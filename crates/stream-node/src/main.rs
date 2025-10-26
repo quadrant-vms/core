@@ -4,8 +4,9 @@ use tokio::net::TcpListener;
 use tracing::info;
 
 mod api;
-mod rtsp;
+mod stream;
 mod storage;
+mod metrics;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -14,7 +15,9 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/healthz", get(api::healthz))
         .route("/streams", get(api::list_streams))
-        .route("/start", get(api::start_stream_api));  // <-- 新增
+        .route("/start", get(api::start_stream_api))
+        .route("/stop",    get(api::stop_stream_api))
+        .route("/metrics", get(|| async { metrics::render() }));
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = TcpListener::bind(addr).await?;
