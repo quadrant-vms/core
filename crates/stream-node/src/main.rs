@@ -7,6 +7,7 @@ mod api;
 mod stream;
 mod storage;
 mod metrics;
+mod compat;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

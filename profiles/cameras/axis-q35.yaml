@@ -1,0 +1,9 @@
+vendor: Axis
+model: Q35
+auth: Basic
+rtsp_params:
+  - [videocodec, h264]
+presets:
+  - h264_ts_lowlat
+  - h264_ts_default
+  - h265_fmp4

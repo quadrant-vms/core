@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, fs, path::PathBuf, process::{Child, Command, Stdio}, time::Duration};
+use std::{collections::HashMap, fs, path::PathBuf, process::{Child, Command, Stdio}, time::{Duration, Instant}};
 use tokio::sync::Mutex;
 use tracing::{info, warn, error};
 use crate::metrics::{STREAMS_RUNNING, RESTARTS_TOTAL};
 use crate::storage::{self, S3Config as UploaderConfig};
+use crate::compat;
 use super::{Codec, Container, hls_root, build_pipeline_args};
 
 #[derive(Clone, Debug)]
@@ -26,191 +27,148 @@ pub struct StreamStatus {
     pub output_dir: PathBuf,
 }
 
-#[derive(Clone, Debug)]
-pub struct RestartPolicy {
-    pub max_retries: u32,
-    pub backoff_start_ms: u64,
-    pub backoff_max_ms: u64,
-}
-impl Default for RestartPolicy {
-    fn default() -> Self {
-        Self {
-            max_retries: env_u32("RESTART_MAX_RETRIES", 5),
-            backoff_start_ms: env_u64("RESTART_BACKOFF_MS_START", 500),
-            backoff_max_ms: env_u64("RESTART_BACKOFF_MS_MAX", 10_000),
-        }
-    }
-}
-fn env_u32(key: &str, def: u32) -> u32 { std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(def) }
-fn env_u64(key: &str, def: u64) -> u64 { std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(def) }
-
 static REGISTRY: Lazy<Mutex<HashMap<String, (Child, StreamStatus, StreamSpec)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub async fn start_stream(spec: &StreamSpec) -> Result<()> {
+pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
     {
         let reg = REGISTRY.lock().await;
-        if reg.contains_key(&spec.id) {
-            return Err(anyhow!("stream '{}' already running", spec.id));
+        if reg.contains_key(&spec_req.id) {
+            return Err(anyhow!("stream '{}' already running", spec_req.id));
         }
     }
 
-    let out_dir = hls_root().join(&spec.id);
+    let pr = compat::probe::probe(&spec_req.uri).await.unwrap_or_default();
+
+    let profiles = compat::load_profiles_from_dir(&compat::profiles_dir());
+    let profile = profiles.iter().find(|p| {
+        match (&p.vendor, &pr.vendor_hint) {
+            (Some(v), Some(h)) => v.eq_ignore_ascii_case(h),
+            _ => false
+        }
+    }).cloned().unwrap_or_default();
+
+    let out_dir = hls_root().join(&spec_req.id);
     fs::create_dir_all(&out_dir)?;
     let playlist = out_dir.join("index.m3u8");
     let segment  = out_dir.join("segment_%05d.ts");
 
-    let args = build_pipeline_args(
-        &spec.codec,
-        &spec.container,
-        &spec.uri,
-        playlist.to_str().ok_or_else(|| anyhow!("bad playlist path"))?,
-        segment.to_str().ok_or_else(|| anyhow!("bad segment path"))?,
-    );
-
-    info!(id=%spec.id, uri=%spec.uri, args=?args, "starting gst-launch-1.0");
-    let child = Command::new("gst-launch-1.0")
-        .args(&args)
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|e| anyhow!("spawn gst-launch-1.0 failed: {}", e))?;
-
-    let status = StreamStatus {
-        id: spec.id.clone(),
-        uri: spec.uri.clone(),
-        codec: match spec.codec { Codec::H264 => "h264".into(), Codec::H265 => "h265".into() },
-        container: match spec.container { Container::Ts => "ts".into(), Container::Fmp4 => "fmp4".into() },
-        running: true,
-        playlist: playlist.clone(),
-        output_dir: out_dir.clone(),
-    };
-
-    {
-        let mut reg = REGISTRY.lock().await;
-        reg.insert(spec.id.clone(), (child, status, spec.clone()));
-        STREAMS_RUNNING.inc();
-    }
-
-    {
-        let dir_for_upload = out_dir.clone();
-        let id_for_upload = spec.id.clone();
-        tokio::spawn(async move {
-            let mut cfg = UploaderConfig::default();
-            cfg.prefix = id_for_upload.clone();
-            if let Err(e) = storage::watch_and_upload(dir_for_upload, cfg, id_for_upload).await {
-                error!("uploader error: {e}");
-            }
-        });
-    }
-
-    // Supervisor
-    let policy = RestartPolicy::default();
-    let id_for_task = spec.id.clone();
-    tokio::spawn(async move {
-        supervise_loop(id_for_task, policy).await;
-    });
-
-    Ok(())
-}
-
-async fn supervise_loop(id: String, policy: RestartPolicy) {
-    let mut attempts: u32 = 0;
-
-    loop {
-        // wait current child
-        let child_exit = {
-            let mut reg = REGISTRY.lock().await;
-            if let Some((child, _status, _spec)) = reg.get_mut(&id) {
-                match child.try_wait() {
-                    Ok(Some(exit)) => Some(exit),
-                    Ok(None) => None, // still running
-                    Err(e) => { error!(%id, "try_wait error: {e}"); None }
-                }
-            } else { return; } // stream removed (stop called)
+    let mut last_err: Option<anyhow::Error> = None;
+    for name in if profile.presets.is_empty() { vec!["h264_ts_default".into()] } else { profile.presets.clone() } {
+        let Some(preset) = compat::preset::get_preset(&name) else {
+            warn!(preset=%name, "unknown preset, skip");
+            continue;
         };
 
-        if child_exit.is_none() {
-            // still running; sleep a bit
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            continue;
-        }
+        let adapter = compat::adapter::find_adapter(pr.vendor_hint.as_deref());
+        let tuned  = adapter.adjust(preset.clone(), &pr);
 
-        // process exited
-        attempts += 1;
-        if attempts > policy.max_retries {
-            warn!(%id, "max retries reached, giving up");
-            let mut reg = REGISTRY.lock().await;
-            reg.remove(&id);
-            STREAMS_RUNNING.dec();
-            return;
-        }
+        let codec = tuned.codec.clone();
+        let container = tuned.container.clone();
+        let latency = tuned.latency_ms;
+        let parse_opts = tuned.parse_opts.clone();
 
-        // backoff
-        let backoff = (policy.backoff_start_ms << (attempts.saturating_sub(1)))
-            .min(policy.backoff_max_ms);
-        warn!(%id, attempts, backoff, "pipeline exited, restarting...");
-        tokio::time::sleep(Duration::from_millis(backoff)).await;
+        let args = build_pipeline_args(
+            &codec, &container, &spec_req.uri, latency, &parse_opts,
+            playlist.to_str().ok_or_else(|| anyhow!("bad playlist path"))?,
+            segment.to_str().ok_or_else(|| anyhow!("bad segment path"))?,
+        );
 
-        // restart with same spec
-        let (new_child, new_status, spec_clone) = {
-            let reg_snapshot = {
-                let reg = REGISTRY.lock().await;
-                reg.get(&id).map(|(_, _st, sp)| sp.clone())
-            };
+        info!(id=%spec_req.id, preset=%tuned.name, args=?args, "trying pipeline");
 
-            // If registry no longer has it (stop called), exit
-            let spec = match reg_snapshot {
-                Some(s) => s,
-                None => return,
-            };
-
-            // rebuild args (paths unchanged)
-            let out_dir = hls_root().join(&spec.id);
-            let playlist = out_dir.join("index.m3u8");
-            let segment  = out_dir.join("segment_%05d.ts");
-
-            let args = build_pipeline_args(
-                &spec.codec, &spec.container, &spec.uri,
-                playlist.to_str().unwrap(), segment.to_str().unwrap(),
-            );
-
-            match Command::new("gst-launch-1.0")
-                .args(&args)
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
-                .spawn()
-            {
-                Ok(child) => {
-                    let st = StreamStatus {
-                        id: spec.id.clone(),
-                        uri: spec.uri.clone(),
-                        codec: match spec.codec { Codec::H264 => "h264".into(), Codec::H265 => "h265".into() },
-                        container: match spec.container { Container::Ts => "ts".into(), Container::Fmp4 => "fmp4".into() },
+        match Command::new("gst-launch-1.0")
+            .args(&args)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+        {
+            Ok(mut child) => {
+                let ok = wait_for_hls_ready(&out_dir, Duration::from_secs(6)).await;
+                if ok {
+                    let status = StreamStatus {
+                        id: spec_req.id.clone(),
+                        uri: spec_req.uri.clone(),
+                        codec: match codec { Codec::H264=>"h264".into(), Codec::H265=>"h265".into() },
+                        container: match container { Container::Ts=>"ts".into(), Container::Fmp4=>"fmp4".into() },
                         running: true,
                         playlist: playlist.clone(),
                         output_dir: out_dir.clone(),
                     };
-                    RESTARTS_TOTAL.inc();
-                    (child, st, spec)
-                }
-                Err(e) => {
-                    error!(%id, "restart spawn failed: {e}");
-                    // try again next loop
+                    {
+                        let mut reg = REGISTRY.lock().await;
+                        reg.insert(spec_req.id.clone(), (child, status, StreamSpec {
+                            id: spec_req.id.clone(),
+                            uri: spec_req.uri.clone(),
+                            codec, container,
+                        }));
+                    }
+                    STREAMS_RUNNING.inc();
+
+                    {
+                        let dir_for_upload = out_dir.clone();
+                        let id_for_upload = spec_req.id.clone();
+                        tokio::spawn(async move {
+                            let mut cfg = UploaderConfig::default();
+                            cfg.prefix = id_for_upload.clone();
+                            if let Err(e) = storage::watch_and_upload(dir_for_upload, cfg, id_for_upload).await {
+                                error!("uploader error: {e}");
+                            }
+                        });
+                    }
+
+                    info!(id=%spec_req.id, preset=%tuned.name, "pipeline ready");
+                    return Ok(());
+                } else {
+                    let _ = child.kill();
+                    last_err = Some(anyhow!("preset '{}' produced no HLS in time", tuned.name));
                     continue;
                 }
             }
-        };
-
-        let mut reg = REGISTRY.lock().await;
-        reg.insert(id.clone(), (new_child, new_status, spec_clone));
+            Err(e) => {
+                warn!(preset=%tuned.name, "spawn failed: {}", e);
+                last_err = Some(anyhow!(e));
+                continue;
+            }
+        }
     }
+
+    Err(last_err.unwrap_or_else(|| anyhow!("no working preset found")))
+}
+
+async fn wait_for_hls_ready(dir: &PathBuf, timeout: Duration) -> bool {
+    use std::fs;
+
+    let deadline = Instant::now() + timeout;
+
+    while Instant::now() < deadline {
+        let m3u8 = dir.join("index.m3u8");
+        if m3u8.exists() {
+            if let Ok(rd) = fs::read_dir(dir) {
+                let mut has_segment = false;
+                for ent in rd.flatten() {
+                    let p = ent.path();
+                    if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                        let ext = ext.to_ascii_lowercase(); // ← owned String
+                        if ext == "ts" || ext == "m4s" {
+                            has_segment = true;
+                            break;
+                        }
+                    }
+                }
+                if has_segment {
+                    return true;
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    false
 }
 
 pub async fn stop_stream(id: &str) -> Result<()> {
     let mut reg = REGISTRY.lock().await;
     if let Some((mut child, _status, _spec)) = reg.remove(id) {
-        child.kill().ok();
+        let _ = child.kill();
         STREAMS_RUNNING.dec();
         Ok(())
     } else {
@@ -220,8 +178,6 @@ pub async fn stop_stream(id: &str) -> Result<()> {
 
 pub async fn list_streams() -> Vec<StreamStatus> {
     let mut reg = REGISTRY.lock().await;
-
-    // refresh running flags, prune exited ones (supervisor will restart)
     let mut to_remove = vec![];
     for (id, (child, status, _spec)) in reg.iter_mut() {
         if let Ok(Some(_exit)) = child.try_wait() {
@@ -233,6 +189,7 @@ pub async fn list_streams() -> Vec<StreamStatus> {
     }
     for id in to_remove {
         reg.remove(&id);
+        STREAMS_RUNNING.dec();
     }
 
     reg.values().map(|(_c, s, _)| s.clone()).collect()

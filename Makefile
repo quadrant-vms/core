@@ -1,2 +1,2 @@
 launch:
-	cargo run -p stream-node
+	HLS_ROOT=./data/hls cargo run -p stream-node
