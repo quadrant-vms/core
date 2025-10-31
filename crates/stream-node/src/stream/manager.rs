@@ -3,7 +3,7 @@ use once_cell::sync::Lazy;
 use std::{collections::HashMap, fs, path::PathBuf, process::{Child, Command, Stdio}, time::{Duration, Instant}};
 use tokio::sync::Mutex;
 use tracing::{info, warn, error};
-use crate::metrics::{STREAMS_RUNNING, RESTARTS_TOTAL};
+use crate::metrics::STREAMS_RUNNING;
 use crate::storage::{self, S3Config as UploaderConfig};
 use crate::compat;
 use super::{Codec, Container, hls_root, build_pipeline_args};
@@ -29,6 +29,14 @@ pub struct StreamStatus {
 
 static REGISTRY: Lazy<Mutex<HashMap<String, (Child, StreamStatus, StreamSpec)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn readiness_timeout() -> Duration {
+    std::env::var("HLS_READY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(20))
+}
 
 pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
     {
@@ -61,7 +69,13 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
         };
 
         let adapter = compat::adapter::find_adapter(pr.vendor_hint.as_deref());
-        let tuned  = adapter.adjust(preset.clone(), &pr);
+        let mut tuned  = adapter.adjust(preset.clone(), &pr);
+        if tuned.codec != spec_req.codec {
+            tuned.codec = spec_req.codec.clone();
+        }
+        if tuned.container != spec_req.container {
+            tuned.container = spec_req.container.clone();
+        }
 
         let codec = tuned.codec.clone();
         let container = tuned.container.clone();
@@ -83,7 +97,7 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
             .spawn()
         {
             Ok(mut child) => {
-                let ok = wait_for_hls_ready(&out_dir, Duration::from_secs(6)).await;
+                let ok = wait_for_hls_ready(&out_dir, readiness_timeout()).await;
                 if ok {
                     let status = StreamStatus {
                         id: spec_req.id.clone(),
@@ -120,6 +134,7 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
                     return Ok(());
                 } else {
                     let _ = child.kill();
+                    let _ = child.wait();
                     last_err = Some(anyhow!("preset '{}' produced no HLS in time", tuned.name));
                     continue;
                 }

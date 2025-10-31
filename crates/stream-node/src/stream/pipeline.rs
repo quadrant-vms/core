@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Codec { H264, H265 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Container { Ts, Fmp4 }
 
 pub fn hls_root() -> PathBuf {
