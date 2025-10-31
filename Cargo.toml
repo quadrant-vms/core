@@ -3,5 +3,7 @@ members = [
   "crates/stream-node",
   "crates/common",
   "crates/telemetry",
+  "crates/admin-gateway",
+  "crates/coordinator",
 ]
 resolver = "2"
