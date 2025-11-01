@@ -6,14 +6,20 @@
 ---
 
 ## 🚧 Development Status
-This project is **under active development**.  
-The current milestone focuses on the `stream-node` component —  
-handling RTSP ingestion, transcoding, and HLS/MinIO integration.
+This project is **under active development**.
 
-Future milestones will include:
-- API Gateway and Recorder nodes
+### ✅ Implemented
+- `stream-node`: RTSP ingest → HLS (TS/fMP4) with S3 upload fallback.
+- `coordinator`: lease-based scheduler (in-memory backend) with REST API.
+- `admin-gateway`: REST facade that acquires leases, launches `stream-node`, and stops streams via worker HTTP calls.
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, and end-to-end gateway↔coordinator↔worker flows.
+
+### 🔜 In Progress
+- Recorder node & media indexing
+- Persistent lease store (PostgreSQL/Redis) and multi-node coordination
+- Operator UI & rule system
 - AI model plugin architecture
-- Cluster management and failover
+- Cluster management and failover hardening
 
 ---
 
