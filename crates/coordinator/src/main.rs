@@ -1,62 +1,62 @@
-use coordinator::{
-    config::CoordinatorConfig,
-    routes,
-    state::CoordinatorState,
-    store::{LeaseStore, MemoryLeaseStore},
-};
 use anyhow::Result;
+use coordinator::{
+  config::CoordinatorConfig,
+  routes,
+  state::CoordinatorState,
+  store::{LeaseStore, MemoryLeaseStore},
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    telemetry::init();
+  telemetry::init();
 
-    let config = CoordinatorConfig::from_env()?;
-    let bind_addr = config.bind_addr;
-    let store: Arc<dyn LeaseStore> = Arc::new(MemoryLeaseStore::new(
-        config.default_ttl_secs,
-        config.max_ttl_secs,
-    ));
-    let state = CoordinatorState::new(config, store);
+  let config = CoordinatorConfig::from_env()?;
+  let bind_addr = config.bind_addr;
+  let store: Arc<dyn LeaseStore> = Arc::new(MemoryLeaseStore::new(
+    config.default_ttl_secs,
+    config.max_ttl_secs,
+  ));
+  let state = CoordinatorState::new(config, store);
 
-    let app = routes::router(state.clone());
-    let listener = TcpListener::bind(bind_addr).await?;
+  let app = routes::router(state.clone());
+  let listener = TcpListener::bind(bind_addr).await?;
 
-    info!(
-        addr = %bind_addr,
-        default_ttl = %state.config().default_ttl_secs,
-        "coordinator listening"
-    );
+  info!(
+      addr = %bind_addr,
+      default_ttl = %state.config().default_ttl_secs,
+      "coordinator listening"
+  );
 
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+  axum::serve(listener, app.into_make_service())
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
-    Ok(())
+  Ok(())
 }
 
 async fn shutdown_signal() {
-    let ctrl_c = async {
-        let _ = tokio::signal::ctrl_c().await;
-    };
+  let ctrl_c = async {
+    let _ = tokio::signal::ctrl_c().await;
+  };
 
-    #[cfg(unix)]
-    let terminate = async {
-        use tokio::signal::unix::{signal, SignalKind};
-        if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
-            let _ = sigterm.recv().await;
-        }
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+  #[cfg(unix)]
+  let terminate = async {
+    use tokio::signal::unix::{SignalKind, signal};
+    if let Ok(mut sigterm) = signal(SignalKind::terminate()) {
+      let _ = sigterm.recv().await;
     }
+  };
 
-    info!("shutdown signal received");
+  #[cfg(not(unix))]
+  let terminate = std::future::pending::<()>();
+
+  tokio::select! {
+      _ = ctrl_c => {},
+      _ = terminate => {},
+  }
+
+  info!("shutdown signal received");
 }
