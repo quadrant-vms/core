@@ -1,12 +1,7 @@
-mod config;
-mod coordinator;
-mod error;
-mod routes;
-mod state;
-
-use crate::{
+use admin_gateway::{
     config::GatewayConfig,
     coordinator::{CoordinatorClient, HttpCoordinatorClient},
+    routes,
     state::AppState,
 };
 use anyhow::Result;

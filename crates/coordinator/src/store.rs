@@ -190,3 +190,140 @@ impl LeaseStore for MemoryLeaseStore {
         Ok(out)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::time::{sleep, Duration};
+
+    fn store() -> MemoryLeaseStore {
+        MemoryLeaseStore::new(10, 60)
+    }
+
+    #[tokio::test]
+    async fn acquire_new_lease() {
+        let store = store();
+        let req = LeaseAcquireRequest {
+            resource_id: "cam1".into(),
+            holder_id: "node-a".into(),
+            kind: LeaseKind::Stream,
+            ttl_secs: 10,
+        };
+        let resp = store.acquire(req).await.unwrap();
+        assert!(resp.granted);
+        let record = resp.record.expect("record");
+        assert_eq!(record.resource_id, "cam1");
+        assert_eq!(record.holder_id, "node-a");
+    }
+
+    #[tokio::test]
+    async fn acquire_conflict() {
+        let store = store();
+        let req1 = LeaseAcquireRequest {
+            resource_id: "cam1".into(),
+            holder_id: "node-a".into(),
+            kind: LeaseKind::Stream,
+            ttl_secs: 10,
+        };
+        let req2 = LeaseAcquireRequest {
+            resource_id: "cam1".into(),
+            holder_id: "node-b".into(),
+            kind: LeaseKind::Stream,
+            ttl_secs: 10,
+        };
+        let first = store.acquire(req1).await.unwrap();
+        assert!(first.granted);
+        let second = store.acquire(req2).await.unwrap();
+        assert!(!second.granted);
+        assert_eq!(
+            second.record.unwrap().holder_id,
+            "node-a",
+            "existing holder should be returned"
+        );
+    }
+
+    #[tokio::test]
+    async fn renew_extends_ttl() {
+        let store = store();
+        let req = LeaseAcquireRequest {
+            resource_id: "cam1".into(),
+            holder_id: "node-a".into(),
+            kind: LeaseKind::Stream,
+            ttl_secs: 2,
+        };
+        let resp = store.acquire(req).await.unwrap();
+        let lease = resp.record.unwrap();
+        sleep(Duration::from_secs(1)).await;
+        let renew = store
+            .renew(LeaseRenewRequest {
+                lease_id: lease.lease_id.clone(),
+                ttl_secs: 5,
+            })
+            .await
+            .unwrap();
+        assert!(renew.renewed);
+        let renewed = renew.record.unwrap();
+        assert!(renewed.expires_at_epoch_secs > lease.expires_at_epoch_secs);
+    }
+
+    #[tokio::test]
+    async fn expired_lease_can_be_reacquired() {
+        let store = MemoryLeaseStore::new(5, 60);
+        let resp = store
+            .acquire(LeaseAcquireRequest {
+                resource_id: "cam1".into(),
+                holder_id: "node-a".into(),
+                kind: LeaseKind::Stream,
+                ttl_secs: 5,
+            })
+            .await
+            .unwrap();
+        assert!(resp.granted);
+        sleep(Duration::from_secs(6)).await;
+        let resp2 = store
+            .acquire(LeaseAcquireRequest {
+                resource_id: "cam1".into(),
+                holder_id: "node-b".into(),
+                kind: LeaseKind::Stream,
+                ttl_secs: 5,
+            })
+            .await
+            .unwrap();
+        assert!(resp2.granted);
+        assert_eq!(resp2.record.unwrap().holder_id, "node-b");
+    }
+
+    #[tokio::test]
+    async fn release_frees_lease() {
+        let store = store();
+        let lease = store
+            .acquire(LeaseAcquireRequest {
+                resource_id: "cam1".into(),
+                holder_id: "node-a".into(),
+                kind: LeaseKind::Stream,
+                ttl_secs: 10,
+            })
+            .await
+            .unwrap()
+            .record
+            .unwrap();
+        let release = store
+            .release(LeaseReleaseRequest {
+                lease_id: lease.lease_id.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(release.released);
+        let reacquire = store
+            .acquire(LeaseAcquireRequest {
+                resource_id: "cam1".into(),
+                holder_id: "node-b".into(),
+                kind: LeaseKind::Stream,
+                ttl_secs: 10,
+            })
+            .await
+            .unwrap();
+        assert!(reacquire.granted);
+        assert_eq!(reacquire.record.unwrap().holder_id, "node-b");
+    }
+}

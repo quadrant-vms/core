@@ -1,11 +1,6 @@
-mod config;
-mod error;
-mod routes;
-mod state;
-mod store;
-
-use crate::{
+use coordinator::{
     config::CoordinatorConfig,
+    routes,
     state::CoordinatorState,
     store::{LeaseStore, MemoryLeaseStore},
 };

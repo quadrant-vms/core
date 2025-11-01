@@ -147,3 +147,257 @@ async fn stop_stream(
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::GatewayConfig, coordinator::CoordinatorClient};
+    use anyhow::Result;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use common::{
+        leases::{LeaseAcquireRequest, LeaseAcquireResponse, LeaseKind, LeaseRecord, LeaseReleaseRequest, LeaseReleaseResponse},
+        streams::{StreamConfig, StreamInfo, StreamState},
+    };
+    use reqwest::Url;
+    use serde_json::json;
+    use std::{net::SocketAddr, sync::Arc};
+    use tokio::sync::Mutex;
+    use tower::ServiceExt;
+
+    struct StubCoordinator {
+        acquire_responses: Mutex<Vec<LeaseAcquireResponse>>,
+        release_responses: Mutex<Vec<LeaseReleaseResponse>>,
+        acquire_calls: Mutex<Vec<LeaseAcquireRequest>>,
+        release_calls: Mutex<Vec<LeaseReleaseRequest>>,
+    }
+
+    impl StubCoordinator {
+        fn with_responses(acquire: Vec<LeaseAcquireResponse>, release: Vec<LeaseReleaseResponse>) -> Arc<Self> {
+            Arc::new(Self {
+                acquire_responses: Mutex::new(acquire),
+                release_responses: Mutex::new(release),
+                acquire_calls: Mutex::new(vec![]),
+                release_calls: Mutex::new(vec![]),
+            })
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl CoordinatorClient for StubCoordinator {
+        async fn acquire(&self, request: &LeaseAcquireRequest) -> Result<LeaseAcquireResponse> {
+            self.acquire_calls.lock().await.push(request.clone());
+            let mut responses = self.acquire_responses.lock().await;
+            let resp = responses
+                .pop()
+                .expect("no acquire response configured (pop from end)");
+            Ok(resp)
+        }
+
+        async fn release(&self, request: &LeaseReleaseRequest) -> Result<LeaseReleaseResponse> {
+            self.release_calls.lock().await.push(request.clone());
+            let mut responses = self.release_responses.lock().await;
+            let resp = responses
+                .pop()
+                .unwrap_or(LeaseReleaseResponse { released: true });
+            Ok(resp)
+        }
+    }
+
+    fn base_config() -> GatewayConfig {
+        GatewayConfig {
+            bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
+            coordinator_base_url: Url::parse("http://127.0.0.1:8082").unwrap(),
+            node_id: "test-node".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn start_stream_accepts_and_records_state() {
+        let lease_record = LeaseRecord {
+            lease_id: "lease-123".into(),
+            resource_id: "stream-1".into(),
+            holder_id: "test-node".into(),
+            kind: LeaseKind::Stream,
+            expires_at_epoch_secs: 999999,
+            version: 1,
+        };
+        let coordinator = StubCoordinator::with_responses(
+            vec![LeaseAcquireResponse {
+                granted: true,
+                record: Some(lease_record.clone()),
+            }],
+            vec![LeaseReleaseResponse { released: true }],
+        );
+        let state = AppState::new(base_config(), coordinator.clone());
+        let app = router(state.clone());
+
+        let start_body = json!({
+            "config": {
+                "id": "stream-1",
+                "camera_id": "cam-1",
+                "uri": "rtsp://example",
+                "codec": "h264",
+                "container": "ts"
+            }
+        })
+        .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/streams")
+                    .header("content-type", "application/json")
+                    .body(Body::from(start_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let start_resp: StreamStartResponse = serde_json::from_slice(&bytes).unwrap();
+        assert!(start_resp.accepted);
+        assert_eq!(start_resp.lease_id.as_deref(), Some("lease-123"));
+
+        // ensure state shows the stream
+        let list_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/streams")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(list_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list: Vec<StreamInfo> = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].config.id, "stream-1");
+        assert!(list[0].state.is_active());
+
+        // verify acquire called with expected resource id
+        let calls = coordinator.acquire_calls.lock().await.clone();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].resource_id, "stream-1");
+    }
+
+    #[tokio::test]
+    async fn start_stream_missing_uri_rejected() {
+        let coordinator = StubCoordinator::with_responses(
+            vec![LeaseAcquireResponse {
+                granted: true,
+                record: None,
+            }],
+            vec![],
+        );
+        let state = AppState::new(base_config(), coordinator);
+        let app = router(state);
+        let body = json!({
+            "config": {
+                "id": "stream-1",
+                "uri": ""
+            }
+        })
+        .to_string();
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/streams")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn stop_stream_releases_and_removes() {
+        let lease_record = LeaseRecord {
+            lease_id: "lease-abc".into(),
+            resource_id: "stream-1".into(),
+            holder_id: "test-node".into(),
+            kind: LeaseKind::Stream,
+            expires_at_epoch_secs: 999999,
+            version: 1,
+        };
+        let coordinator = StubCoordinator::with_responses(
+            vec![LeaseAcquireResponse {
+                granted: true,
+                record: Some(lease_record.clone()),
+            }],
+            vec![LeaseReleaseResponse { released: true }],
+        );
+        let state = AppState::new(base_config(), coordinator.clone());
+        {
+            // seed state directly with a running stream
+            let mut streams = state.streams().write().await;
+            streams.insert(
+                "stream-1".into(),
+                StreamInfo {
+                    config: StreamConfig {
+                        id: "stream-1".into(),
+                        camera_id: Some("cam-1".into()),
+                        uri: "rtsp://example".into(),
+                        codec: Some("h264".into()),
+                        container: Some("ts".into()),
+                    },
+                    state: StreamState::Running,
+                    lease_id: Some("lease-abc".into()),
+                    last_error: None,
+                },
+            );
+        }
+
+        let app = router(state.clone());
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/v1/streams/stream-1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let stop_resp: StreamStopResponse = serde_json::from_slice(&bytes).unwrap();
+        assert!(stop_resp.stopped);
+
+        let list_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/streams")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let bytes = axum::body::to_bytes(list_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list: Vec<StreamInfo> = serde_json::from_slice(&bytes).unwrap();
+        assert!(list.is_empty());
+
+        let releases = coordinator.release_calls.lock().await.clone();
+        assert_eq!(releases.len(), 1);
+        assert_eq!(releases[0].lease_id, "lease-abc");
+    }
+}
