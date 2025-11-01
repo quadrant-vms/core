@@ -90,6 +90,32 @@ async fn start_stream(
         streams.insert(config.id.clone(), stream_info);
     }
 
+    let worker = state.worker();
+    if let Err(err) = worker.start_stream(&config).await {
+        {
+            let mut streams = state.streams().write().await;
+            if let Some(entry) = streams.get_mut(&config.id) {
+                entry.state = StreamState::Error;
+                entry.last_error = Some(err.to_string());
+            }
+        }
+        let coordinator = state.coordinator();
+        let _ = coordinator
+            .release(&LeaseReleaseRequest {
+                lease_id: record.lease_id.clone(),
+            })
+            .await;
+        return Err(ApiError::internal(format!("worker start failed: {err}")));
+    }
+
+    {
+        let mut streams = state.streams().write().await;
+        if let Some(entry) = streams.get_mut(&config.id) {
+            entry.state = StreamState::Running;
+            entry.last_error = None;
+        }
+    }
+
     info!(stream_id = %config.id, lease = %record.lease_id, "stream start accepted");
 
     Ok(Json(StreamStartResponse {
@@ -111,6 +137,24 @@ async fn stop_stream(
     let Some(info) = existing else {
         return Err(ApiError::not_found(format!("stream '{}' not found", stream_id)));
     };
+
+    {
+        let mut streams = state.streams().write().await;
+        if let Some(entry) = streams.get_mut(&stream_id) {
+            entry.state = StreamState::Stopping;
+            entry.last_error = None;
+        }
+    }
+
+    let worker = state.worker();
+    if let Err(err) = worker.stop_stream(&stream_id).await {
+        let mut streams = state.streams().write().await;
+        if let Some(entry) = streams.get_mut(&stream_id) {
+            entry.state = StreamState::Error;
+            entry.last_error = Some(err.to_string());
+        }
+        return Err(ApiError::internal(format!("worker stop failed: {err}")));
+    }
 
     if let Some(lease_id) = info.lease_id.clone() {
         let coordinator = state.coordinator();
@@ -135,7 +179,6 @@ async fn stop_stream(
             message,
         }))
     } else {
-        // No active lease tracked; just remove local state.
         {
             let mut streams = state.streams().write().await;
             streams.remove(&stream_id);
@@ -151,7 +194,7 @@ async fn stop_stream(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{config::GatewayConfig, coordinator::CoordinatorClient};
+    use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::WorkerClient};
     use anyhow::Result;
     use axum::{
         body::Body,
@@ -206,11 +249,45 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct StubWorker {
+        start_calls: Mutex<Vec<StreamConfig>>,
+        stop_calls: Mutex<Vec<String>>,
+        fail_start: Mutex<bool>,
+        fail_stop: Mutex<bool>,
+    }
+
+    impl StubWorker {
+        fn new() -> Self {
+            Self::default()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl WorkerClient for StubWorker {
+        async fn start_stream(&self, config: &StreamConfig) -> Result<()> {
+            self.start_calls.lock().await.push(config.clone());
+            if *self.fail_start.lock().await {
+                anyhow::bail!("start failed");
+            }
+            Ok(())
+        }
+
+        async fn stop_stream(&self, stream_id: &str) -> Result<()> {
+            self.stop_calls.lock().await.push(stream_id.to_string());
+            if *self.fail_stop.lock().await {
+                anyhow::bail!("stop failed");
+            }
+            Ok(())
+        }
+    }
+
     fn base_config() -> GatewayConfig {
         GatewayConfig {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
             coordinator_base_url: Url::parse("http://127.0.0.1:8082").unwrap(),
             node_id: "test-node".into(),
+            worker_base_url: Url::parse("http://127.0.0.1:8080").unwrap(),
         }
     }
 
@@ -231,7 +308,13 @@ mod tests {
             }],
             vec![LeaseReleaseResponse { released: true }],
         );
-        let state = AppState::new(base_config(), coordinator.clone());
+        let worker = Arc::new(StubWorker::new());
+        let worker_client: Arc<dyn WorkerClient> = worker.clone();
+        let state = AppState::new(
+            base_config(),
+            coordinator.clone(),
+            worker_client,
+        );
         let app = router(state.clone());
 
         let start_body = json!({
@@ -285,6 +368,10 @@ mod tests {
         assert_eq!(list[0].config.id, "stream-1");
         assert!(list[0].state.is_active());
 
+        let start_calls = worker.start_calls.lock().await.clone();
+        assert_eq!(start_calls.len(), 1);
+        assert_eq!(start_calls[0].id, "stream-1");
+
         // verify acquire called with expected resource id
         let calls = coordinator.acquire_calls.lock().await.clone();
         assert_eq!(calls.len(), 1);
@@ -300,7 +387,13 @@ mod tests {
             }],
             vec![],
         );
-        let state = AppState::new(base_config(), coordinator);
+        let worker = Arc::new(StubWorker::new());
+        let worker_client: Arc<dyn WorkerClient> = worker.clone();
+        let state = AppState::new(
+            base_config(),
+            coordinator,
+            worker_client,
+        );
         let app = router(state);
         let body = json!({
             "config": {
@@ -321,6 +414,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(worker.start_calls.lock().await.is_empty());
     }
 
     #[tokio::test]
@@ -340,7 +434,13 @@ mod tests {
             }],
             vec![LeaseReleaseResponse { released: true }],
         );
-        let state = AppState::new(base_config(), coordinator.clone());
+        let worker = Arc::new(StubWorker::new());
+        let worker_client: Arc<dyn WorkerClient> = worker.clone();
+        let state = AppState::new(
+            base_config(),
+            coordinator.clone(),
+            worker_client,
+        );
         {
             // seed state directly with a running stream
             let mut streams = state.streams().write().await;
@@ -399,5 +499,8 @@ mod tests {
         let releases = coordinator.release_calls.lock().await.clone();
         assert_eq!(releases.len(), 1);
         assert_eq!(releases[0].lease_id, "lease-abc");
+
+        let stop_calls = worker.stop_calls.lock().await.clone();
+        assert_eq!(stop_calls, vec!["stream-1".to_string()]);
     }
 }

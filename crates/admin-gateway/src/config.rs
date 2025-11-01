@@ -7,6 +7,7 @@ pub struct GatewayConfig {
     pub bind_addr: SocketAddr,
     pub coordinator_base_url: Url,
     pub node_id: String,
+    pub worker_base_url: Url,
 }
 
 impl GatewayConfig {
@@ -19,12 +20,18 @@ impl GatewayConfig {
             .unwrap_or_else(|_| "http://127.0.0.1:8082".to_string());
         let coordinator_base_url = Url::parse(&coord).context("invalid COORDINATOR_ENDPOINT")?;
 
+        let worker = env::var("STREAM_WORKER_ENDPOINT")
+            .unwrap_or_else(|_| "http://127.0.0.1:8080/".to_string());
+        let worker_base_url =
+            Url::parse(&worker).context("invalid STREAM_WORKER_ENDPOINT")?;
+
         let node_id = env::var("NODE_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
 
         Ok(Self {
             bind_addr,
             coordinator_base_url,
             node_id,
+            worker_base_url,
         })
     }
 }

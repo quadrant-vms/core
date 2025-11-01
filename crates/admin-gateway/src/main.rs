@@ -3,6 +3,7 @@ use admin_gateway::{
     coordinator::{CoordinatorClient, HttpCoordinatorClient},
     routes,
     state::AppState,
+    worker::{HttpWorkerClient, WorkerClient},
 };
 use anyhow::Result;
 use std::sync::Arc;
@@ -16,7 +17,9 @@ async fn main() -> Result<()> {
     let config = GatewayConfig::from_env()?;
     let coordinator: Arc<dyn CoordinatorClient> =
         Arc::new(HttpCoordinatorClient::new(config.coordinator_base_url.clone())?);
-    let state = AppState::new(config.clone(), coordinator);
+    let worker: Arc<dyn WorkerClient> =
+        Arc::new(HttpWorkerClient::new(config.worker_base_url.clone())?);
+    let state = AppState::new(config.clone(), coordinator, worker);
 
     let app = routes::router(state.clone());
     let listener = TcpListener::bind(config.bind_addr).await?;

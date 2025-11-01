@@ -1,4 +1,4 @@
-use crate::{config::GatewayConfig, coordinator::CoordinatorClient};
+use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::WorkerClient};
 use common::streams::StreamInfo;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::RwLock;
@@ -11,14 +11,20 @@ pub struct AppState {
 struct AppStateInner {
     config: GatewayConfig,
     coordinator: Arc<dyn CoordinatorClient>,
+    worker: Arc<dyn WorkerClient>,
     streams: RwLock<HashMap<String, StreamInfo>>,
 }
 
 impl AppState {
-    pub fn new(config: GatewayConfig, coordinator: Arc<dyn CoordinatorClient>) -> Self {
+    pub fn new(
+        config: GatewayConfig,
+        coordinator: Arc<dyn CoordinatorClient>,
+        worker: Arc<dyn WorkerClient>,
+    ) -> Self {
         let inner = AppStateInner {
             config,
             coordinator,
+            worker,
             streams: RwLock::new(HashMap::new()),
         };
         Self {
@@ -32,6 +38,10 @@ impl AppState {
 
     pub fn coordinator(&self) -> Arc<dyn CoordinatorClient> {
         self.inner.coordinator.clone()
+    }
+
+    pub fn worker(&self) -> Arc<dyn WorkerClient> {
+        self.inner.worker.clone()
     }
 
     pub fn streams(&self) -> &RwLock<HashMap<String, StreamInfo>> {
