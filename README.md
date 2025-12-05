@@ -12,12 +12,17 @@ This project is **under active development**.
 - `stream-node`: RTSP ingest → HLS (TS/fMP4) with S3 upload fallback.
 - `coordinator`: lease-based scheduler (in-memory backend) with REST API.
 - `admin-gateway`: REST facade that acquires leases, launches `stream-node`, and stops streams via worker HTTP calls.
-- `recorder-node`: Recording job management with REST API, media indexing infrastructure, and S3 storage integration (stub pipeline implementation).
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, and end-to-end gateway↔coordinator↔worker flows.
+- `recorder-node`: Complete recording pipeline implementation with:
+  - FFmpeg-based recording from RTSP and HLS sources
+  - Multi-format output support (MP4, HLS, MKV)
+  - Automatic metadata extraction (duration, resolution, codecs, bitrate, fps)
+  - Recording job lifecycle management with REST API
+  - Storage path tracking and S3 integration
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, and end-to-end gateway↔coordinator↔worker flows.
 
 ### 🔜 In Progress
-- Recorder node pipeline implementation (actual media recording from RTSP/HLS sources)
-- Media metadata extraction (duration, resolution, codecs, bitrate)
+- Integration with coordinator for recorder lease management
+- Admin-gateway integration for recorder worker management
 - Persistent lease store (PostgreSQL/Redis) and multi-node coordination
 - Operator UI & rule system
 - AI model plugin architecture

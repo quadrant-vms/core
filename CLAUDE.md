@@ -55,11 +55,12 @@ This is a **Cargo workspace** with multiple crates:
    - Lease types, stream types, and recording types
 
 5. **recorder-node** (`crates/recorder-node/`)
+   - FFmpeg-based recording pipeline (RTSP/HLS sources → MP4/HLS/MKV)
    - Recording job management and lifecycle
-   - Media indexing infrastructure
+   - Automatic metadata extraction using ffprobe
    - REST API for recording operations (start/stop/list)
    - Entry point: `crates/recorder-node/src/main.rs`
-   - **Status**: Infrastructure complete, pipeline implementation pending
+   - **Status**: Pipeline implementation complete
 
 6. **telemetry** (`crates/telemetry/`)
    - Logging and monitoring infrastructure
@@ -117,15 +118,18 @@ make status-dc
 
 ### Current Development Priority
 
-**Next Feature**: Recorder Pipeline Implementation (per README.md)
+**Recently Completed**: Recorder Pipeline Implementation
 - ✅ recorder-node crate structure created
 - ✅ Recording job manager with lifecycle management
 - ✅ REST API (start/stop/list recordings)
-- ✅ Media indexer infrastructure (stub implementation)
-- 🔜 Actual pipeline implementation (RTSP/HLS → MP4/HLS recording)
-- 🔜 Metadata extraction using ffprobe or similar tools
-- 🔜 Integration with coordinator for lease management
+- ✅ FFmpeg-based recording pipeline (RTSP/HLS → MP4/HLS/MKV)
+- ✅ Metadata extraction using ffprobe
+- ✅ Storage path tracking and file management
+
+**Next Feature**: Coordinator & Gateway Integration for Recorder (per README.md)
+- 🔜 Integration with coordinator for recorder lease management
 - 🔜 Admin-gateway integration for recorder worker management
+- 🔜 End-to-end tests for recorder workflow
 
 ### Common Tasks
 

@@ -75,12 +75,34 @@ impl RecordingManager {
 
       let mut pipelines = pipelines_clone.write().await;
       if let Some(pipeline) = pipelines.get_mut(&id) {
+        // Store output path
+        let output_path = pipeline.output_path().to_string_lossy().to_string();
+        let mut recordings = recordings_clone.write().await;
+        if let Some(info) = recordings.get_mut(&id) {
+          info.storage_path = Some(output_path);
+        }
+        drop(recordings);
+
+        // Run pipeline
         if let Err(e) = pipeline.run().await {
           warn!(id = %id, error = %e, "recording pipeline failed");
           let mut recordings = recordings_clone.write().await;
           if let Some(info) = recordings.get_mut(&id) {
             info.state = RecordingState::Error;
             info.last_error = Some(e.to_string());
+          }
+        } else {
+          // Extract metadata after successful recording
+          info!(id = %id, "recording completed, extracting metadata");
+          match pipeline.extract_metadata().await {
+            Ok(_metadata) => {
+              info!(id = %id, "metadata extraction successful");
+              // Metadata is logged but not stored in RecordingInfo yet
+              // TODO: Add metadata field to RecordingInfo
+            }
+            Err(e) => {
+              warn!(id = %id, error = %e, "metadata extraction failed");
+            }
           }
         }
       }
