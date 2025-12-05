@@ -18,10 +18,13 @@ This project is **under active development**.
   - Automatic metadata extraction (duration, resolution, codecs, bitrate, fps)
   - Recording job lifecycle management with REST API
   - Storage path tracking and S3 integration
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, and end-to-end gateway↔coordinator↔worker flows.
+  - **Coordinator lease integration** for distributed recording management
+  - Automatic lease acquisition, renewal (50% TTL interval), and release
+  - Lease failure detection with error state transitions
+  - Configurable via `COORDINATOR_URL` and `NODE_ID` environment variables
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker flows.
 
 ### 🔜 In Progress
-- Integration with coordinator for recorder lease management
 - Admin-gateway integration for recorder worker management
 - Persistent lease store (PostgreSQL/Redis) and multi-node coordination
 - Operator UI & rule system

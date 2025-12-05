@@ -1,13 +1,18 @@
 use anyhow::{anyhow, Result};
-use common::recordings::*;
+use common::{
+  leases::{LeaseAcquireRequest, LeaseKind, LeaseReleaseRequest, LeaseRenewRequest},
+  recordings::*,
+};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 use super::pipeline::RecordingPipeline;
+use crate::coordinator::CoordinatorClient;
 
 lazy_static! {
   pub static ref RECORDING_MANAGER: RecordingManager = RecordingManager::new();
@@ -16,6 +21,9 @@ lazy_static! {
 pub struct RecordingManager {
   recordings: Arc<RwLock<HashMap<String, RecordingInfo>>>,
   pipelines: Arc<RwLock<HashMap<String, RecordingPipeline>>>,
+  renewals: Arc<RwLock<HashMap<String, CancellationToken>>>,
+  coordinator: Arc<RwLock<Option<Arc<dyn CoordinatorClient>>>>,
+  node_id: Arc<RwLock<Option<String>>>,
 }
 
 impl RecordingManager {
@@ -23,13 +31,21 @@ impl RecordingManager {
     Self {
       recordings: Arc::new(RwLock::new(HashMap::new())),
       pipelines: Arc::new(RwLock::new(HashMap::new())),
+      renewals: Arc::new(RwLock::new(HashMap::new())),
+      coordinator: Arc::new(RwLock::new(None)),
+      node_id: Arc::new(RwLock::new(None)),
     }
+  }
+
+  pub async fn set_coordinator(&self, coordinator: Arc<dyn CoordinatorClient>, node_id: String) {
+    *self.coordinator.write().await = Some(coordinator);
+    *self.node_id.write().await = Some(node_id);
   }
 
   pub async fn start(&self, req: RecordingStartRequest) -> Result<RecordingStartResponse> {
     let id = req.config.id.clone();
 
-    let mut recordings = self.recordings.write().await;
+    let recordings = self.recordings.read().await;
     if recordings.contains_key(&id) {
       return Ok(RecordingStartResponse {
         accepted: false,
@@ -37,6 +53,51 @@ impl RecordingManager {
         message: Some(format!("recording {} already exists", id)),
       });
     }
+    drop(recordings);
+
+    // Attempt to acquire lease if coordinator is configured
+    let lease_id = if let Some(coordinator) = self.coordinator.read().await.clone() {
+      let node_id = self
+        .node_id
+        .read()
+        .await
+        .clone()
+        .unwrap_or_else(|| "recorder-node".to_string());
+      let ttl_secs = req.lease_ttl_secs.unwrap_or(60).max(5);
+
+      let lease_req = LeaseAcquireRequest {
+        resource_id: id.clone(),
+        holder_id: node_id,
+        kind: LeaseKind::Recorder,
+        ttl_secs,
+      };
+
+      info!(id = %id, ttl = ttl_secs, "acquiring recorder lease");
+      let lease_resp = coordinator.acquire(&lease_req).await?;
+
+      if !lease_resp.granted {
+        return Ok(RecordingStartResponse {
+          accepted: false,
+          lease_id: None,
+          message: Some(format!(
+            "lease not granted for recording {}",
+            id
+          )),
+        });
+      }
+
+      let record = lease_resp
+        .record
+        .ok_or_else(|| anyhow!("lease granted but no record returned"))?;
+
+      // Start renewal loop
+      self.start_lease_renewal(id.clone(), record.lease_id.clone(), ttl_secs).await;
+
+      Some(record.lease_id)
+    } else {
+      info!(id = %id, "no coordinator configured, starting without lease");
+      None
+    };
 
     let now = SystemTime::now()
       .duration_since(UNIX_EPOCH)
@@ -46,13 +107,14 @@ impl RecordingManager {
     let info = RecordingInfo {
       config: req.config.clone(),
       state: RecordingState::Starting,
-      lease_id: None,
+      lease_id: lease_id.clone(),
       storage_path: None,
       last_error: None,
       started_at: Some(now),
       stopped_at: None,
     };
 
+    let mut recordings = self.recordings.write().await;
     recordings.insert(id.clone(), info);
     drop(recordings);
 
@@ -110,7 +172,7 @@ impl RecordingManager {
 
     Ok(RecordingStartResponse {
       accepted: true,
-      lease_id: None,
+      lease_id,
       message: Some("recording started".to_string()),
     })
   }
@@ -132,11 +194,30 @@ impl RecordingManager {
       .as_secs();
     info.stopped_at = Some(now);
 
+    let lease_id = info.lease_id.clone();
     drop(recordings);
 
+    // Cancel renewal loop
+    self.cancel_lease_renewal(id).await;
+
+    // Stop the pipeline
     let mut pipelines = self.pipelines.write().await;
     if let Some(mut pipeline) = pipelines.remove(id) {
       pipeline.stop().await?;
+    }
+    drop(pipelines);
+
+    // Release the lease if we have one
+    if let Some(lease_id) = lease_id {
+      if let Some(coordinator) = self.coordinator.read().await.clone() {
+        let release_req = LeaseReleaseRequest {
+          lease_id: lease_id.clone(),
+        };
+        info!(id = %id, lease_id = %lease_id, "releasing recorder lease");
+        if let Err(e) = coordinator.release(&release_req).await {
+          warn!(id = %id, error = %e, "failed to release lease");
+        }
+      }
     }
 
     let mut recordings = self.recordings.write().await;
@@ -156,6 +237,69 @@ impl RecordingManager {
   pub async fn get(&self, id: &str) -> Option<RecordingInfo> {
     let recordings = self.recordings.read().await;
     recordings.get(id).cloned()
+  }
+
+  async fn start_lease_renewal(&self, recording_id: String, lease_id: String, ttl_secs: u64) {
+    let token = CancellationToken::new();
+    {
+      let mut renewals = self.renewals.write().await;
+      if let Some(existing) = renewals.insert(recording_id.clone(), token.clone()) {
+        existing.cancel();
+      }
+    }
+
+    let recordings = Arc::clone(&self.recordings);
+    let coordinator = self.coordinator.clone();
+    let interval_secs = ttl_secs / 2;
+    let renew_interval = Duration::from_secs(std::cmp::max(interval_secs, 5));
+
+    tokio::spawn(async move {
+      loop {
+        tokio::select! {
+          _ = token.cancelled() => {
+            break;
+          }
+          _ = tokio::time::sleep(renew_interval) => {
+            let req = LeaseRenewRequest {
+              lease_id: lease_id.clone(),
+              ttl_secs,
+            };
+
+            let coordinator_guard = coordinator.read().await;
+            if let Some(coordinator) = coordinator_guard.as_ref() {
+              match coordinator.renew(&req).await {
+                Ok(_) => {
+                  let mut recordings = recordings.write().await;
+                  if let Some(entry) = recordings.get_mut(&recording_id) {
+                    if entry.state == RecordingState::Error {
+                      entry.state = RecordingState::Recording;
+                    }
+                    entry.last_error = None;
+                  }
+                }
+                Err(err) => {
+                  warn!(id = %recording_id, error = %err, "lease renewal failed");
+                  let mut recordings = recordings.write().await;
+                  if let Some(entry) = recordings.get_mut(&recording_id) {
+                    entry.state = RecordingState::Error;
+                    entry.last_error = Some(err.to_string());
+                  }
+                  break;
+                }
+              }
+            } else {
+              break;
+            }
+          }
+        }
+      }
+    });
+  }
+
+  async fn cancel_lease_renewal(&self, recording_id: &str) {
+    if let Some(token) = self.renewals.write().await.remove(recording_id) {
+      token.cancel();
+    }
   }
 }
 

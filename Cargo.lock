@@ -2282,6 +2282,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
+name = "quadrant-vms"
+version = "0.1.0"
+dependencies = [
+ "admin-gateway",
+ "anyhow",
+ "async-trait",
+ "axum",
+ "common",
+ "coordinator",
+ "recorder-node",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2394,6 +2412,7 @@ name = "recorder-node"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "aws-config",
  "aws-credential-types",
  "aws-sdk-s3",
@@ -2407,6 +2426,7 @@ dependencies = [
  "serde_json",
  "telemetry",
  "tokio",
+ "tokio-util",
  "tracing",
 ]
 
