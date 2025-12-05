@@ -1,0 +1,87 @@
+# Quadrant VMS - Claude Ignore Patterns
+# Exclude these files/directories to minimize token usage
+# Claude will skip these when gathering context
+
+# Build artifacts and dependencies
+target/
+debug/
+Cargo.lock
+*.rlib
+*.rmeta
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Test and generated data
+data/
+data/hls/
+mutants.out*/
+*.profdata
+*.profraw
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Rust backup files
+**/*.rs.bk
+
+# Logs and runtime files
+*.log
+*.log.*
+logs/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+
+# Docker and compose artifacts
+.make
+
+# Documentation assets (unless specifically needed)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.mp4
+*.avi
+*.mov
+
+# Lock and cache files (already in Cargo.lock)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# OS-specific
+Thumbs.db
+.DS_Store
+
+# Large binary or generated files
+*.wasm
+*.bin
+
+# Deployment profiles (include only when working on deployment)
+# Remove these lines if you need to work on deployment configs
+# profiles/compose/
+# profiles/desktop/
+# profiles/k8s/
+
+# Git internals
+.git/
+.gitignore
+
+# Backup and temporary
+*.bak
+*.tmp
+*.temp
+*.cache
