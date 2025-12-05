@@ -52,8 +52,16 @@ This is a **Cargo workspace** with multiple crates:
 4. **common** (`crates/common/`)
    - Shared utilities and types
    - Contract definitions for inter-service communication
+   - Lease types, stream types, and recording types
 
-5. **telemetry** (`crates/telemetry/`)
+5. **recorder-node** (`crates/recorder-node/`)
+   - Recording job management and lifecycle
+   - Media indexing infrastructure
+   - REST API for recording operations (start/stop/list)
+   - Entry point: `crates/recorder-node/src/main.rs`
+   - **Status**: Infrastructure complete, pipeline implementation pending
+
+6. **telemetry** (`crates/telemetry/`)
    - Logging and monitoring infrastructure
 
 ### Key Files
@@ -109,12 +117,15 @@ make status-dc
 
 ### Current Development Priority
 
-**Next Feature**: Recorder Node & Media Indexing (per README.md)
-- Create `crates/recorder-node`
-- Implement recording job management
-- Add media indexing with metadata extraction
-- Create REST API for recording operations
-- Add integration tests
+**Next Feature**: Recorder Pipeline Implementation (per README.md)
+- ✅ recorder-node crate structure created
+- ✅ Recording job manager with lifecycle management
+- ✅ REST API (start/stop/list recordings)
+- ✅ Media indexer infrastructure (stub implementation)
+- 🔜 Actual pipeline implementation (RTSP/HLS → MP4/HLS recording)
+- 🔜 Metadata extraction using ffprobe or similar tools
+- 🔜 Integration with coordinator for lease management
+- 🔜 Admin-gateway integration for recorder worker management
 
 ### Common Tasks
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/stream-node",
+  "crates/recorder-node",
   "crates/common",
   "crates/telemetry",
   "crates/admin-gateway",

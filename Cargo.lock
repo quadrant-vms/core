@@ -2390,6 +2390,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "recorder-node"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "axum",
+ "common",
+ "lazy_static",
+ "once_cell",
+ "prometheus",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "telemetry",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
