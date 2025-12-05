@@ -4,6 +4,28 @@
 
 **Quadrant VMS** is a modular, cluster-ready Video Management System built in Rust.
 
+## 🚨 MANDATORY Development Rules
+
+### 1. Always Update README.md After Feature Completion
+- **CRITICAL**: After completing ANY feature or milestone, update `README.md`
+- Move completed items from "🔜 In Progress" to "✅ Implemented"
+- Add specific details about what was implemented
+- Add new sub-items if the feature introduced new components
+- Keep README.md as the single source of truth for project status
+
+### 2. Update This File (CLAUDE.md) When Needed
+- **Keep this guide current**: If project structure changes, update this file
+- Add new crates to the Architecture section
+- Update Common Tasks if new patterns emerge
+- Add new development workflows as they're established
+- This file should evolve with the project
+
+### 3. Self-Contained Context for New Sessions
+- **Goal**: User should NEVER need to repeat instructions across chat sessions
+- All project context, rules, and workflows must be in CLAUDE.md
+- New Claude sessions should read this file first to understand everything
+- If you find yourself asking the user to repeat something, add it here
+
 ### Architecture
 
 This is a **Cargo workspace** with multiple crates:
@@ -43,7 +65,35 @@ This is a **Cargo workspace** with multiple crates:
 - `profiles/` - Deployment profiles (compose/desktop/k8s)
 - `data/hls/` - HLS output directory (runtime generated)
 
-### Development Workflow
+## Development Workflow
+
+### Standard Development Cycle
+
+When implementing a new feature, follow this sequence:
+
+1. **Plan & Explore**
+   - Read README.md to understand current progress
+   - Explore relevant crates and existing patterns
+   - Use Task tool with Explore agent for codebase discovery
+
+2. **Implement**
+   - Create or modify files in appropriate crate
+   - Follow existing code patterns and architecture
+   - Add unit tests co-located with code
+   - Add integration tests in `tests/` if needed
+
+3. **Test**
+   - Run `cargo test` to ensure all tests pass
+   - Fix any warnings or compilation errors
+   - Verify integration tests pass
+
+4. **Document & Commit**
+   - **MANDATORY**: Update README.md with completed feature
+   - Update CLAUDE.md if structure changed
+   - Create descriptive commit message
+   - Push to remote repository
+
+### Commands
 
 ```bash
 # Run tests
@@ -56,6 +106,15 @@ make launch  # or: HLS_ROOT=./data/hls cargo run -p stream-node
 make init-dc
 make status-dc
 ```
+
+### Current Development Priority
+
+**Next Feature**: Recorder Node & Media Indexing (per README.md)
+- Create `crates/recorder-node`
+- Implement recording job management
+- Add media indexing with metadata extraction
+- Create REST API for recording operations
+- Add integration tests
 
 ### Common Tasks
 
@@ -91,3 +150,13 @@ make status-dc
 ### Ignore Patterns
 
 See `.claudeignore` for files to skip during context gathering to save tokens.
+
+---
+
+## Quick Start for New Claude Sessions
+
+1. **Read this file first** - Contains all context and rules
+2. **Check README.md** - See current implementation status
+3. **Run `cargo test`** - Verify current state
+4. **Continue from "Current Development Priority"** section above
+5. **Remember**: Always update README.md when completing features
