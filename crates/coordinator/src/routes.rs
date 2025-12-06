@@ -1,4 +1,4 @@
-use crate::{error::ApiError, state::CoordinatorState};
+use crate::{cluster::ClusterStatus, error::ApiError, state::CoordinatorState};
 use axum::{
   Json, Router,
   extract::{Query, State},
@@ -8,7 +8,7 @@ use common::leases::{
   LeaseAcquireRequest, LeaseAcquireResponse, LeaseKind, LeaseRecord, LeaseReleaseRequest,
   LeaseReleaseResponse, LeaseRenewRequest, LeaseRenewResponse,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub fn router(state: CoordinatorState) -> Router {
   Router::new()
@@ -18,6 +18,9 @@ pub fn router(state: CoordinatorState) -> Router {
     .route("/v1/leases/acquire", post(acquire_lease))
     .route("/v1/leases/renew", post(renew_lease))
     .route("/v1/leases/release", post(release_lease))
+    .route("/cluster/status", get(cluster_status))
+    .route("/cluster/vote", post(cluster_vote))
+    .route("/cluster/heartbeat", post(cluster_heartbeat))
     .with_state(state)
 }
 
@@ -89,6 +92,59 @@ async fn release_lease(
   Ok(Json(resp))
 }
 
+async fn cluster_status(
+  State(state): State<CoordinatorState>,
+) -> Result<Json<ClusterStatus>, ApiError> {
+  let cluster = state
+    .cluster()
+    .ok_or_else(|| ApiError::bad_request("clustering not enabled"))?;
+  let status = cluster.status().await;
+  Ok(Json(status))
+}
+
+#[derive(Debug, Deserialize)]
+struct VoteRequest {
+  candidate_id: String,
+  term: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct VoteResponse {
+  vote_granted: bool,
+}
+
+async fn cluster_vote(
+  State(state): State<CoordinatorState>,
+  Json(request): Json<VoteRequest>,
+) -> Result<Json<VoteResponse>, ApiError> {
+  let cluster = state
+    .cluster()
+    .ok_or_else(|| ApiError::bad_request("clustering not enabled"))?;
+  let vote_granted = cluster
+    .handle_vote_request(request.candidate_id, request.term)
+    .await;
+  Ok(Json(VoteResponse { vote_granted }))
+}
+
+#[derive(Debug, Deserialize)]
+struct HeartbeatRequest {
+  leader_id: String,
+  term: u64,
+}
+
+async fn cluster_heartbeat(
+  State(state): State<CoordinatorState>,
+  Json(request): Json<HeartbeatRequest>,
+) -> Result<&'static str, ApiError> {
+  let cluster = state
+    .cluster()
+    .ok_or_else(|| ApiError::bad_request("clustering not enabled"))?;
+  cluster
+    .handle_heartbeat(request.leader_id, request.term)
+    .await;
+  Ok("ok")
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -112,6 +168,11 @@ mod tests {
       max_ttl_secs: 60,
       store_type: LeaseStoreType::Memory,
       database_url: None,
+      cluster_enabled: false,
+      node_id: None,
+      peer_addrs: vec![],
+      election_timeout_ms: 5000,
+      heartbeat_interval_ms: 1000,
     };
     let store = Arc::new(MemoryLeaseStore::new(10, 60));
     CoordinatorState::new(config, store)

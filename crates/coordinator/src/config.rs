@@ -14,6 +14,11 @@ pub struct CoordinatorConfig {
   pub max_ttl_secs: u64,
   pub store_type: LeaseStoreType,
   pub database_url: Option<String>,
+  pub cluster_enabled: bool,
+  pub node_id: Option<String>,
+  pub peer_addrs: Vec<String>,
+  pub election_timeout_ms: u64,
+  pub heartbeat_interval_ms: u64,
 }
 
 impl CoordinatorConfig {
@@ -43,12 +48,44 @@ impl CoordinatorConfig {
       env::var("DATABASE_URL").ok()
     };
 
+    let cluster_enabled = env::var("CLUSTER_ENABLED")
+      .ok()
+      .and_then(|v| v.parse::<bool>().ok())
+      .unwrap_or(false);
+
+    let node_id = env::var("NODE_ID").ok();
+
+    let peer_addrs = env::var("CLUSTER_PEERS")
+      .ok()
+      .map(|s| {
+        s.split(',')
+          .map(|addr| addr.trim().to_string())
+          .filter(|addr| !addr.is_empty())
+          .collect()
+      })
+      .unwrap_or_default();
+
+    let election_timeout_ms = env::var("ELECTION_TIMEOUT_MS")
+      .ok()
+      .and_then(|v| v.parse::<u64>().ok())
+      .unwrap_or(5000);
+
+    let heartbeat_interval_ms = env::var("HEARTBEAT_INTERVAL_MS")
+      .ok()
+      .and_then(|v| v.parse::<u64>().ok())
+      .unwrap_or(1000);
+
     Ok(Self {
       bind_addr,
       default_ttl_secs: default_ttl,
       max_ttl_secs: max_ttl.max(default_ttl),
       store_type,
       database_url,
+      cluster_enabled,
+      node_id,
+      peer_addrs,
+      election_timeout_ms,
+      heartbeat_interval_ms,
     })
   }
 }

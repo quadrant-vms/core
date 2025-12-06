@@ -40,13 +40,22 @@ This project is **under active development**.
   - Enhanced health endpoints: `/readyz` endpoint verifies lease store connectivity
   - Graceful degradation: temporary coordinator unavailability doesn't immediately kill active streams
   - Comprehensive error handling with detailed error messages and logging
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker↔recorder flows.
+- **Multi-coordinator clustering with leader election**:
+  - Leader election using Raft-inspired consensus algorithm
+  - Automatic failover and re-election on leader failure
+  - Heartbeat-based health monitoring between coordinator nodes
+  - Randomized election timeouts to prevent split votes
+  - Cluster status API endpoint (`/cluster/status`)
+  - Configurable via environment variables (`CLUSTER_ENABLED`, `NODE_ID`, `CLUSTER_PEERS`)
+  - Support for single-node and multi-node cluster deployments
+  - Integration tests validating leader election in 1-node and 3-node clusters
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, and end-to-end gateway↔coordinator↔worker↔recorder flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
 - AI model plugin architecture
-- Multi-coordinator clustering with leader election
 - Advanced metrics and observability
+- Request forwarding from follower coordinators to leader
 
 ---
 

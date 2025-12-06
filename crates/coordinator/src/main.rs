@@ -1,5 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use coordinator::{
+  cluster::ClusterManager,
   config::{CoordinatorConfig, LeaseStoreType},
   routes,
   state::CoordinatorState,
@@ -37,7 +38,43 @@ async fn main() -> Result<()> {
     }
   };
 
-  let state = CoordinatorState::new(config, store);
+  let state = if config.cluster_enabled {
+    let node_id = config
+      .node_id
+      .clone()
+      .context("NODE_ID required when clustering is enabled")?;
+    let node_addr = config.bind_addr.to_string();
+    let peer_addrs = config.peer_addrs.clone();
+
+    info!(
+      node_id = %node_id,
+      peers = ?peer_addrs,
+      "clustering enabled"
+    );
+
+    let cluster = Arc::new(ClusterManager::new(
+      node_id,
+      node_addr,
+      peer_addrs,
+      config.election_timeout_ms,
+      config.heartbeat_interval_ms,
+    ));
+
+    let election_monitor = cluster.clone();
+    tokio::spawn(async move {
+      election_monitor.start_election_monitor().await;
+    });
+
+    let heartbeat_sender = cluster.clone();
+    tokio::spawn(async move {
+      heartbeat_sender.start_heartbeat_sender().await;
+    });
+
+    CoordinatorState::with_cluster(config.clone(), store, cluster)
+  } else {
+    info!("clustering disabled, running as standalone coordinator");
+    CoordinatorState::new(config.clone(), store)
+  };
 
   let app = routes::router(state.clone());
   let listener = TcpListener::bind(bind_addr).await?;

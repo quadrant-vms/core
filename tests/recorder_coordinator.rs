@@ -20,6 +20,11 @@ fn coordinator_state() -> CoordinatorState {
     max_ttl_secs: 60,
     store_type: LeaseStoreType::Memory,
     database_url: None,
+    cluster_enabled: false,
+    node_id: None,
+    peer_addrs: vec![],
+    election_timeout_ms: 5000,
+    heartbeat_interval_ms: 1000,
   };
   let store: Arc<dyn LeaseStore> =
     Arc::new(MemoryLeaseStore::new(cfg.default_ttl_secs, cfg.max_ttl_secs));
