@@ -247,6 +247,80 @@ lazy_static! {
         REGISTRY.register(Box::new(metric.clone())).ok();
         metric
     };
+
+    // ==== AI Service Metrics ====
+    pub static ref AI_SERVICE_ACTIVE_TASKS: IntGauge = {
+        let metric = IntGauge::new("ai_service_active_tasks", "Number of active AI tasks")
+            .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_TASK_OPERATIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "ai_service_task_operations_total",
+                "Total number of AI task operations",
+            ),
+            &["operation", "status"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_FRAMES_PROCESSED: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "ai_service_frames_processed_total",
+                "Total number of frames processed",
+            ),
+            &["plugin_type", "status"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_DETECTIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "ai_service_detections_total",
+                "Total number of detections made",
+            ),
+            &["plugin_type", "class"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_DETECTION_LATENCY: HistogramVec = {
+        let metric = HistogramVec::new(
+            HistogramOpts::new(
+                "ai_service_detection_latency_seconds",
+                "Latency of AI detection operations",
+            )
+            .buckets(vec![0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0]),
+            &["plugin_type"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_PLUGIN_HEALTH: IntGaugeVec = {
+        let metric = IntGaugeVec::new(
+            Opts::new(
+                "ai_service_plugin_health",
+                "Health status of plugins (1=healthy, 0=unhealthy)",
+            ),
+            &["plugin_id"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
 }
 
 /// Helper function to encode metrics for Prometheus scraping
@@ -293,6 +367,22 @@ mod tests {
                 .with_label_values(&["stream"])
                 .get(),
             2
+        );
+    }
+
+    #[test]
+    fn test_ai_service_metrics_accessible() {
+        AI_SERVICE_ACTIVE_TASKS.set(5);
+        assert_eq!(AI_SERVICE_ACTIVE_TASKS.get(), 5);
+
+        AI_SERVICE_FRAMES_PROCESSED
+            .with_label_values(&["mock_detector", "success"])
+            .inc();
+        assert_eq!(
+            AI_SERVICE_FRAMES_PROCESSED
+                .with_label_values(&["mock_detector", "success"])
+                .get(),
+            1
         );
     }
 

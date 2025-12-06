@@ -52,18 +52,33 @@ This project is **under active development**.
     - **Request forwarding from followers to leader**: Follower coordinators automatically forward write operations (acquire/renew/release) to the elected leader, enabling clients to connect to any coordinator node without tracking leader status
 - **Advanced Metrics and Observability**:
   - Prometheus metrics integration across all services
-  - Comprehensive metric collection for coordinators, stream-nodes, recorder-nodes, and admin-gateway
+  - Comprehensive metric collection for coordinators, stream-nodes, recorder-nodes, admin-gateway, and ai-service
   - `/metrics` endpoint on all services for Prometheus scraping
   - Coordinator metrics: active leases, lease operations, cluster nodes, leader elections, forwarded requests
   - Stream-node metrics: active streams, HLS segments, S3 uploads, bytes processed
   - Recorder-node metrics: active recordings, recording operations, bytes recorded, completion status
   - Admin-gateway metrics: HTTP requests, request duration, active workers, worker operations
+  - AI-service metrics: active tasks, frames processed, detections made, detection latency, plugin health
   - Centralized metrics registry in telemetry crate
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, and end-to-end gateway↔coordinator↔worker↔recorder flows.
+- **AI Model Plugin Architecture**:
+  - `ai-service`: Modular AI plugin system with extensible architecture
+  - Plugin trait interface for custom AI model integrations
+  - Plugin registry with dynamic plugin registration and management
+  - Built-in mock object detection plugin for testing and demonstration
+  - REST API for AI task lifecycle management (`/v1/tasks`)
+  - Coordinator lease integration for distributed AI task management
+  - Automatic lease acquisition, renewal, and release for AI tasks
+  - Support for multiple output formats (webhook, MQTT, RabbitMQ, local file)
+  - Frame-based processing with configurable sampling rates
+  - Comprehensive metrics for AI operations (tasks, frames, detections, latency)
+  - Health check endpoints for plugin monitoring
+  - Configurable via `AI_SERVICE_ADDR`, `COORDINATOR_URL`, and `NODE_ID` environment variables
+  - Standalone or coordinator-integrated deployment modes
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
-- AI model plugin architecture
+- Real AI model integrations (YOLOv8, pose estimation, facial recognition)
 
 ---
 

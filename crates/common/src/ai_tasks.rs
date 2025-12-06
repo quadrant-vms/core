@@ -1,0 +1,338 @@
+//! AI Task contracts for the Quadrant VMS AI plugin system.
+//!
+//! This module defines the contracts for AI task lifecycle, plugin configuration,
+//! and result delivery.
+
+use serde::{Deserialize, Serialize};
+
+/// Configuration for an AI task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskConfig {
+    /// Unique task identifier
+    pub id: String,
+
+    /// Plugin type identifier (e.g., "object_detection", "pose_estimation")
+    pub plugin_type: String,
+
+    /// Input stream ID to process (if using existing stream)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_stream_id: Option<String>,
+
+    /// Direct input URI (RTSP/HLS/file) if not using stream_id
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_uri: Option<String>,
+
+    /// Plugin-specific configuration (JSON object)
+    #[serde(default)]
+    pub model_config: serde_json::Value,
+
+    /// Frame sampling rate (process every Nth frame, default: 1)
+    #[serde(default = "default_frame_rate")]
+    pub frame_rate: u32,
+
+    /// Output format configuration
+    pub output: AiOutputConfig,
+}
+
+fn default_frame_rate() -> u32 {
+    1
+}
+
+/// Output configuration for AI task results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum AiOutputConfig {
+    /// POST results to webhook URL
+    WebhookJson { url: String, headers: Option<serde_json::Value> },
+
+    /// Publish to MQTT topic
+    MqttTopic { broker: String, topic: String },
+
+    /// Publish to RabbitMQ exchange
+    RabbitMq { url: String, exchange: String, routing_key: String },
+
+    /// Store in local file (for testing/debugging)
+    LocalFile { path: String },
+}
+
+/// Request to start an AI task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskStartRequest {
+    /// Task configuration
+    pub config: AiTaskConfig,
+
+    /// Lease TTL in seconds (default: 300)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_ttl_secs: Option<u64>,
+}
+
+/// Response to AI task start request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskStartResponse {
+    /// Whether the task was accepted
+    pub accepted: bool,
+
+    /// Lease ID if task was accepted
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_id: Option<String>,
+
+    /// Human-readable message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Request to stop an AI task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskStopRequest {
+    /// Task ID to stop
+    pub task_id: String,
+}
+
+/// Response to AI task stop request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskStopResponse {
+    /// Whether the stop was successful
+    pub success: bool,
+
+    /// Human-readable message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// AI task state
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiTaskState {
+    /// Task is queued but not started
+    Pending,
+
+    /// Plugin is being initialized
+    Initializing,
+
+    /// Task is actively processing frames
+    Processing,
+
+    /// Task is paused (can be resumed)
+    Paused,
+
+    /// Task is being stopped
+    Stopping,
+
+    /// Task has stopped normally
+    Stopped,
+
+    /// Task encountered an error
+    Error,
+}
+
+/// AI task information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiTaskInfo {
+    /// Task configuration
+    pub config: AiTaskConfig,
+
+    /// Current state
+    pub state: AiTaskState,
+
+    /// Lease ID if acquired
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_id: Option<String>,
+
+    /// Last error message if in error state
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+
+    /// Timestamp when task started (Unix timestamp in milliseconds)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<u64>,
+
+    /// Timestamp of last processed frame (Unix timestamp in milliseconds)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_processed_frame: Option<u64>,
+
+    /// Total frames processed
+    pub frames_processed: u64,
+
+    /// Total detections made
+    pub detections_made: u64,
+}
+
+/// Video frame metadata for AI processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoFrame {
+    /// Source task or stream ID
+    pub source_id: String,
+
+    /// Frame timestamp (Unix timestamp in milliseconds)
+    pub timestamp: u64,
+
+    /// Frame sequence number
+    pub sequence: u64,
+
+    /// Frame width in pixels
+    pub width: u32,
+
+    /// Frame height in pixels
+    pub height: u32,
+
+    /// Image format (e.g., "jpeg", "png", "raw")
+    pub format: String,
+
+    /// Frame data (base64 encoded for JSON transport)
+    pub data: String,
+}
+
+/// Detection result from AI plugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Detection {
+    /// Object class/label
+    pub class: String,
+
+    /// Detection confidence (0.0 to 1.0)
+    pub confidence: f32,
+
+    /// Bounding box (x, y, width, height)
+    pub bbox: BoundingBox,
+
+    /// Additional metadata (plugin-specific)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Bounding box coordinates
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BoundingBox {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// AI processing result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiResult {
+    /// Task ID that produced this result
+    pub task_id: String,
+
+    /// Frame timestamp
+    pub timestamp: u64,
+
+    /// Plugin type that produced the result
+    pub plugin_type: String,
+
+    /// Detected objects/entities
+    pub detections: Vec<Detection>,
+
+    /// Overall confidence score
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f32>,
+
+    /// Processing latency in milliseconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub processing_time_ms: Option<u64>,
+
+    /// Additional metadata
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Plugin metadata and capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginInfo {
+    /// Plugin unique identifier
+    pub id: String,
+
+    /// Human-readable name
+    pub name: String,
+
+    /// Plugin description
+    pub description: String,
+
+    /// Plugin version
+    pub version: String,
+
+    /// Configuration schema (JSON Schema)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_schema: Option<serde_json::Value>,
+
+    /// Supported input formats
+    pub supported_formats: Vec<String>,
+
+    /// Whether the plugin requires GPU
+    pub requires_gpu: bool,
+}
+
+/// List of available plugins
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginListResponse {
+    pub plugins: Vec<PluginInfo>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ai_task_config_serialization() {
+        let config = AiTaskConfig {
+            id: "task-1".to_string(),
+            plugin_type: "object_detection".to_string(),
+            input_stream_id: Some("stream-123".to_string()),
+            input_uri: None,
+            model_config: serde_json::json!({
+                "model": "yolov8",
+                "confidence_threshold": 0.5
+            }),
+            frame_rate: 5,
+            output: AiOutputConfig::WebhookJson {
+                url: "http://localhost:8080/detections".to_string(),
+                headers: None,
+            },
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: AiTaskConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, config.id);
+        assert_eq!(deserialized.plugin_type, config.plugin_type);
+    }
+
+    #[test]
+    fn test_ai_task_state_transitions() {
+        let states = vec![
+            AiTaskState::Pending,
+            AiTaskState::Initializing,
+            AiTaskState::Processing,
+            AiTaskState::Stopping,
+            AiTaskState::Stopped,
+        ];
+
+        for state in states {
+            let json = serde_json::to_string(&state).unwrap();
+            let deserialized: AiTaskState = serde_json::from_str(&json).unwrap();
+            assert_eq!(deserialized, state);
+        }
+    }
+
+    #[test]
+    fn test_detection_serialization() {
+        let detection = Detection {
+            class: "person".to_string(),
+            confidence: 0.95,
+            bbox: BoundingBox {
+                x: 100,
+                y: 200,
+                width: 50,
+                height: 100,
+            },
+            metadata: Some(serde_json::json!({
+                "age_estimate": "25-35",
+                "pose": "standing"
+            })),
+        };
+
+        let json = serde_json::to_string(&detection).unwrap();
+        let deserialized: Detection = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.class, detection.class);
+        assert_eq!(deserialized.confidence, detection.confidence);
+    }
+}

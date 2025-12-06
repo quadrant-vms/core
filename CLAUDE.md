@@ -73,12 +73,23 @@ This is a **Cargo workspace** with multiple crates:
 
 6. **telemetry** (`crates/telemetry/`)
    - Logging and monitoring infrastructure
+   - Centralized Prometheus metrics registry
+
+7. **ai-service** (`crates/ai-service/`)
+   - AI plugin system with extensible architecture
+   - Plugin trait for custom AI model integrations
+   - Built-in mock object detection plugin
+   - REST API for AI task management
+   - Coordinator lease integration
+   - Entry point: `crates/ai-service/src/main.rs`
+   - **Status**: Core plugin architecture complete
 
 ### Key Files
 
 - `Cargo.toml` - Workspace manifest
 - `Makefile` - Docker Compose and cargo shortcuts
 - `tests/gateway_coordinator.rs` - End-to-end integration tests
+- `tests/ai_service.rs` - AI service integration tests
 - `.env` / `example.env` - Configuration (not in git)
 - `profiles/` - Deployment profiles (compose/desktop/k8s)
 - `data/hls/` - HLS output directory (runtime generated)
@@ -130,29 +141,28 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: Multi-Coordinator Clustering with Leader Election
-- ✅ recorder-node crate structure created
-- ✅ Recording job manager with lifecycle management
-- ✅ REST API (start/stop/list recordings)
-- ✅ FFmpeg-based recording pipeline (RTSP/HLS → MP4/HLS/MKV)
-- ✅ Metadata extraction using ffprobe
-- ✅ Storage path tracking and file management
-- ✅ Coordinator lease integration for distributed recording management
+**Recently Completed**: AI Model Plugin Architecture
+- ✅ ai-service crate with extensible plugin system
+- ✅ Plugin trait interface (AiPlugin) for custom integrations
+- ✅ Plugin registry with dynamic registration
+- ✅ Mock object detection plugin for testing
+- ✅ REST API for AI task lifecycle (/v1/tasks, /v1/plugins)
+- ✅ Coordinator lease integration for AI tasks
 - ✅ Automatic lease acquisition, renewal, and release
-- ✅ Admin-gateway recorder worker management integration
-- ✅ End-to-end tests for recorder workflow
-- ✅ Coordinator failover detection and recovery
-- ✅ Worker heartbeat and health monitoring
-- ✅ Automatic lease recovery on worker failure
-- ✅ Multi-coordinator cluster support with leader election
-- ✅ Request forwarding from followers to leader
-- ✅ Integration tests for failover scenarios
+- ✅ State management with task tracking
+- ✅ Multiple output format support (webhook, MQTT, RabbitMQ, file)
+- ✅ Frame-based processing configuration
+- ✅ Comprehensive AI metrics (tasks, frames, detections, latency)
+- ✅ Health check and readiness endpoints
+- ✅ Integration tests for plugin system
+- ✅ Standalone and coordinator-integrated deployment modes
 
-**Next Feature**: Advanced Metrics and Observability
-- 🔜 Metrics collection and aggregation
-- 🔜 Prometheus/OpenTelemetry integration
-- 🔜 Performance monitoring dashboards
-- 🔜 Health check endpoints with detailed diagnostics
+**Next Feature**: Real AI Model Integrations
+- 🔜 YOLOv8 object detection plugin
+- 🔜 Pose estimation plugin
+- 🔜 Facial recognition plugin
+- 🔜 Frame capture from stream-node/recorder-node
+- 🔜 GPU acceleration support
 
 ### Common Tasks
 

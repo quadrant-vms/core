@@ -6,6 +6,7 @@ members = [
   "crates/telemetry",
   "crates/admin-gateway",
   "crates/coordinator",
+  "crates/ai-service",
 ]
 resolver = "2"
 
@@ -18,11 +19,13 @@ edition = "2021"
 admin-gateway = { path = "crates/admin-gateway" }
 coordinator = { path = "crates/coordinator" }
 recorder-node = { path = "crates/recorder-node" }
+ai-service = { path = "crates/ai-service" }
 common = { path = "crates/common" }
 
 [dev-dependencies]
 anyhow = "1"
 axum = "0.7"
+axum-test = "16"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 tokio-util = "0.7"
 reqwest = { version = "0.12", features = ["json"] }

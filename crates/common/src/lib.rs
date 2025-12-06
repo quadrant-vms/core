@@ -1,3 +1,4 @@
+pub mod ai_tasks;
 pub mod leases;
 pub mod recordings;
 pub mod streams;
