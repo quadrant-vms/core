@@ -1,7 +1,7 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
     plugin::mock_detector::MockDetectorPlugin, plugin::registry::PluginRegistry,
-    plugin::yolov8_detector::YoloV8DetectorPlugin, AiServiceState,
+    plugin::yolov8_detector::YoloV8DetectorPlugin, plugin::AiPlugin, AiServiceState,
 };
 use anyhow::Result;
 use std::sync::Arc;

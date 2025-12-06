@@ -111,6 +111,7 @@ mod tests {
     use common::ai_tasks::{AiResult, VideoFrame};
 
     struct MockPlugin {
+        #[allow(dead_code)]
         id: String,
     }
 
