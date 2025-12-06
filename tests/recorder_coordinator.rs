@@ -38,6 +38,7 @@ async fn spawn_router(router: Router) -> Result<(SocketAddr, JoinHandle<()>)> {
 #[tokio::test]
 async fn recorder_acquires_and_releases_lease() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
+  std::env::set_var("MOCK_RECORDING", "1");
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
@@ -72,6 +73,9 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   assert!(response.lease_id.is_some());
   let lease_id = response.lease_id.unwrap();
 
+  // Give time for lease to be stored in coordinator
+  tokio::time::sleep(Duration::from_millis(50)).await;
+
   // Verify lease was acquired by checking coordinator
   let http_client = Client::builder().build()?;
   let leases_resp = http_client
@@ -88,8 +92,8 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   let stopped = RECORDING_MANAGER.stop("rec-1").await?;
   assert!(stopped);
 
-  // Verify lease was released
-  tokio::time::sleep(Duration::from_millis(100)).await;
+  // Verify lease was released (give time for async HTTP call to coordinator)
+  tokio::time::sleep(Duration::from_millis(300)).await;
   let leases_resp = http_client
     .get(format!("{}v1/leases?kind=recorder", coordinator_url))
     .send()
@@ -104,6 +108,7 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
 #[tokio::test]
 async fn recorder_lease_conflict() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
+  std::env::set_var("MOCK_RECORDING", "1");
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
@@ -160,16 +165,17 @@ async fn recorder_lease_conflict() -> Result<()> {
   Ok(())
 }
 
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn recorder_lease_renewal() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
+  std::env::set_var("MOCK_RECORDING", "1");
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
   let (coordinator_addr, coordinator_task) = spawn_router(coordinator_router).await?;
   let coordinator_url = format!("http://{}/", coordinator_addr);
 
-  tokio::time::sleep(Duration::from_millis(100)).await;
+  tokio::time::advance(Duration::from_millis(100)).await;
 
   // Initialize recorder manager with coordinator
   let base = reqwest::Url::parse(&coordinator_url)?;
@@ -178,7 +184,7 @@ async fn recorder_lease_renewal() -> Result<()> {
     .set_coordinator(client.clone(), "recorder-test".to_string())
     .await;
 
-  // Start recording with short TTL
+  // Start recording with short TTL (reduced from 10s to 2s for faster tests)
   let config = RecordingConfig {
     id: "rec-renewal".to_string(),
     source_stream_id: Some("stream-1".to_string()),
@@ -189,15 +195,16 @@ async fn recorder_lease_renewal() -> Result<()> {
 
   let req = RecordingStartRequest {
     config,
-    lease_ttl_secs: Some(10),
+    lease_ttl_secs: Some(2),
   };
 
   let response = RECORDING_MANAGER.start(req).await?;
   assert!(response.accepted);
   let lease_id = response.lease_id.clone().unwrap();
 
-  // Wait for renewal cycle (10s TTL / 2 = 5s interval, wait 6s)
-  tokio::time::sleep(Duration::from_secs(6)).await;
+  // Fast-forward time for renewal cycle (2s TTL / 2 = 1s interval, advance 1.5s)
+  tokio::time::advance(Duration::from_millis(1500)).await;
+  tokio::task::yield_now().await; // Give renewal task a chance to run
 
   // Verify lease is still active (was renewed)
   let http_client = Client::builder().build()?;

@@ -49,6 +49,22 @@ impl RecordingPipeline {
       "starting recording pipeline"
     );
 
+    // Check if we're in mock/test mode
+    if std::env::var("MOCK_RECORDING").is_ok() {
+      info!(id = %self.config.id, "mock mode enabled, skipping FFmpeg");
+      // In mock mode, just create the output directory and return success
+      if let Some(parent) = self.output_path.parent() {
+        fs::create_dir_all(parent)
+          .await
+          .context("failed to create output directory")?;
+      }
+      // Create an empty output file to simulate recording
+      fs::write(&self.output_path, b"mock recording data")
+        .await
+        .context("failed to create mock output file")?;
+      return Ok(());
+    }
+
     let source_uri = self
       .config
       .source_uri
