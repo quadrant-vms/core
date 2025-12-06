@@ -1,4 +1,8 @@
-use ai_service::{api, config::AiServiceConfig, coordinator::HttpCoordinatorClient, plugin::mock_detector::MockDetectorPlugin, plugin::registry::PluginRegistry, AiServiceState};
+use ai_service::{
+    api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
+    plugin::mock_detector::MockDetectorPlugin, plugin::registry::PluginRegistry,
+    plugin::yolov8_detector::YoloV8DetectorPlugin, AiServiceState,
+};
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::{net::TcpListener, sync::RwLock};
@@ -23,9 +27,38 @@ async fn main() -> Result<()> {
 
     // Register built-in plugins
     info!("Registering built-in plugins...");
+
+    // Always register mock detector
     let mock_detector = Arc::new(RwLock::new(MockDetectorPlugin::new()));
     registry.register(mock_detector).await?;
     info!("Registered mock_object_detector plugin");
+
+    // Register YOLOv8 detector if model file exists
+    let yolov8_model_path = std::env::var("YOLOV8_MODEL_PATH")
+        .unwrap_or_else(|_| "models/yolov8n.onnx".to_string());
+
+    if std::path::Path::new(&yolov8_model_path).exists() {
+        let mut yolov8 = YoloV8DetectorPlugin::new();
+        let yolov8_config = serde_json::json!({
+            "model_path": yolov8_model_path,
+            "confidence_threshold": std::env::var("YOLOV8_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.5)
+        });
+        if let Err(e) = yolov8.init(yolov8_config).await {
+            tracing::warn!("Failed to initialize YOLOv8 plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(yolov8))).await?;
+            info!("Registered yolov8_detector plugin with model: {}", yolov8_model_path);
+        }
+    } else {
+        info!(
+            "YOLOv8 model not found at '{}', skipping yolov8_detector plugin registration. \
+            Set YOLOV8_MODEL_PATH environment variable to enable.",
+            yolov8_model_path
+        );
+    }
 
     let plugin_count = registry.count().await;
     info!("Plugin registry initialized with {} plugins", plugin_count);

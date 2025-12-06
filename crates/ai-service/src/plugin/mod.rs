@@ -1,5 +1,6 @@
 pub mod mock_detector;
 pub mod registry;
+pub mod yolov8_detector;
 
 use anyhow::Result;
 use async_trait::async_trait;

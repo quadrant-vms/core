@@ -65,6 +65,15 @@ This project is **under active development**.
   - Plugin trait interface for custom AI model integrations
   - Plugin registry with dynamic plugin registration and management
   - Built-in mock object detection plugin for testing and demonstration
+  - **YOLOv8 object detection plugin**:
+    - Real-time object detection using YOLOv8 ONNX models
+    - Support for all YOLOv8 model variants (nano, small, medium, large, extra-large)
+    - CPU and GPU inference support via ONNX Runtime
+    - Non-Maximum Suppression (NMS) for overlapping box filtering
+    - Configurable confidence and IoU thresholds
+    - 80 COCO classes detection (person, car, dog, etc.)
+    - Automatic scaling to original image dimensions
+    - Environment variable configuration (`YOLOV8_MODEL_PATH`, `YOLOV8_CONFIDENCE`)
   - REST API for AI task lifecycle management (`/v1/tasks`)
   - Coordinator lease integration for distributed AI task management
   - Automatic lease acquisition, renewal, and release for AI tasks
@@ -78,7 +87,9 @@ This project is **under active development**.
 
 ### 🔜 In Progress
 - Operator UI & rule system
-- Real AI model integrations (YOLOv8, pose estimation, facial recognition)
+- Additional AI model integrations (pose estimation, facial recognition)
+- Frame capture pipeline from stream-node/recorder-node to AI service
+- GPU acceleration optimization for YOLOv8
 
 ---
 

@@ -23,3 +23,7 @@ image = "0.25"
 tower-http = { version = "0.6", features = ["trace"] }
 hostname = "0.4"
 uuid = { version = "1", features = ["v4"] }
+# YOLOv8 dependencies
+ort = { version = "2.0.0-rc.10", features = ["download-binaries"] }
+ndarray = "0.16"
+imageproc = "0.25"
