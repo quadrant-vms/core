@@ -8,7 +8,7 @@ use admin_gateway::{
 use anyhow::Result;
 use axum::Router;
 use coordinator::{
-    config::CoordinatorConfig,
+    config::{CoordinatorConfig, LeaseStoreType},
     routes as coordinator_routes,
     state::CoordinatorState,
     store::{LeaseStore, MemoryLeaseStore},
@@ -22,6 +22,8 @@ fn coordinator_state() -> CoordinatorState {
         bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
         default_ttl_secs: 15,
         max_ttl_secs: 60,
+        store_type: LeaseStoreType::Memory,
+        database_url: None,
     };
     let store: Arc<dyn LeaseStore> = Arc::new(MemoryLeaseStore::new(cfg.default_ttl_secs, cfg.max_ttl_secs));
     CoordinatorState::new(cfg, store)

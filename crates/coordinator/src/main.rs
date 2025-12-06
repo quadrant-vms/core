@@ -1,9 +1,9 @@
 use anyhow::Result;
 use coordinator::{
-  config::CoordinatorConfig,
+  config::{CoordinatorConfig, LeaseStoreType},
   routes,
   state::CoordinatorState,
-  store::{LeaseStore, MemoryLeaseStore},
+  store::{LeaseStore, MemoryLeaseStore, PostgresLeaseStore},
 };
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -15,10 +15,28 @@ async fn main() -> Result<()> {
 
   let config = CoordinatorConfig::from_env()?;
   let bind_addr = config.bind_addr;
-  let store: Arc<dyn LeaseStore> = Arc::new(MemoryLeaseStore::new(
-    config.default_ttl_secs,
-    config.max_ttl_secs,
-  ));
+
+  let store: Arc<dyn LeaseStore> = match config.store_type {
+    LeaseStoreType::Memory => {
+      info!("using in-memory lease store");
+      Arc::new(MemoryLeaseStore::new(
+        config.default_ttl_secs,
+        config.max_ttl_secs,
+      ))
+    }
+    LeaseStoreType::Postgres => {
+      let database_url = config
+        .database_url
+        .as_ref()
+        .expect("DATABASE_URL required for Postgres");
+      info!(url = %database_url, "using PostgreSQL lease store");
+      Arc::new(
+        PostgresLeaseStore::new(database_url, config.default_ttl_secs, config.max_ttl_secs)
+          .await?,
+      )
+    }
+  };
+
   let state = CoordinatorState::new(config, store);
 
   let app = routes::router(state.clone());

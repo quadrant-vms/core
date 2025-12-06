@@ -82,7 +82,11 @@ async fn release_lease(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{config::CoordinatorConfig, state::CoordinatorState, store::MemoryLeaseStore};
+  use crate::{
+    config::{CoordinatorConfig, LeaseStoreType},
+    state::CoordinatorState,
+    store::MemoryLeaseStore,
+  };
   use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -96,6 +100,8 @@ mod tests {
       bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
       default_ttl_secs: 10,
       max_ttl_secs: 60,
+      store_type: LeaseStoreType::Memory,
+      database_url: None,
     };
     let store = Arc::new(MemoryLeaseStore::new(10, 60));
     CoordinatorState::new(config, store)

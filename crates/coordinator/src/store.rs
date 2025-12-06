@@ -1,9 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use common::leases::{
   LeaseAcquireRequest, LeaseAcquireResponse, LeaseKind, LeaseRecord, LeaseReleaseRequest,
   LeaseReleaseResponse, LeaseRenewRequest, LeaseRenewResponse,
 };
+use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{
   collections::HashMap,
   time::{SystemTime, UNIX_EPOCH},
@@ -325,5 +326,287 @@ mod tests {
       .unwrap();
     assert!(reacquire.granted);
     assert_eq!(reacquire.record.unwrap().holder_id, "node-b");
+  }
+}
+
+pub struct PostgresLeaseStore {
+  pool: PgPool,
+  default_ttl: u64,
+  max_ttl: u64,
+}
+
+impl PostgresLeaseStore {
+  pub async fn new(database_url: &str, default_ttl: u64, max_ttl: u64) -> Result<Self> {
+    let pool = PgPoolOptions::new()
+      .max_connections(10)
+      .connect(database_url)
+      .await
+      .context("failed to connect to PostgreSQL")?;
+
+    sqlx::migrate!("./migrations")
+      .run(&pool)
+      .await
+      .context("failed to run database migrations")?;
+
+    Ok(Self {
+      pool,
+      default_ttl,
+      max_ttl: max_ttl.max(default_ttl),
+    })
+  }
+
+  fn normalize_ttl(&self, ttl: u64) -> u64 {
+    let ttl = if ttl == 0 { self.default_ttl } else { ttl };
+    ttl.min(self.max_ttl).max(5)
+  }
+
+  fn now_epoch_secs() -> u64 {
+    SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_secs()
+  }
+
+  async fn purge_expired(&self) -> Result<()> {
+    let now = Self::now_epoch_secs() as i64;
+    sqlx::query("DELETE FROM leases WHERE expires_at_epoch_secs <= $1")
+      .bind(now)
+      .execute(&self.pool)
+      .await
+      .context("failed to purge expired leases")?;
+    Ok(())
+  }
+}
+
+#[async_trait]
+impl LeaseStore for PostgresLeaseStore {
+  async fn acquire(&self, request: LeaseAcquireRequest) -> Result<LeaseAcquireResponse> {
+    let ttl = self.normalize_ttl(request.ttl_secs);
+    let now = Self::now_epoch_secs();
+
+    self.purge_expired().await?;
+
+    let mut tx = self.pool.begin().await.context("failed to begin transaction")?;
+
+    let existing: Option<(String, String, String, i64, i64)> = sqlx::query_as(
+      "SELECT lease_id, holder_id, kind, expires_at_epoch_secs, version
+       FROM leases
+       WHERE resource_id = $1
+       FOR UPDATE"
+    )
+    .bind(&request.resource_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .context("failed to query existing lease")?;
+
+    if let Some((lease_id, holder_id, kind_str, expires_at, version)) = existing {
+      if expires_at as u64 > now {
+        if holder_id == request.holder_id {
+          let new_expires = (now + ttl) as i64;
+          let new_version = version + 1;
+
+          sqlx::query(
+            "UPDATE leases
+             SET expires_at_epoch_secs = $1, version = $2, updated_at = NOW()
+             WHERE lease_id = $3"
+          )
+          .bind(new_expires)
+          .bind(new_version)
+          .bind(&lease_id)
+          .execute(&mut *tx)
+          .await
+          .context("failed to update lease")?;
+
+          tx.commit().await.context("failed to commit transaction")?;
+
+          let kind = kind_str.parse().unwrap_or(LeaseKind::Stream);
+          return Ok(LeaseAcquireResponse {
+            granted: true,
+            record: Some(LeaseRecord {
+              lease_id,
+              resource_id: request.resource_id,
+              holder_id,
+              kind,
+              expires_at_epoch_secs: new_expires as u64,
+              version: new_version as u64,
+            }),
+          });
+        } else {
+          tx.rollback().await.ok();
+          let kind = kind_str.parse().unwrap_or(LeaseKind::Stream);
+          return Ok(LeaseAcquireResponse {
+            granted: false,
+            record: Some(LeaseRecord {
+              lease_id,
+              resource_id: request.resource_id,
+              holder_id,
+              kind,
+              expires_at_epoch_secs: expires_at as u64,
+              version: version as u64,
+            }),
+          });
+        }
+      } else {
+        sqlx::query("DELETE FROM leases WHERE lease_id = $1")
+          .bind(&lease_id)
+          .execute(&mut *tx)
+          .await
+          .context("failed to delete expired lease")?;
+      }
+    }
+
+    let lease_id = Uuid::new_v4().to_string();
+    let expires_at = (now + ttl) as i64;
+    let kind_str = request.kind.to_string();
+
+    sqlx::query(
+      "INSERT INTO leases (lease_id, resource_id, holder_id, kind, expires_at_epoch_secs, version)
+       VALUES ($1, $2, $3, $4, $5, $6)"
+    )
+    .bind(&lease_id)
+    .bind(&request.resource_id)
+    .bind(&request.holder_id)
+    .bind(&kind_str)
+    .bind(expires_at)
+    .bind(1i64)
+    .execute(&mut *tx)
+    .await
+    .context("failed to insert new lease")?;
+
+    tx.commit().await.context("failed to commit transaction")?;
+
+    Ok(LeaseAcquireResponse {
+      granted: true,
+      record: Some(LeaseRecord {
+        lease_id,
+        resource_id: request.resource_id,
+        holder_id: request.holder_id,
+        kind: request.kind,
+        expires_at_epoch_secs: expires_at as u64,
+        version: 1,
+      }),
+    })
+  }
+
+  async fn renew(&self, request: LeaseRenewRequest) -> Result<LeaseRenewResponse> {
+    let ttl = self.normalize_ttl(request.ttl_secs);
+    let now = Self::now_epoch_secs();
+
+    self.purge_expired().await?;
+
+    let result: Option<(String, String, String, i64, i64)> = sqlx::query_as(
+      "SELECT resource_id, holder_id, kind, expires_at_epoch_secs, version
+       FROM leases
+       WHERE lease_id = $1"
+    )
+    .bind(&request.lease_id)
+    .fetch_optional(&self.pool)
+    .await
+    .context("failed to query lease")?;
+
+    let Some((resource_id, holder_id, kind_str, expires_at, version)) = result else {
+      return Ok(LeaseRenewResponse {
+        renewed: false,
+        record: None,
+      });
+    };
+
+    if expires_at as u64 <= now {
+      sqlx::query("DELETE FROM leases WHERE lease_id = $1")
+        .bind(&request.lease_id)
+        .execute(&self.pool)
+        .await
+        .ok();
+
+      return Ok(LeaseRenewResponse {
+        renewed: false,
+        record: None,
+      });
+    }
+
+    let new_expires = (now + ttl) as i64;
+    let new_version = version + 1;
+
+    sqlx::query(
+      "UPDATE leases
+       SET expires_at_epoch_secs = $1, version = $2, updated_at = NOW()
+       WHERE lease_id = $3"
+    )
+    .bind(new_expires)
+    .bind(new_version)
+    .bind(&request.lease_id)
+    .execute(&self.pool)
+    .await
+    .context("failed to renew lease")?;
+
+    let kind = kind_str.parse().unwrap_or(LeaseKind::Stream);
+
+    Ok(LeaseRenewResponse {
+      renewed: true,
+      record: Some(LeaseRecord {
+        lease_id: request.lease_id,
+        resource_id,
+        holder_id,
+        kind,
+        expires_at_epoch_secs: new_expires as u64,
+        version: new_version as u64,
+      }),
+    })
+  }
+
+  async fn release(&self, request: LeaseReleaseRequest) -> Result<LeaseReleaseResponse> {
+    self.purge_expired().await?;
+
+    let result = sqlx::query("DELETE FROM leases WHERE lease_id = $1")
+      .bind(&request.lease_id)
+      .execute(&self.pool)
+      .await
+      .context("failed to release lease")?;
+
+    Ok(LeaseReleaseResponse {
+      released: result.rows_affected() > 0,
+    })
+  }
+
+  async fn list(&self, kind: Option<LeaseKind>) -> Result<Vec<LeaseRecord>> {
+    self.purge_expired().await?;
+
+    let records: Vec<(String, String, String, String, i64, i64)> = if let Some(kind) = kind {
+      let kind_str = kind.to_string();
+      sqlx::query_as(
+        "SELECT lease_id, resource_id, holder_id, kind, expires_at_epoch_secs, version
+         FROM leases
+         WHERE kind = $1
+         ORDER BY resource_id"
+      )
+      .bind(&kind_str)
+      .fetch_all(&self.pool)
+      .await
+      .context("failed to list leases")?
+    } else {
+      sqlx::query_as(
+        "SELECT lease_id, resource_id, holder_id, kind, expires_at_epoch_secs, version
+         FROM leases
+         ORDER BY resource_id"
+      )
+      .fetch_all(&self.pool)
+      .await
+      .context("failed to list leases")?
+    };
+
+    let mut out = Vec::new();
+    for (lease_id, resource_id, holder_id, kind_str, expires_at, version) in records {
+      let kind = kind_str.parse().unwrap_or(LeaseKind::Stream);
+      out.push(LeaseRecord {
+        lease_id,
+        resource_id,
+        holder_id,
+        kind,
+        expires_at_epoch_secs: expires_at as u64,
+        version: version as u64,
+      });
+    }
+
+    Ok(out)
   }
 }

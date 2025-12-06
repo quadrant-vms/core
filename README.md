@@ -10,7 +10,13 @@ This project is **under active development**.
 
 ### ✅ Implemented
 - `stream-node`: RTSP ingest → HLS (TS/fMP4) with S3 upload fallback.
-- `coordinator`: lease-based scheduler (in-memory backend) with REST API.
+- `coordinator`: lease-based scheduler with REST API
+  - **Persistent lease store** with PostgreSQL backend
+  - In-memory backend option for development/testing
+  - Configurable via `LEASE_STORE_TYPE` environment variable (`memory` or `postgres`)
+  - Automatic database migrations with sqlx
+  - Atomic lease operations with PostgreSQL transactions
+  - Efficient lease expiration and cleanup
 - `admin-gateway`: REST facade that acquires leases, launches `stream-node`, and stops streams via worker HTTP calls.
 - `recorder-node`: Complete recording pipeline implementation with:
   - FFmpeg-based recording from RTSP and HLS sources
@@ -31,7 +37,6 @@ This project is **under active development**.
 - CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker↔recorder flows.
 
 ### 🔜 In Progress
-- Persistent lease store (PostgreSQL/Redis) and multi-node coordination
 - Operator UI & rule system
 - AI model plugin architecture
 - Cluster management and failover hardening
