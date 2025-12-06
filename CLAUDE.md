@@ -6,21 +6,30 @@
 
 ## 🚨 MANDATORY Development Rules
 
-### 1. Always Update README.md After Feature Completion
+### 1. ALWAYS Commit & Push After Completing Work
+- **CRITICAL**: After completing ANY work (features, fixes, optimizations, tests), you MUST:
+  1. Run `git add` to stage changes
+  2. Run `git commit` with descriptive message
+  3. Run `git push` to remote repository
+- **NEVER FORGET THIS STEP** - The user should not need to remind you
+- This is the FIRST and MOST IMPORTANT rule
+- If you complete work without committing and pushing, you have failed
+
+### 2. Always Update README.md After Feature Completion
 - **CRITICAL**: After completing ANY feature or milestone, update `README.md`
 - Move completed items from "🔜 In Progress" to "✅ Implemented"
 - Add specific details about what was implemented
 - Add new sub-items if the feature introduced new components
 - Keep README.md as the single source of truth for project status
 
-### 2. Update This File (CLAUDE.md) When Needed
+### 3. Update This File (CLAUDE.md) When Needed
 - **Keep this guide current**: If project structure changes, update this file
 - Add new crates to the Architecture section
 - Update Common Tasks if new patterns emerge
 - Add new development workflows as they're established
 - This file should evolve with the project
 
-### 3. Self-Contained Context for New Sessions
+### 4. Self-Contained Context for New Sessions
 - **Goal**: User should NEVER need to repeat instructions across chat sessions
 - All project context, rules, and workflows must be in CLAUDE.md
 - New Claude sessions should read this file first to understand everything
@@ -96,11 +105,14 @@ When implementing a new feature, follow this sequence:
    - Fix any warnings or compilation errors
    - Verify integration tests pass
 
-4. **Document & Commit**
-   - **MANDATORY**: Update README.md with completed feature
+4. **Document & Commit** ⚠️ NEVER SKIP THIS STEP
+   - **MANDATORY**: Always commit and push after completing work
+   - Update README.md with completed feature (if applicable)
    - Update CLAUDE.md if structure changed
-   - Create descriptive commit message
-   - Push to remote repository
+   - Run: `git add <files>`
+   - Run: `git commit -m "descriptive message"`
+   - Run: `git push`
+   - **Failure to commit and push means the work is incomplete**
 
 ### Commands
 
