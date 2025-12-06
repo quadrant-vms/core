@@ -1,7 +1,7 @@
 use crate::coordinator::CoordinatorClient;
 use crate::plugin::registry::PluginRegistry;
 use anyhow::{anyhow, Context, Result};
-use common::ai_tasks::{AiTaskConfig, AiTaskInfo, AiTaskState};
+use common::ai_tasks::{AiResult, AiTaskConfig, AiTaskInfo, AiTaskState, VideoFrame};
 use common::leases::{LeaseAcquireRequest, LeaseKind, LeaseReleaseRequest, LeaseRenewRequest};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -211,6 +211,57 @@ impl AiServiceState {
                     .as_millis() as u64,
             );
         }
+    }
+
+    /// Process a video frame for a specific task
+    pub async fn process_frame(&self, task_id: &str, frame: VideoFrame) -> Result<AiResult> {
+        // Get task info
+        let task_info = {
+            let tasks = self.inner.tasks.read().await;
+            tasks.get(task_id).cloned()
+                .ok_or_else(|| anyhow!("Task '{}' not found", task_id))?
+        };
+
+        // Verify task is in processing state
+        if task_info.state != AiTaskState::Processing {
+            return Err(anyhow!("Task '{}' is not in processing state (current: {:?})", task_id, task_info.state));
+        }
+
+        // Get the plugin
+        let plugin = self.inner.plugins.get(&task_info.config.plugin_type).await
+            .context(format!("Plugin '{}' not found", task_info.config.plugin_type))?;
+
+        // Process frame with plugin
+        let plugin_read = plugin.read().await;
+        let start_time = std::time::Instant::now();
+        let mut result = plugin_read.process_frame(&frame).await
+            .context("Failed to process frame with plugin")?;
+        let processing_time = start_time.elapsed().as_millis() as u64;
+        drop(plugin_read);
+
+        // Override task_id to match the actual task (plugin may use frame.source_id)
+        result.task_id = task_id.to_string();
+
+        // Update task stats
+        let detections_count = result.detections.len() as u64;
+        self.update_task_stats(task_id, 1, detections_count).await;
+
+        // Update metrics
+        telemetry::metrics::AI_SERVICE_FRAMES_PROCESSED
+            .with_label_values(&[&task_info.config.plugin_type, "success"])
+            .inc();
+        telemetry::metrics::AI_SERVICE_DETECTION_LATENCY
+            .with_label_values(&[&task_info.config.plugin_type])
+            .observe(processing_time as f64 / 1000.0);
+
+        info!(
+            task_id = %task_id,
+            detections = detections_count,
+            processing_time_ms = processing_time,
+            "Processed frame"
+        );
+
+        Ok(result)
     }
 
     async fn start_renewal_loop(

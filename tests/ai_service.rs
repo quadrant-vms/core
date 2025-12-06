@@ -4,7 +4,7 @@ use ai_service::{
     AiServiceState,
 };
 use common::ai_tasks::{
-    AiOutputConfig, AiTaskConfig, AiTaskStartRequest, AiTaskStopRequest, PluginListResponse,
+    AiOutputConfig, AiTaskConfig, AiTaskStartRequest, PluginListResponse, VideoFrame,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -276,4 +276,86 @@ async fn test_metrics_endpoint() {
 
     // Just verify the endpoint is accessible
     assert_eq!(response.status_code(), 200);
+}
+
+#[tokio::test]
+async fn test_submit_frame() {
+    let (app, state) = setup_test_service().await;
+
+    // Start a task first
+    let task_config = AiTaskConfig {
+        id: "test-task-frame".to_string(),
+        plugin_type: "mock_object_detector".to_string(),
+        input_stream_id: Some("stream-123".to_string()),
+        input_uri: None,
+        model_config: serde_json::json!({}),
+        frame_rate: 1,
+        output: AiOutputConfig::LocalFile {
+            path: "/tmp/test.json".to_string(),
+        },
+    };
+
+    state.start_task(task_config, Some(60)).await.unwrap();
+
+    // Create a test frame (small JPEG header as base64)
+    let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46];
+    let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &jpeg_data);
+
+    let frame = VideoFrame {
+        source_id: "stream-123".to_string(),
+        timestamp: 1234567890,
+        sequence: 1,
+        width: 640,
+        height: 480,
+        format: "jpeg".to_string(),
+        data: base64_data,
+    };
+
+    // Submit frame
+    let response = axum_test::TestServer::new(app)
+        .unwrap()
+        .post("/v1/tasks/test-task-frame/frames")
+        .json(&frame)
+        .await;
+
+    assert_eq!(response.status_code(), 200);
+
+    let result: common::ai_tasks::AiResult = response.json();
+    assert_eq!(result.task_id, "test-task-frame");
+    assert_eq!(result.plugin_type, "mock_object_detector");
+
+    // Mock detector should return 2 detections
+    assert_eq!(result.detections.len(), 2);
+
+    // Verify task stats were updated
+    let task_info = state.get_task("test-task-frame").await.unwrap();
+    assert_eq!(task_info.frames_processed, 1);
+    assert_eq!(task_info.detections_made, 2);
+}
+
+#[tokio::test]
+async fn test_submit_frame_to_nonexistent_task() {
+    let (app, _state) = setup_test_service().await;
+
+    let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0];
+    let base64_data = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &jpeg_data);
+
+    let frame = VideoFrame {
+        source_id: "stream-123".to_string(),
+        timestamp: 1234567890,
+        sequence: 1,
+        width: 640,
+        height: 480,
+        format: "jpeg".to_string(),
+        data: base64_data,
+    };
+
+    // Submit frame to non-existent task
+    let response = axum_test::TestServer::new(app)
+        .unwrap()
+        .post("/v1/tasks/nonexistent-task/frames")
+        .json(&frame)
+        .await;
+
+    assert_eq!(response.status_code(), 400);
 }

@@ -6,7 +6,8 @@ use axum::{
     Json,
 };
 use common::ai_tasks::{
-    AiTaskStartRequest, AiTaskStartResponse, AiTaskStopRequest, AiTaskStopResponse, PluginListResponse,
+    AiTaskStartRequest, AiTaskStartResponse, AiTaskStopResponse, PluginListResponse,
+    VideoFrame,
 };
 use serde_json::json;
 
@@ -148,6 +149,27 @@ pub async fn readyz(State(state): State<AiServiceState>) -> impl IntoResponse {
                 "plugins": plugin_health
             })),
         )
+    }
+}
+
+/// Submit a video frame for processing by a specific task
+pub async fn submit_frame(
+    State(state): State<AiServiceState>,
+    Path(task_id): Path<String>,
+    Json(frame): Json<VideoFrame>,
+) -> impl IntoResponse {
+    match state.process_frame(&task_id, frame).await {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to process frame for task {}: {}", task_id, e);
+            (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "error": format!("Failed to process frame: {}", e)
+                })),
+            )
+                .into_response()
+        }
     }
 }
 

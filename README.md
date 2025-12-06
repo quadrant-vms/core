@@ -74,6 +74,15 @@ This project is **under active development**.
     - 80 COCO classes detection (person, car, dog, etc.)
     - Automatic scaling to original image dimensions
     - Environment variable configuration (`YOLOV8_MODEL_PATH`, `YOLOV8_CONFIDENCE`)
+  - **Frame capture pipeline**:
+    - FFmpeg-based frame extraction utilities in common crate
+    - REST API endpoint for frame submission (`POST /v1/tasks/:id/frames`)
+    - Real-time frame processing with AI plugins
+    - Base64-encoded JPEG frame transport for JSON compatibility
+    - Automatic frame dimension probing with ffprobe
+    - Configurable JPEG quality and scaling
+    - Frame sequence tracking and timestamp management
+    - Integration-ready for stream-node and recorder-node frame extraction
   - REST API for AI task lifecycle management (`/v1/tasks`)
   - Coordinator lease integration for distributed AI task management
   - Automatic lease acquisition, renewal, and release for AI tasks
@@ -83,12 +92,12 @@ This project is **under active development**.
   - Health check endpoints for plugin monitoring
   - Configurable via `AI_SERVICE_ADDR`, `COORDINATOR_URL`, and `NODE_ID` environment variables
   - Standalone or coordinator-integrated deployment modes
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, frame capture pipeline, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
 - Additional AI model integrations (pose estimation, facial recognition)
-- Frame capture pipeline from stream-node/recorder-node to AI service
+- Stream-node and recorder-node integration with frame capture for live AI processing
 - GPU acceleration optimization for YOLOv8
 
 ---

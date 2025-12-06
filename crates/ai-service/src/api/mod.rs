@@ -1,7 +1,7 @@
 pub mod routes;
 
 use crate::state::AiServiceState;
-use axum::{routing::{delete, get, post}, Router};
+use axum::{routing::{get, post}, Router};
 use tower_http::trace::TraceLayer;
 
 /// Build the API router
@@ -17,6 +17,7 @@ pub fn router(state: AiServiceState) -> Router {
         // Task endpoints
         .route("/v1/tasks", get(routes::list_tasks).post(routes::start_task))
         .route("/v1/tasks/:id", get(routes::get_task).delete(routes::stop_task))
+        .route("/v1/tasks/:id/frames", post(routes::submit_frame))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
