@@ -13,6 +13,7 @@ use serde::Deserialize;
 pub fn router(state: CoordinatorState) -> Router {
   Router::new()
     .route("/healthz", get(healthz))
+    .route("/readyz", get(readyz))
     .route("/v1/leases", get(list_leases))
     .route("/v1/leases/acquire", post(acquire_lease))
     .route("/v1/leases/renew", post(renew_lease))
@@ -22,6 +23,15 @@ pub fn router(state: CoordinatorState) -> Router {
 
 async fn healthz() -> &'static str {
   "ok"
+}
+
+async fn readyz(State(state): State<CoordinatorState>) -> Result<&'static str, ApiError> {
+  let store = state.store();
+  match store.health_check().await {
+    Ok(true) => Ok("ready"),
+    Ok(false) => Err(ApiError::internal("lease store not ready")),
+    Err(e) => Err(ApiError::internal(format!("health check failed: {}", e))),
+  }
 }
 
 #[derive(Debug, Deserialize)]

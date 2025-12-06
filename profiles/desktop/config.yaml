@@ -1,0 +1,12 @@
+profile: desktop
+config_provider: file://profiles/desktop
+lease_provider: filelock://profiles/desktop/locks
+storage_provider: fs://recordings
+event_bus: embedded
+cluster_mode: off
+cameras:
+  - id: cam-001
+    rtsp: rtsp://user:pass@192.168.1.10:554/stream1
+    prefer: { transport: tcp, gop_sec: 1 }
+recording:
+  retention_days: 7

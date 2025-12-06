@@ -546,6 +546,10 @@ mod tests {
       }
       Ok(())
     }
+
+    async fn health_check(&self) -> Result<bool> {
+      Ok(true)
+    }
   }
 
   #[derive(Default)]
@@ -572,6 +576,10 @@ mod tests {
         stopped: true,
         message: None,
       })
+    }
+
+    async fn health_check(&self) -> Result<bool> {
+      Ok(true)
     }
   }
 

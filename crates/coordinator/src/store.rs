@@ -18,6 +18,7 @@ pub trait LeaseStore: Send + Sync {
   async fn renew(&self, request: LeaseRenewRequest) -> Result<LeaseRenewResponse>;
   async fn release(&self, request: LeaseReleaseRequest) -> Result<LeaseReleaseResponse>;
   async fn list(&self, kind: Option<LeaseKind>) -> Result<Vec<LeaseRecord>>;
+  async fn health_check(&self) -> Result<bool>;
 }
 
 #[derive(Default)]
@@ -189,6 +190,12 @@ impl LeaseStore for MemoryLeaseStore {
     }
     out.sort_by(|a, b| a.resource_id.cmp(&b.resource_id));
     Ok(out)
+  }
+
+  async fn health_check(&self) -> Result<bool> {
+    // Memory store is always healthy if we can acquire the lock
+    let _inner = self.inner.read().await;
+    Ok(true)
   }
 }
 
@@ -608,5 +615,16 @@ impl LeaseStore for PostgresLeaseStore {
     }
 
     Ok(out)
+  }
+
+  async fn health_check(&self) -> Result<bool> {
+    // Verify database connectivity with a simple query
+    match sqlx::query("SELECT 1").fetch_one(&self.pool).await {
+      Ok(_) => Ok(true),
+      Err(e) => {
+        tracing::warn!(error = %e, "PostgreSQL health check failed");
+        Ok(false)
+      }
+    }
   }
 }

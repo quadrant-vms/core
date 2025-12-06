@@ -12,12 +12,14 @@ use tracing::instrument;
 pub trait WorkerClient: Send + Sync {
   async fn start_stream(&self, config: &StreamConfig) -> Result<()>;
   async fn stop_stream(&self, stream_id: &str) -> Result<()>;
+  async fn health_check(&self) -> Result<bool>;
 }
 
 #[async_trait]
 pub trait RecorderClient: Send + Sync {
   async fn start_recording(&self, request: &RecordingStartRequest) -> Result<RecordingStartResponse>;
   async fn stop_recording(&self, request: &RecordingStopRequest) -> Result<RecordingStopResponse>;
+  async fn health_check(&self) -> Result<bool>;
 }
 
 pub struct HttpWorkerClient {
@@ -86,6 +88,15 @@ impl WorkerClient for HttpWorkerClient {
       .context("worker stop returned error status")?;
     Ok(())
   }
+
+  #[instrument(skip_all)]
+  async fn health_check(&self) -> Result<bool> {
+    let url = self.endpoint("healthz")?;
+    match self.client.get(url).send().await {
+      Ok(resp) => Ok(resp.status().is_success()),
+      Err(_) => Ok(false),
+    }
+  }
 }
 
 pub struct HttpRecorderClient {
@@ -149,5 +160,14 @@ impl RecorderClient for HttpRecorderClient {
       .context("failed to parse recorder stop response")?;
 
     Ok(response)
+  }
+
+  #[instrument(skip_all)]
+  async fn health_check(&self) -> Result<bool> {
+    let url = self.endpoint("healthz")?;
+    match self.client.get(url).send().await {
+      Ok(resp) => Ok(resp.status().is_success()),
+      Err(_) => Ok(false),
+    }
   }
 }

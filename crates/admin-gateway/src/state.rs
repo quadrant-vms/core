@@ -83,18 +83,36 @@ impl AppState {
 
     tokio::spawn(async move {
       let coordinator = state.coordinator();
+      let worker = state.worker();
+      let mut consecutive_failures = 0u32;
+      const MAX_RETRIES: u32 = 3;
+
       loop {
         tokio::select! {
             _ = token.cancelled() => {
                 break;
             }
             _ = tokio::time::sleep(renew_interval) => {
+                // Check worker health first
+                let worker_healthy = worker.health_check().await.unwrap_or(false);
+                if !worker_healthy {
+                    let mut streams = state.streams().write().await;
+                    if let Some(entry) = streams.get_mut(&stream_id) {
+                        entry.state = StreamState::Error;
+                        entry.last_error = Some("Worker health check failed".to_string());
+                    }
+                    break;
+                }
+
+                // Attempt lease renewal with retry logic
                 let req = LeaseRenewRequest {
                     lease_id: lease_id.clone(),
                     ttl_secs,
                 };
+
                 match coordinator.renew(&req).await {
                     Ok(_) => {
+                        consecutive_failures = 0;
                         let mut streams = state.streams().write().await;
                         if let Some(entry) = streams.get_mut(&stream_id) {
                             if entry.state == StreamState::Error {
@@ -104,14 +122,29 @@ impl AppState {
                         }
                     }
                     Err(err) => {
-                        {
+                        consecutive_failures += 1;
+                        if consecutive_failures >= MAX_RETRIES {
                             let mut streams = state.streams().write().await;
                             if let Some(entry) = streams.get_mut(&stream_id) {
                                 entry.state = StreamState::Error;
-                                entry.last_error = Some(err.to_string());
+                                entry.last_error = Some(format!(
+                                    "Lease renewal failed after {} retries: {}",
+                                    MAX_RETRIES, err
+                                ));
                             }
+                            break;
+                        } else {
+                            // Log warning but continue trying
+                            tracing::warn!(
+                                stream_id = %stream_id,
+                                attempt = consecutive_failures,
+                                error = %err,
+                                "Lease renewal failed, will retry"
+                            );
+                            // Exponential backoff before next attempt
+                            let backoff = Duration::from_millis(100 * 2u64.pow(consecutive_failures - 1));
+                            tokio::time::sleep(backoff).await;
                         }
-                        break;
                     }
                 }
             }

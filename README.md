@@ -34,12 +34,19 @@ This project is **under active development**.
   - Automatic lease acquisition and renewal for recordings
   - Recording lifecycle orchestration (start/stop/list)
   - Worker health monitoring and error handling
+- **Failover hardening and resilience features**:
+  - Worker health verification: admin-gateway checks worker liveness during lease renewal
+  - Automatic retry with exponential backoff: lease renewals retry up to 3 times before marking stream as failed
+  - Enhanced health endpoints: `/readyz` endpoint verifies lease store connectivity
+  - Graceful degradation: temporary coordinator unavailability doesn't immediately kill active streams
+  - Comprehensive error handling with detailed error messages and logging
 - CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker↔recorder flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
 - AI model plugin architecture
-- Cluster management and failover hardening
+- Multi-coordinator clustering with leader election
+- Advanced metrics and observability
 
 ---
 

@@ -1,0 +1,13 @@
+apiVersion: vms.dev/v1
+kind: Camera
+metadata: { name: cam-001 }
+spec:
+  rtsp: "rtsp://user:pass@10.0.0.12/stream1"
+  prefer: { transport: "tcp", gopSec: 1 }
+---
+apiVersion: vms.ai/v1
+kind: Pipeline
+metadata: { name: basic-record }
+spec:
+  graph: [{id: dec},{id: rec}]
+  edges: [["dec","rec"]]

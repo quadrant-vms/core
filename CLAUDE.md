@@ -130,18 +130,24 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: Recorder Pipeline Implementation
+**Recently Completed**: Recorder Integration with Coordinator & Gateway
 - ✅ recorder-node crate structure created
 - ✅ Recording job manager with lifecycle management
 - ✅ REST API (start/stop/list recordings)
 - ✅ FFmpeg-based recording pipeline (RTSP/HLS → MP4/HLS/MKV)
 - ✅ Metadata extraction using ffprobe
 - ✅ Storage path tracking and file management
+- ✅ Coordinator lease integration for distributed recording management
+- ✅ Automatic lease acquisition, renewal, and release
+- ✅ Admin-gateway recorder worker management integration
+- ✅ End-to-end tests for recorder workflow
 
-**Next Feature**: Coordinator & Gateway Integration for Recorder (per README.md)
-- 🔜 Integration with coordinator for recorder lease management
-- 🔜 Admin-gateway integration for recorder worker management
-- 🔜 End-to-end tests for recorder workflow
+**Next Feature**: Cluster Management and Failover Hardening
+- 🔜 Coordinator failover detection and recovery
+- 🔜 Worker heartbeat and health monitoring
+- 🔜 Automatic lease recovery on worker failure
+- 🔜 Multi-coordinator cluster support with leader election
+- 🔜 Integration tests for failover scenarios
 
 ### Common Tasks
 

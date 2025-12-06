@@ -65,6 +65,10 @@ impl WorkerClient for StubWorker {
         self.stop_calls.lock().await.push(stream_id.to_string());
         Ok(())
     }
+
+    async fn health_check(&self) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 struct StubRecorder;
@@ -90,6 +94,10 @@ impl RecorderClient for StubRecorder {
             stopped: true,
             message: None,
         })
+    }
+
+    async fn health_check(&self) -> Result<bool> {
+        Ok(true)
     }
 }
 
