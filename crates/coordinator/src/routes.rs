@@ -9,6 +9,7 @@ use common::leases::{
   LeaseReleaseResponse, LeaseRenewRequest, LeaseRenewResponse,
 };
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 pub fn router(state: CoordinatorState) -> Router {
   Router::new()
@@ -65,10 +66,64 @@ async fn list_leases(
   Ok(Json(records))
 }
 
+/// Forward a request to the leader if this node is a follower
+async fn forward_to_leader<T: Serialize, R: serde::de::DeserializeOwned>(
+  state: &CoordinatorState,
+  path: &str,
+  payload: &T,
+) -> Result<R, ApiError> {
+  let cluster = state
+    .cluster()
+    .ok_or_else(|| ApiError::internal("clustering not enabled"))?;
+
+  if cluster.is_leader().await {
+    return Err(ApiError::internal("should not forward, this node is the leader"));
+  }
+
+  let leader_addr = cluster
+    .leader_addr()
+    .await
+    .ok_or_else(|| ApiError::internal("no leader available"))?;
+
+  let url = format!("http://{}{}", leader_addr, path);
+
+  debug!(url = %url, "forwarding request to leader");
+
+  let client = reqwest::Client::new();
+  let response = client
+    .post(&url)
+    .json(payload)
+    .send()
+    .await
+    .map_err(|e| ApiError::internal(format!("failed to forward request: {}", e)))?;
+
+  if !response.status().is_success() {
+    return Err(ApiError::internal(format!(
+      "leader returned error: {}",
+      response.status()
+    )));
+  }
+
+  let result = response
+    .json::<R>()
+    .await
+    .map_err(|e| ApiError::internal(format!("failed to parse leader response: {}", e)))?;
+
+  Ok(result)
+}
+
 async fn acquire_lease(
   State(state): State<CoordinatorState>,
   Json(request): Json<LeaseAcquireRequest>,
 ) -> Result<Json<LeaseAcquireResponse>, ApiError> {
+  // If clustering is enabled and we're a follower, forward to leader
+  if let Some(cluster) = state.cluster() {
+    if !cluster.is_leader().await {
+      let resp = forward_to_leader(&state, "/v1/leases/acquire", &request).await?;
+      return Ok(Json(resp));
+    }
+  }
+
   let store = state.store();
   let resp = store.acquire(request).await?;
   Ok(Json(resp))
@@ -78,6 +133,14 @@ async fn renew_lease(
   State(state): State<CoordinatorState>,
   Json(request): Json<LeaseRenewRequest>,
 ) -> Result<Json<LeaseRenewResponse>, ApiError> {
+  // If clustering is enabled and we're a follower, forward to leader
+  if let Some(cluster) = state.cluster() {
+    if !cluster.is_leader().await {
+      let resp = forward_to_leader(&state, "/v1/leases/renew", &request).await?;
+      return Ok(Json(resp));
+    }
+  }
+
   let store = state.store();
   let resp = store.renew(request).await?;
   Ok(Json(resp))
@@ -87,6 +150,14 @@ async fn release_lease(
   State(state): State<CoordinatorState>,
   Json(request): Json<LeaseReleaseRequest>,
 ) -> Result<Json<LeaseReleaseResponse>, ApiError> {
+  // If clustering is enabled and we're a follower, forward to leader
+  if let Some(cluster) = state.cluster() {
+    if !cluster.is_leader().await {
+      let resp = forward_to_leader(&state, "/v1/leases/release", &request).await?;
+      return Ok(Json(resp));
+    }
+  }
+
   let store = state.store();
   let resp = store.release(request).await?;
   Ok(Json(resp))
@@ -129,6 +200,7 @@ async fn cluster_vote(
 #[derive(Debug, Deserialize)]
 struct HeartbeatRequest {
   leader_id: String,
+  leader_addr: String,
   term: u64,
 }
 
@@ -140,7 +212,7 @@ async fn cluster_heartbeat(
     .cluster()
     .ok_or_else(|| ApiError::bad_request("clustering not enabled"))?;
   cluster
-    .handle_heartbeat(request.leader_id, request.term)
+    .handle_heartbeat(request.leader_id, request.leader_addr, request.term)
     .await;
   Ok("ok")
 }

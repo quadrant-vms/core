@@ -165,3 +165,123 @@ async fn test_three_node_cluster_elects_leader() {
     "all nodes should agree on leader"
   );
 }
+
+#[tokio::test]
+async fn test_follower_forwards_lease_request_to_leader() {
+  let addr1: SocketAddr = "127.0.0.1:18086".parse().unwrap();
+  let addr2: SocketAddr = "127.0.0.1:18087".parse().unwrap();
+
+  let peers_for_1 = vec![addr2.to_string()];
+  let peers_for_2 = vec![addr1.to_string()];
+
+  let (_h1, url1) =
+    start_coordinator("node-1".to_string(), addr1, peers_for_1).await;
+  let (_h2, url2) =
+    start_coordinator("node-2".to_string(), addr2, peers_for_2).await;
+
+  // Wait for leader election
+  sleep(Duration::from_secs(3)).await;
+
+  let client = reqwest::Client::new();
+
+  // Find leader and follower
+  let status1: serde_json::Value = client
+    .get(format!("{}/cluster/status", url1))
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+  let _status2: serde_json::Value = client
+    .get(format!("{}/cluster/status", url2))
+    .send()
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+  let (leader_url, follower_url) = if status1["role"] == "Leader" {
+    (&url1, &url2)
+  } else {
+    (&url2, &url1)
+  };
+
+  // Send lease acquisition request to the follower
+  let acquire_request = serde_json::json!({
+    "resource_id": "test-resource",
+    "holder_id": "test-holder",
+    "kind": "stream",
+    "ttl_secs": 30
+  });
+
+  let resp = client
+    .post(format!("{}/v1/leases/acquire", follower_url))
+    .json(&acquire_request)
+    .send()
+    .await
+    .unwrap();
+
+  assert_eq!(resp.status(), 200, "follower should forward and return success");
+
+  let acquire_response: serde_json::Value = resp.json().await.unwrap();
+  assert!(acquire_response["record"].is_object());
+  assert_eq!(acquire_response["record"]["resource_id"], "test-resource");
+
+  // Verify the lease exists on the leader
+  let list_resp = client
+    .get(format!("{}/v1/leases", leader_url))
+    .send()
+    .await
+    .unwrap();
+
+  assert_eq!(list_resp.status(), 200);
+  let leases: Vec<serde_json::Value> = list_resp.json().await.unwrap();
+  assert_eq!(leases.len(), 1);
+  assert_eq!(leases[0]["resource_id"], "test-resource");
+
+  // Test lease renewal through follower
+  let lease_id = acquire_response["record"]["lease_id"].as_str().unwrap();
+  let renew_request = serde_json::json!({
+    "lease_id": lease_id,
+    "ttl_secs": 30
+  });
+
+  let renew_resp = client
+    .post(format!("{}/v1/leases/renew", follower_url))
+    .json(&renew_request)
+    .send()
+    .await
+    .unwrap();
+
+  assert_eq!(renew_resp.status(), 200, "follower should forward renewal");
+
+  // Test lease release through follower
+  let release_request = serde_json::json!({
+    "lease_id": lease_id
+  });
+
+  let release_resp = client
+    .post(format!("{}/v1/leases/release", follower_url))
+    .json(&release_request)
+    .send()
+    .await
+    .unwrap();
+
+  assert_eq!(release_resp.status(), 200, "follower should forward release");
+
+  let release_response: serde_json::Value = release_resp.json().await.unwrap();
+  assert_eq!(release_response["released"], true);
+
+  // Verify lease is gone on leader
+  let list_resp = client
+    .get(format!("{}/v1/leases", leader_url))
+    .send()
+    .await
+    .unwrap();
+
+  let leases: Vec<serde_json::Value> = list_resp.json().await.unwrap();
+  assert_eq!(leases.len(), 0);
+}

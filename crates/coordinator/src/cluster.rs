@@ -38,6 +38,7 @@ pub struct ClusterStatus {
 struct ClusterInner {
   role: NodeRole,
   leader_id: Option<String>,
+  leader_addr: Option<String>,
   peers: HashMap<String, PeerInfo>,
   term: u64,
   last_heartbeat: u64,
@@ -82,6 +83,7 @@ impl ClusterManager {
     let inner = ClusterInner {
       role: NodeRole::Follower,
       leader_id: None,
+      leader_addr: None,
       peers,
       term: 0,
       last_heartbeat: Self::now_epoch_secs(),
@@ -131,10 +133,7 @@ impl ClusterManager {
       if leader_id == &self.node_id {
         Some(self.node_addr.clone())
       } else {
-        inner
-          .peers
-          .get(leader_id)
-          .map(|peer| peer.addr.clone())
+        inner.leader_addr.clone()
       }
     } else {
       None
@@ -321,6 +320,7 @@ impl ClusterManager {
     #[derive(Serialize)]
     struct HeartbeatRequest {
       leader_id: String,
+      leader_addr: String,
       term: u64,
     }
 
@@ -328,6 +328,7 @@ impl ClusterManager {
     let url = format!("http://{}/cluster/heartbeat", peer_addr);
     let req = HeartbeatRequest {
       leader_id: self.node_id.clone(),
+      leader_addr: self.node_addr.clone(),
       term,
     };
 
@@ -343,17 +344,19 @@ impl ClusterManager {
     Ok(())
   }
 
-  pub async fn handle_heartbeat(&self, leader_id: String, term: u64) {
+  pub async fn handle_heartbeat(&self, leader_id: String, leader_addr: String, term: u64) {
     let mut inner = self.inner.write().await;
 
     if term >= inner.term {
       inner.term = term;
       inner.role = NodeRole::Follower;
       inner.leader_id = Some(leader_id.clone());
+      inner.leader_addr = Some(leader_addr.clone());
       inner.last_heartbeat = Self::now_epoch_secs();
       debug!(
         node_id = %self.node_id,
         leader = %leader_id,
+        leader_addr = %leader_addr,
         term = term,
         "received heartbeat"
       );
@@ -426,11 +429,14 @@ mod tests {
       1000,
     );
 
-    cm.handle_heartbeat("node-2".to_string(), 3).await;
+    cm.handle_heartbeat("node-2".to_string(), "127.0.0.1:8083".to_string(), 3).await;
 
     let status = cm.status().await;
     assert_eq!(status.role, NodeRole::Follower);
     assert_eq!(status.leader_id, Some("node-2".to_string()));
     assert_eq!(status.term, 3);
+
+    let leader_addr = cm.leader_addr().await;
+    assert_eq!(leader_addr, Some("127.0.0.1:8083".to_string()));
   }
 }

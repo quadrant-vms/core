@@ -49,13 +49,13 @@ This project is **under active development**.
   - Configurable via environment variables (`CLUSTER_ENABLED`, `NODE_ID`, `CLUSTER_PEERS`)
   - Support for single-node and multi-node cluster deployments
   - Integration tests validating leader election in 1-node and 3-node clusters
+  - **Request forwarding from followers to leader**: Follower coordinators automatically forward write operations (acquire/renew/release) to the elected leader, enabling clients to connect to any coordinator node without tracking leader status
 - CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, and end-to-end gateway↔coordinator↔worker↔recorder flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
 - AI model plugin architecture
 - Advanced metrics and observability
-- Request forwarding from follower coordinators to leader
 
 ---
 
