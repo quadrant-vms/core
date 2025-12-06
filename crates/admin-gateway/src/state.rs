@@ -1,6 +1,7 @@
-use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::WorkerClient};
+use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::{RecorderClient, WorkerClient}};
 use common::{
   leases::LeaseRenewRequest,
+  recordings::RecordingInfo,
   streams::{StreamInfo, StreamState},
 };
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -16,7 +17,9 @@ struct AppStateInner {
   config: GatewayConfig,
   coordinator: Arc<dyn CoordinatorClient>,
   worker: Arc<dyn WorkerClient>,
+  recorder: Arc<dyn RecorderClient>,
   streams: RwLock<HashMap<String, StreamInfo>>,
+  recordings: RwLock<HashMap<String, RecordingInfo>>,
   renewals: RwLock<HashMap<String, CancellationToken>>,
 }
 
@@ -25,12 +28,15 @@ impl AppState {
     config: GatewayConfig,
     coordinator: Arc<dyn CoordinatorClient>,
     worker: Arc<dyn WorkerClient>,
+    recorder: Arc<dyn RecorderClient>,
   ) -> Self {
     let inner = AppStateInner {
       config,
       coordinator,
       worker,
+      recorder,
       streams: RwLock::new(HashMap::new()),
+      recordings: RwLock::new(HashMap::new()),
       renewals: RwLock::new(HashMap::new()),
     };
     Self {
@@ -50,8 +56,16 @@ impl AppState {
     self.inner.worker.clone()
   }
 
+  pub fn recorder(&self) -> Arc<dyn RecorderClient> {
+    self.inner.recorder.clone()
+  }
+
   pub fn streams(&self) -> &RwLock<HashMap<String, StreamInfo>> {
     &self.inner.streams
+  }
+
+  pub fn recordings(&self) -> &RwLock<HashMap<String, RecordingInfo>> {
+    &self.inner.recordings
   }
 
   pub async fn start_lease_renewal(&self, stream_id: String, lease_id: String, ttl_secs: u64) {

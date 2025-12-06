@@ -3,7 +3,7 @@ use admin_gateway::{
     coordinator::HttpCoordinatorClient,
     routes as gateway_routes,
     state::AppState,
-    worker::WorkerClient,
+    worker::{RecorderClient, WorkerClient},
 };
 use anyhow::Result;
 use axum::Router;
@@ -65,6 +65,32 @@ impl WorkerClient for StubWorker {
     }
 }
 
+struct StubRecorder;
+
+impl StubRecorder {
+    fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait::async_trait]
+impl RecorderClient for StubRecorder {
+    async fn start_recording(&self, _request: &common::recordings::RecordingStartRequest) -> Result<common::recordings::RecordingStartResponse> {
+        Ok(common::recordings::RecordingStartResponse {
+            accepted: true,
+            lease_id: None,
+            message: None,
+        })
+    }
+
+    async fn stop_recording(&self, _request: &common::recordings::RecordingStopRequest) -> Result<common::recordings::RecordingStopResponse> {
+        Ok(common::recordings::RecordingStopResponse {
+            stopped: true,
+            message: None,
+        })
+    }
+}
+
 #[tokio::test]
 async fn gateway_and_coordinator_end_to_end() -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
@@ -81,10 +107,12 @@ async fn gateway_and_coordinator_end_to_end() -> Result<()> {
         coordinator_base_url: reqwest::Url::parse(&coordinator_url)?,
         node_id: "gateway-test".to_string(),
         worker_base_url: reqwest::Url::parse("http://worker.local/")?,
+        recorder_base_url: reqwest::Url::parse("http://recorder.local/")?,
     };
     let coordinator_client = Arc::new(HttpCoordinatorClient::new(gateway_cfg.coordinator_base_url.clone())?);
     let worker_client = worker.clone() as Arc<dyn WorkerClient>;
-    let app_state = AppState::new(gateway_cfg.clone(), coordinator_client, worker_client);
+    let recorder_client = Arc::new(StubRecorder::new()) as Arc<dyn RecorderClient>;
+    let app_state = AppState::new(gateway_cfg.clone(), coordinator_client, worker_client, recorder_client);
     let gateway_router = gateway_routes::router(app_state);
     let (gateway_addr, gateway_task) = spawn_router(gateway_router).await?;
 

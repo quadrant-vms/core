@@ -6,6 +6,7 @@ use axum::{
 };
 use common::{
   leases::{LeaseAcquireRequest, LeaseKind, LeaseReleaseRequest},
+  recordings::{RecordingInfo, RecordingStartRequest, RecordingStartResponse, RecordingState, RecordingStopRequest, RecordingStopResponse},
   streams::{StreamInfo, StreamStartRequest, StreamStartResponse, StreamState, StreamStopResponse},
 };
 use tracing::info;
@@ -15,6 +16,8 @@ pub fn router(state: AppState) -> Router {
     .route("/healthz", get(healthz))
     .route("/v1/streams", get(list_streams).post(start_stream))
     .route("/v1/streams/:id", delete(stop_stream))
+    .route("/v1/recordings", get(list_recordings).post(start_recording))
+    .route("/v1/recordings/:id", delete(stop_recording))
     .with_state(state)
 }
 
@@ -206,10 +209,224 @@ async fn stop_stream(
   }
 }
 
+async fn list_recordings(State(state): State<AppState>) -> Result<Json<Vec<RecordingInfo>>, ApiError> {
+  let recordings = state.recordings().read().await;
+  let list = recordings.values().cloned().collect();
+  Ok(Json(list))
+}
+
+async fn start_recording(
+  State(state): State<AppState>,
+  Json(payload): Json<RecordingStartRequest>,
+) -> Result<Json<RecordingStartResponse>, ApiError> {
+  if payload.config.id.trim().is_empty() {
+    return Err(ApiError::bad_request("recording id required"));
+  }
+  if payload.config.source_stream_id.is_none() && payload.config.source_uri.is_none() {
+    return Err(ApiError::bad_request("source_stream_id or source_uri required"));
+  }
+
+  {
+    let recordings = state.recordings().read().await;
+    if let Some(existing) = recordings.get(&payload.config.id) {
+      if existing.state.is_active() {
+        return Ok(Json(RecordingStartResponse {
+          accepted: false,
+          lease_id: existing.lease_id.clone(),
+          message: Some("recording already active".into()),
+        }));
+      }
+    }
+  }
+
+  let ttl = payload.lease_ttl_secs.unwrap_or(30).max(5);
+  let lease_req = LeaseAcquireRequest {
+    resource_id: payload.config.id.clone(),
+    holder_id: state.node_id().to_string(),
+    kind: LeaseKind::Recorder,
+    ttl_secs: ttl,
+  };
+
+  let coordinator = state.coordinator();
+  let lease_resp = coordinator.acquire(&lease_req).await?;
+
+  if !lease_resp.granted {
+    return Ok(Json(RecordingStartResponse {
+      accepted: false,
+      lease_id: lease_resp.record.map(|r| r.lease_id),
+      message: Some("resource already leased".into()),
+    }));
+  }
+
+  let record = lease_resp
+    .record
+    .ok_or_else(|| ApiError::internal("coordinator granted lease without record"))?;
+
+  let recording_info = RecordingInfo {
+    config: payload.config.clone(),
+    state: RecordingState::Starting,
+    lease_id: Some(record.lease_id.clone()),
+    storage_path: None,
+    last_error: None,
+    started_at: None,
+    stopped_at: None,
+  };
+
+  {
+    let mut recordings = state.recordings().write().await;
+    recordings.insert(payload.config.id.clone(), recording_info);
+  }
+
+  let recorder = state.recorder();
+  let recorder_resp = recorder.start_recording(&payload).await;
+
+  match recorder_resp {
+    Ok(resp) if !resp.accepted => {
+      {
+        let mut recordings = state.recordings().write().await;
+        if let Some(entry) = recordings.get_mut(&payload.config.id) {
+          entry.state = RecordingState::Error;
+          entry.last_error = resp.message.clone();
+        }
+      }
+      let coordinator = state.coordinator();
+      let _ = coordinator
+        .release(&LeaseReleaseRequest {
+          lease_id: record.lease_id.clone(),
+        })
+        .await;
+      return Ok(Json(RecordingStartResponse {
+        accepted: false,
+        lease_id: Some(record.lease_id),
+        message: resp.message,
+      }));
+    }
+    Err(err) => {
+      {
+        let mut recordings = state.recordings().write().await;
+        if let Some(entry) = recordings.get_mut(&payload.config.id) {
+          entry.state = RecordingState::Error;
+          entry.last_error = Some(err.to_string());
+        }
+      }
+      let coordinator = state.coordinator();
+      let _ = coordinator
+        .release(&LeaseReleaseRequest {
+          lease_id: record.lease_id.clone(),
+        })
+        .await;
+      return Err(ApiError::internal(format!("recorder start failed: {err}")));
+    }
+    Ok(_) => {}
+  }
+
+  {
+    let mut recordings = state.recordings().write().await;
+    if let Some(entry) = recordings.get_mut(&payload.config.id) {
+      entry.state = RecordingState::Recording;
+      entry.last_error = None;
+    }
+  }
+
+  state
+    .start_lease_renewal(
+      payload.config.id.clone(),
+      record.lease_id.clone(),
+      lease_req.ttl_secs,
+    )
+    .await;
+
+  info!(recording_id = %payload.config.id, lease = %record.lease_id, "recording start accepted");
+
+  Ok(Json(RecordingStartResponse {
+    accepted: true,
+    lease_id: Some(record.lease_id),
+    message: None,
+  }))
+}
+
+async fn stop_recording(
+  State(state): State<AppState>,
+  Path(recording_id): Path<String>,
+) -> Result<Json<RecordingStopResponse>, ApiError> {
+  let existing = {
+    let recordings = state.recordings().read().await;
+    recordings.get(&recording_id).cloned()
+  };
+
+  let Some(info) = existing else {
+    return Err(ApiError::not_found(format!(
+      "recording '{}' not found",
+      recording_id
+    )));
+  };
+
+  state.cancel_lease_renewal(&recording_id).await;
+
+  {
+    let mut recordings = state.recordings().write().await;
+    if let Some(entry) = recordings.get_mut(&recording_id) {
+      entry.state = RecordingState::Stopping;
+      entry.last_error = None;
+    }
+  }
+
+  let recorder = state.recorder();
+  let stop_req = RecordingStopRequest {
+    id: recording_id.clone(),
+  };
+  if let Err(err) = recorder.stop_recording(&stop_req).await {
+    let mut recordings = state.recordings().write().await;
+    if let Some(entry) = recordings.get_mut(&recording_id) {
+      entry.state = RecordingState::Error;
+      entry.last_error = Some(err.to_string());
+    }
+    return Err(ApiError::internal(format!("recorder stop failed: {err}")));
+  }
+
+  if let Some(lease_id) = info.lease_id.clone() {
+    let coordinator = state.coordinator();
+    let release_req = LeaseReleaseRequest {
+      lease_id: lease_id.clone(),
+    };
+    let release_resp = coordinator.release(&release_req).await?;
+
+    {
+      let mut recordings = state.recordings().write().await;
+      recordings.remove(&recording_id);
+    }
+
+    let message = if release_resp.released {
+      None
+    } else {
+      Some("lease already released or expired".into())
+    };
+
+    info!(recording_id = %recording_id, lease = %lease_id, released = release_resp.released, "recording stop requested");
+
+    Ok(Json(RecordingStopResponse {
+      stopped: true,
+      message,
+    }))
+  } else {
+    state.cancel_lease_renewal(&recording_id).await;
+
+    {
+      let mut recordings = state.recordings().write().await;
+      recordings.remove(&recording_id);
+    }
+
+    Ok(Json(RecordingStopResponse {
+      stopped: true,
+      message: Some("recording had no active lease; removed local state".into()),
+    }))
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::WorkerClient};
+  use crate::{config::GatewayConfig, coordinator::CoordinatorClient, worker::{RecorderClient, WorkerClient}};
   use anyhow::{Result, anyhow};
   use axum::{
     body::Body,
@@ -331,12 +548,40 @@ mod tests {
     }
   }
 
+  #[derive(Default)]
+  struct StubRecorder;
+
+  impl StubRecorder {
+    fn new() -> Self {
+      Self::default()
+    }
+  }
+
+  #[async_trait::async_trait]
+  impl RecorderClient for StubRecorder {
+    async fn start_recording(&self, _request: &RecordingStartRequest) -> Result<RecordingStartResponse> {
+      Ok(RecordingStartResponse {
+        accepted: true,
+        lease_id: None,
+        message: None,
+      })
+    }
+
+    async fn stop_recording(&self, _request: &RecordingStopRequest) -> Result<RecordingStopResponse> {
+      Ok(RecordingStopResponse {
+        stopped: true,
+        message: None,
+      })
+    }
+  }
+
   fn base_config() -> GatewayConfig {
     GatewayConfig {
       bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
       coordinator_base_url: Url::parse("http://127.0.0.1:8082").unwrap(),
       node_id: "test-node".into(),
       worker_base_url: Url::parse("http://127.0.0.1:8080").unwrap(),
+      recorder_base_url: Url::parse("http://127.0.0.1:8083").unwrap(),
     }
   }
 
@@ -359,7 +604,8 @@ mod tests {
     );
     let worker = Arc::new(StubWorker::new());
     let worker_client: Arc<dyn WorkerClient> = worker.clone();
-    let state = AppState::new(base_config(), coordinator.clone(), worker_client);
+    let recorder: Arc<dyn RecorderClient> = Arc::new(StubRecorder::new());
+    let state = AppState::new(base_config(), coordinator.clone(), worker_client, recorder);
     let app = router(state.clone());
 
     let start_body = json!({
@@ -436,7 +682,8 @@ mod tests {
     );
     let worker = Arc::new(StubWorker::new());
     let worker_client: Arc<dyn WorkerClient> = worker.clone();
-    let state = AppState::new(base_config(), coordinator, worker_client);
+    let recorder: Arc<dyn RecorderClient> = Arc::new(StubRecorder::new());
+    let state = AppState::new(base_config(), coordinator, worker_client, recorder);
     let app = router(state);
     let body = json!({
         "config": {
@@ -479,7 +726,8 @@ mod tests {
     );
     let worker = Arc::new(StubWorker::new());
     let worker_client: Arc<dyn WorkerClient> = worker.clone();
-    let state = AppState::new(base_config(), coordinator.clone(), worker_client);
+    let recorder: Arc<dyn RecorderClient> = Arc::new(StubRecorder::new());
+    let state = AppState::new(base_config(), coordinator.clone(), worker_client, recorder);
     {
       // seed state directly with a running stream
       let mut streams = state.streams().write().await;
@@ -564,10 +812,12 @@ mod tests {
     );
     let worker = Arc::new(StubWorker::new());
     *worker.fail_start.lock().await = true;
+    let recorder: Arc<dyn RecorderClient> = Arc::new(StubRecorder::new());
     let state = AppState::new(
       base_config(),
       coordinator.clone(),
       worker.clone() as Arc<dyn WorkerClient>,
+      recorder,
     );
     let app = router(state.clone());
 
@@ -630,10 +880,12 @@ mod tests {
     );
     coordinator.push_renew_response(Err("renew failed")).await;
     let worker = Arc::new(StubWorker::new());
+    let recorder: Arc<dyn RecorderClient> = Arc::new(StubRecorder::new());
     let state = AppState::new(
       base_config(),
       coordinator.clone(),
       worker.clone() as Arc<dyn WorkerClient>,
+      recorder,
     );
     let app = router(state.clone());
 

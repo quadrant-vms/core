@@ -22,10 +22,15 @@ This project is **under active development**.
   - Automatic lease acquisition, renewal (50% TTL interval), and release
   - Lease failure detection with error state transitions
   - Configurable via `COORDINATOR_URL` and `NODE_ID` environment variables
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker flows.
+- `admin-gateway`: Recorder worker management integration
+  - REST API for recorder operations (`/v1/recordings`)
+  - Lease-based recorder resource management via coordinator
+  - Automatic lease acquisition and renewal for recordings
+  - Recording lifecycle orchestration (start/stop/list)
+  - Worker health monitoring and error handling
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, and end-to-end gateway↔coordinator↔worker↔recorder flows.
 
 ### 🔜 In Progress
-- Admin-gateway integration for recorder worker management
 - Persistent lease store (PostgreSQL/Redis) and multi-node coordination
 - Operator UI & rule system
 - AI model plugin architecture

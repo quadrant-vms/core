@@ -8,6 +8,7 @@ pub struct GatewayConfig {
   pub coordinator_base_url: Url,
   pub node_id: String,
   pub worker_base_url: Url,
+  pub recorder_base_url: Url,
 }
 
 impl GatewayConfig {
@@ -23,6 +24,10 @@ impl GatewayConfig {
       env::var("STREAM_WORKER_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:8080/".to_string());
     let worker_base_url = Url::parse(&worker).context("invalid STREAM_WORKER_ENDPOINT")?;
 
+    let recorder =
+      env::var("RECORDER_WORKER_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:8083/".to_string());
+    let recorder_base_url = Url::parse(&recorder).context("invalid RECORDER_WORKER_ENDPOINT")?;
+
     let node_id = env::var("NODE_ID").unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
 
     Ok(Self {
@@ -30,6 +35,7 @@ impl GatewayConfig {
       coordinator_base_url,
       node_id,
       worker_base_url,
+      recorder_base_url,
     })
   }
 }
