@@ -30,6 +30,9 @@ async fn main() -> anyhow::Result<()> {
 
   let app = Router::new()
     .route("/healthz", get(api::healthz))
+    .route("/metrics", get(|| async {
+      telemetry::metrics::encode_metrics().unwrap_or_else(|e| format!("Error: {}", e))
+    }))
     .route("/recordings", get(api::list_recordings))
     .route("/start", post(api::start_recording))
     .route("/stop", post(api::stop_recording));

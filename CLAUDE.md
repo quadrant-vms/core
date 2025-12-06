@@ -130,7 +130,7 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: Recorder Integration with Coordinator & Gateway
+**Recently Completed**: Multi-Coordinator Clustering with Leader Election
 - ✅ recorder-node crate structure created
 - ✅ Recording job manager with lifecycle management
 - ✅ REST API (start/stop/list recordings)
@@ -141,13 +141,18 @@ make status-dc
 - ✅ Automatic lease acquisition, renewal, and release
 - ✅ Admin-gateway recorder worker management integration
 - ✅ End-to-end tests for recorder workflow
+- ✅ Coordinator failover detection and recovery
+- ✅ Worker heartbeat and health monitoring
+- ✅ Automatic lease recovery on worker failure
+- ✅ Multi-coordinator cluster support with leader election
+- ✅ Request forwarding from followers to leader
+- ✅ Integration tests for failover scenarios
 
-**Next Feature**: Cluster Management and Failover Hardening
-- 🔜 Coordinator failover detection and recovery
-- 🔜 Worker heartbeat and health monitoring
-- 🔜 Automatic lease recovery on worker failure
-- 🔜 Multi-coordinator cluster support with leader election
-- 🔜 Integration tests for failover scenarios
+**Next Feature**: Advanced Metrics and Observability
+- 🔜 Metrics collection and aggregation
+- 🔜 Prometheus/OpenTelemetry integration
+- 🔜 Performance monitoring dashboards
+- 🔜 Health check endpoints with detailed diagnostics
 
 ### Common Tasks
 

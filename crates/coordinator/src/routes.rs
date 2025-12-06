@@ -15,6 +15,7 @@ pub fn router(state: CoordinatorState) -> Router {
   Router::new()
     .route("/healthz", get(healthz))
     .route("/readyz", get(readyz))
+    .route("/metrics", get(metrics))
     .route("/v1/leases", get(list_leases))
     .route("/v1/leases/acquire", post(acquire_lease))
     .route("/v1/leases/renew", post(renew_lease))
@@ -36,6 +37,11 @@ async fn readyz(State(state): State<CoordinatorState>) -> Result<&'static str, A
     Ok(false) => Err(ApiError::internal("lease store not ready")),
     Err(e) => Err(ApiError::internal(format!("health check failed: {}", e))),
   }
+}
+
+async fn metrics() -> Result<String, ApiError> {
+  telemetry::metrics::encode_metrics()
+    .map_err(|e| ApiError::internal(format!("failed to encode metrics: {}", e)))
 }
 
 #[derive(Debug, Deserialize)]

@@ -14,6 +14,7 @@ use tracing::info;
 pub fn router(state: AppState) -> Router {
   Router::new()
     .route("/healthz", get(healthz))
+    .route("/metrics", get(metrics))
     .route("/v1/streams", get(list_streams).post(start_stream))
     .route("/v1/streams/:id", delete(stop_stream))
     .route("/v1/recordings", get(list_recordings).post(start_recording))
@@ -23,6 +24,11 @@ pub fn router(state: AppState) -> Router {
 
 async fn healthz() -> &'static str {
   "ok"
+}
+
+async fn metrics() -> Result<String, ApiError> {
+  telemetry::metrics::encode_metrics()
+    .map_err(|e| ApiError::internal(format!("failed to encode metrics: {}", e)))
 }
 
 async fn list_streams(State(state): State<AppState>) -> Result<Json<Vec<StreamInfo>>, ApiError> {
