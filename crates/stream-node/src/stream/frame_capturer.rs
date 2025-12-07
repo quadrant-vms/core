@@ -15,6 +15,7 @@ use tracing::{debug, error, info, warn};
 
 /// Configuration for frame capture and AI processing
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct FrameCaptureConfig {
     /// AI service base URL (e.g., "http://localhost:8084")
     pub ai_service_url: String,
@@ -53,6 +54,7 @@ impl Default for FrameCaptureConfig {
 /// * `source_uri` - Video source URI (RTSP, HLS, etc.)
 /// * `config` - Frame capture configuration
 /// * `cancel_token` - Token to stop the frame capture loop
+#[allow(dead_code)]
 pub fn start_frame_capture(
     stream_id: String,
     source_uri: String,
@@ -135,6 +137,7 @@ pub fn start_frame_capture(
 }
 
 /// Submit a frame to the AI service
+#[allow(dead_code)]
 async fn submit_frame_to_ai(
     client: &Client,
     ai_service_url: &str,

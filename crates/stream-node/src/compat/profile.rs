@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct CameraProfile {
   pub vendor: Option<String>,
   pub model: Option<String>,

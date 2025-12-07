@@ -1,4 +1,5 @@
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProbeResult {
   pub vendor_hint: Option<String>,
   pub has_h264: bool,

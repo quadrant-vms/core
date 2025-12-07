@@ -100,13 +100,21 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   assert!(stopped);
 
   // Verify lease was released (give time for async HTTP call to coordinator)
-  tokio::time::sleep(Duration::from_millis(300)).await;
-  let leases_resp = http_client
-    .get(format!("{}v1/leases?kind=recorder", coordinator_url))
-    .send()
-    .await?;
-  let leases: Vec<serde_json::Value> = leases_resp.json().await?;
-  assert_eq!(leases.len(), 0);
+  // Use a retry loop with timeout to handle timing variability
+  let mut lease_released = false;
+  for _ in 0..10 {
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let leases_resp = http_client
+      .get(format!("{}v1/leases?kind=recorder", coordinator_url))
+      .send()
+      .await?;
+    let leases: Vec<serde_json::Value> = leases_resp.json().await?;
+    if leases.is_empty() {
+      lease_released = true;
+      break;
+    }
+  }
+  assert!(lease_released, "lease was not released within timeout");
 
   coordinator_task.abort();
   Ok(())

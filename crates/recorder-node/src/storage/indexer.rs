@@ -28,6 +28,7 @@ impl MediaIndexer {
     })
   }
 
+  #[allow(dead_code)]
   pub async fn index_recording(_recording_id: &str, _metadata: RecordingMetadata) -> Result<()> {
     // TODO: Store metadata in database/index
     info!("indexing recording (stub implementation)");

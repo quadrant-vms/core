@@ -9,6 +9,7 @@ pub static STREAMS_RUNNING: Lazy<IntGauge> = Lazy::new(|| {
   g
 });
 
+#[allow(dead_code)]
 pub static RESTARTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
   let c = IntCounter::new("stream_restarts_total", "Total restarts of pipelines").unwrap();
   REGISTRY.register(Box::new(c.clone())).ok();
