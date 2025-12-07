@@ -95,12 +95,19 @@ This project is **under active development**.
   - Health check endpoints for plugin monitoring
   - Configurable via `AI_SERVICE_ADDR`, `COORDINATOR_URL`, and `NODE_ID` environment variables
   - Standalone or coordinator-integrated deployment modes
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, frame capture pipeline, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
+- **Recorder-node AI integration**:
+  - Frame capture from active recordings for AI processing
+  - Optional AI configuration per recording (RecordingAiConfig)
+  - Automatic frame extraction and submission to AI service
+  - Configurable capture interval, resolution, and quality
+  - Integration with ai-service via REST API
+  - Backward compatible (AI processing is optional)
+  - Clean lifecycle management with cancellation tokens
+- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, frame capture pipeline, recorder AI integration, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
 
 ### 🔜 In Progress
 - Operator UI & rule system
 - Additional AI model integrations (pose estimation, facial recognition)
-- Recorder-node integration with frame capture for live AI processing
 - GPU acceleration optimization for YOLOv8
 - Full end-to-end integration testing with live streams and AI processing
 
