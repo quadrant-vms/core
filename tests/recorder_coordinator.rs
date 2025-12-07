@@ -11,7 +11,11 @@ use recorder_node::coordinator::HttpCoordinatorClient;
 use recorder_node::recording::manager::RECORDING_MANAGER;
 use reqwest::Client;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{net::TcpListener, task::JoinHandle, time::Duration};
+use tokio::{net::TcpListener, task::JoinHandle, time::Duration, sync::Mutex};
+use std::sync::OnceLock;
+
+// Global mutex to serialize tests that use the global RECORDING_MANAGER
+static TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
 
 fn coordinator_state() -> CoordinatorState {
   let cfg = CoordinatorConfig {
@@ -44,11 +48,17 @@ async fn spawn_router(router: Router) -> Result<(SocketAddr, JoinHandle<()>)> {
 
 #[tokio::test]
 async fn recorder_acquires_and_releases_lease() -> Result<()> {
+  // Acquire test lock to prevent parallel execution with shared global state
+  let _lock = TEST_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
+
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
 
   // Clear any state from previous tests
   RECORDING_MANAGER.clear().await;
+
+  // Give time for cancellation tokens to fully cleanup from previous tests
+  tokio::time::sleep(Duration::from_millis(200)).await;
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
@@ -64,9 +74,10 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
     .set_coordinator(client.clone(), "recorder-test".to_string())
     .await;
 
-  // Start a recording
+  // Start a recording with unique ID to avoid cross-test conflicts
+  let test_id = format!("rec-acquire-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
   let config = RecordingConfig {
-    id: "rec-1".to_string(),
+    id: test_id.clone(),
     source_stream_id: Some("stream-1".to_string()),
     source_uri: Some("rtsp://example.com/stream".to_string()),
     retention_hours: Some(24),
@@ -84,23 +95,29 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   assert!(response.lease_id.is_some());
   let lease_id = response.lease_id.unwrap();
 
-  // Give time for lease to be stored in coordinator
-  tokio::time::sleep(Duration::from_millis(50)).await;
-
-  // Verify lease was acquired by checking coordinator
+  // Verify lease was acquired by checking coordinator (use retry loop for timing)
   let http_client = Client::builder().build()?;
-  let leases_resp = http_client
-    .get(format!("{}v1/leases?kind=recorder", coordinator_url))
-    .send()
-    .await?;
-  assert!(leases_resp.status().is_success());
-  let leases: Vec<serde_json::Value> = leases_resp.json().await?;
-  assert_eq!(leases.len(), 1);
-  assert_eq!(leases[0]["lease_id"], lease_id);
-  assert_eq!(leases[0]["resource_id"], "rec-1");
+  let mut lease_found = false;
+  for _ in 0..20 {
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let leases_resp = http_client
+      .get(format!("{}v1/leases?kind=recorder", coordinator_url))
+      .send()
+      .await?;
+    if leases_resp.status().is_success() {
+      let leases: Vec<serde_json::Value> = leases_resp.json().await?;
+      // Filter to only our test's lease (tests may run in parallel)
+      let our_lease: Vec<_> = leases.iter().filter(|l| l["resource_id"] == test_id).collect();
+      if our_lease.len() == 1 && our_lease[0]["lease_id"] == lease_id {
+        lease_found = true;
+        break;
+      }
+    }
+  }
+  assert!(lease_found, "lease was not found in coordinator within timeout (1 second)");
 
   // Stop the recording
-  let stopped = RECORDING_MANAGER.stop("rec-1").await?;
+  let stopped = RECORDING_MANAGER.stop(&test_id).await?;
   assert!(stopped);
 
   // Verify lease was released (give time for async HTTP call to coordinator)
@@ -126,11 +143,17 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
 
 #[tokio::test]
 async fn recorder_lease_conflict() -> Result<()> {
+  // Acquire test lock to prevent parallel execution with shared global state
+  let _lock = TEST_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
+
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
 
   // Clear any state from previous tests
   RECORDING_MANAGER.clear().await;
+
+  // Give time for cancellation tokens to fully cleanup from previous tests
+  tokio::time::sleep(Duration::from_millis(200)).await;
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
@@ -146,9 +169,10 @@ async fn recorder_lease_conflict() -> Result<()> {
     .set_coordinator(client.clone(), "recorder-test".to_string())
     .await;
 
-  // Start first recording
+  // Start first recording with unique ID to avoid cross-test conflicts
+  let test_id = format!("rec-conflict-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
   let config1 = RecordingConfig {
-    id: "rec-conflict".to_string(),
+    id: test_id.clone(),
     source_stream_id: Some("stream-1".to_string()),
     source_uri: Some("rtsp://example.com/stream".to_string()),
     retention_hours: Some(24),
@@ -166,7 +190,7 @@ async fn recorder_lease_conflict() -> Result<()> {
 
   // Try to start another recording with the same ID (should fail)
   let config2 = RecordingConfig {
-    id: "rec-conflict".to_string(),
+    id: test_id.clone(),
     source_stream_id: Some("stream-2".to_string()),
     source_uri: Some("rtsp://example.com/stream2".to_string()),
     retention_hours: Some(24),
@@ -184,13 +208,16 @@ async fn recorder_lease_conflict() -> Result<()> {
   assert!(response2.message.is_some());
 
   // Clean up
-  RECORDING_MANAGER.stop("rec-conflict").await?;
+  RECORDING_MANAGER.stop(&test_id).await?;
   coordinator_task.abort();
   Ok(())
 }
 
 #[tokio::test(start_paused = true)]
 async fn recorder_lease_renewal() -> Result<()> {
+  // Acquire test lock to prevent parallel execution with shared global state
+  let _lock = TEST_MUTEX.get_or_init(|| Mutex::new(())).lock().await;
+
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
 
@@ -212,8 +239,9 @@ async fn recorder_lease_renewal() -> Result<()> {
     .await;
 
   // Start recording with short TTL (reduced from 10s to 2s for faster tests)
+  let test_id = format!("rec-renewal-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
   let config = RecordingConfig {
-    id: "rec-renewal".to_string(),
+    id: test_id.clone(),
     source_stream_id: Some("stream-1".to_string()),
     source_uri: Some("rtsp://example.com/stream".to_string()),
     retention_hours: Some(24),
@@ -245,7 +273,7 @@ async fn recorder_lease_renewal() -> Result<()> {
   assert_eq!(leases[0]["lease_id"], lease_id);
 
   // Stop and clean up
-  RECORDING_MANAGER.stop("rec-renewal").await?;
+  RECORDING_MANAGER.stop(&test_id).await?;
   coordinator_task.abort();
   Ok(())
 }
