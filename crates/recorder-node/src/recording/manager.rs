@@ -11,6 +11,7 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+use super::frame_capturer::{self, FrameCaptureConfig};
 use super::pipeline::RecordingPipeline;
 use crate::coordinator::CoordinatorClient;
 
@@ -22,6 +23,7 @@ pub struct RecordingManager {
   recordings: Arc<RwLock<HashMap<String, RecordingInfo>>>,
   pipelines: Arc<RwLock<HashMap<String, RecordingPipeline>>>,
   renewals: Arc<RwLock<HashMap<String, CancellationToken>>>,
+  frame_capturers: Arc<RwLock<HashMap<String, CancellationToken>>>,
   coordinator: Arc<RwLock<Option<Arc<dyn CoordinatorClient>>>>,
   node_id: Arc<RwLock<Option<String>>>,
 }
@@ -32,6 +34,7 @@ impl RecordingManager {
       recordings: Arc::new(RwLock::new(HashMap::new())),
       pipelines: Arc::new(RwLock::new(HashMap::new())),
       renewals: Arc::new(RwLock::new(HashMap::new())),
+      frame_capturers: Arc::new(RwLock::new(HashMap::new())),
       coordinator: Arc::new(RwLock::new(None)),
       node_id: Arc::new(RwLock::new(None)),
     }
@@ -43,6 +46,10 @@ impl RecordingManager {
     self.pipelines.write().await.clear();
     let renewals = self.renewals.write().await.drain().collect::<Vec<_>>();
     for (_, token) in renewals {
+      token.cancel();
+    }
+    let capturers = self.frame_capturers.write().await.drain().collect::<Vec<_>>();
+    for (_, token) in capturers {
       token.cancel();
     }
     *self.coordinator.write().await = None;
@@ -135,6 +142,41 @@ impl RecordingManager {
     pipelines.insert(id.clone(), pipeline);
     drop(pipelines);
 
+    // Start frame capture if AI config is provided
+    if let Some(ai_cfg) = &req.ai_config {
+      let source_uri = req
+        .config
+        .source_uri
+        .clone()
+        .unwrap_or_else(|| "unknown".to_string());
+      let cancel_token = CancellationToken::new();
+
+      let frame_cfg = FrameCaptureConfig {
+        ai_service_url: ai_cfg.ai_service_url.clone(),
+        ai_task_id: ai_cfg.ai_task_id.clone(),
+        capture_interval_secs: ai_cfg.capture_interval_secs,
+        frame_width: ai_cfg.frame_width,
+        frame_height: ai_cfg.frame_height,
+        jpeg_quality: ai_cfg.jpeg_quality,
+      };
+
+      info!(
+        id = %id,
+        ai_task_id = %frame_cfg.ai_task_id,
+        "starting frame capture for recording"
+      );
+
+      frame_capturer::start_frame_capture(
+        id.clone(),
+        source_uri,
+        frame_cfg,
+        cancel_token.clone(),
+      );
+
+      let mut capturers = self.frame_capturers.write().await;
+      capturers.insert(id.clone(), cancel_token);
+    }
+
     let recordings_clone = Arc::clone(&self.recordings);
     let pipelines_clone = Arc::clone(&self.pipelines);
 
@@ -211,6 +253,12 @@ impl RecordingManager {
 
     // Cancel renewal loop
     self.cancel_lease_renewal(id).await;
+
+    // Cancel frame capture if running
+    if let Some(token) = self.frame_capturers.write().await.remove(id) {
+      info!(id = %id, "stopping frame capture");
+      token.cancel();
+    }
 
     // Stop the pipeline
     let mut pipelines = self.pipelines.write().await;
@@ -334,6 +382,7 @@ mod tests {
     let req = RecordingStartRequest {
       config,
       lease_ttl_secs: Some(60),
+      ai_config: None,
     };
 
     let response = manager.start(req).await.unwrap();

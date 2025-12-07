@@ -70,10 +70,45 @@ pub struct RecordingInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingAiConfig {
+  /// AI service base URL (e.g., "http://localhost:8084")
+  pub ai_service_url: String,
+  /// AI task ID to submit frames to
+  pub ai_task_id: String,
+  /// Frame capture interval in seconds
+  #[serde(default = "default_capture_interval")]
+  pub capture_interval_secs: u64,
+  /// Frame width (0 = auto)
+  #[serde(default = "default_frame_width")]
+  pub frame_width: u32,
+  /// Frame height (0 = auto)
+  #[serde(default)]
+  pub frame_height: u32,
+  /// JPEG quality (2-31, lower is better)
+  #[serde(default = "default_jpeg_quality")]
+  pub jpeg_quality: u32,
+}
+
+fn default_capture_interval() -> u64 {
+  2
+}
+
+fn default_frame_width() -> u32 {
+  640
+}
+
+fn default_jpeg_quality() -> u32 {
+  5
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecordingStartRequest {
   pub config: RecordingConfig,
   #[serde(default)]
   pub lease_ttl_secs: Option<u64>,
+  /// Optional AI processing configuration
+  #[serde(default)]
+  pub ai_config: Option<RecordingAiConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

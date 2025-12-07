@@ -41,6 +41,7 @@ async fn test_recording_start_request() {
   let request = RecordingStartRequest {
     config: config.clone(),
     lease_ttl_secs: Some(120),
+    ai_config: None,
   };
 
   assert_eq!(request.config.id, "test-rec");

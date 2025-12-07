@@ -76,6 +76,7 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   let req = RecordingStartRequest {
     config,
     lease_ttl_secs: Some(30),
+    ai_config: None,
   };
 
   let response = RECORDING_MANAGER.start(req).await?;
@@ -157,6 +158,7 @@ async fn recorder_lease_conflict() -> Result<()> {
   let req1 = RecordingStartRequest {
     config: config1,
     lease_ttl_secs: Some(30),
+    ai_config: None,
   };
 
   let response1 = RECORDING_MANAGER.start(req1).await?;
@@ -174,6 +176,7 @@ async fn recorder_lease_conflict() -> Result<()> {
   let req2 = RecordingStartRequest {
     config: config2,
     lease_ttl_secs: Some(30),
+    ai_config: None,
   };
 
   let response2 = RECORDING_MANAGER.start(req2).await?;
@@ -220,6 +223,7 @@ async fn recorder_lease_renewal() -> Result<()> {
   let req = RecordingStartRequest {
     config,
     lease_ttl_secs: Some(2),
+    ai_config: None,
   };
 
   let response = RECORDING_MANAGER.start(req).await?;
