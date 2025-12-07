@@ -103,7 +103,17 @@ This project is **under active development**.
   - Integration with ai-service via REST API
   - Backward compatible (AI processing is optional)
   - Clean lifecycle management with cancellation tokens
-- CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, frame capture pipeline, recorder AI integration, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
+- **Comprehensive Test Suite** (`cargo test`):
+  - Unit tests for lease store logic, router contracts, recording lifecycle, pipeline configuration
+  - Integration tests for recorder-coordinator integration, cluster leader election, metrics collection
+  - AI plugin system tests, frame capture pipeline tests, recorder AI integration tests
+  - **Full end-to-end integration tests** (`tests/full_pipeline_e2e.rs`):
+    - Complete pipeline: stream → recording → AI processing with coordinator orchestration
+    - Multi-service interaction: admin-gateway ↔ coordinator ↔ stream-node ↔ recorder-node ↔ ai-service
+    - Lease management across all service types (stream, recorder, AI tasks)
+    - Health check verification across all services
+    - Multi-component error handling and recovery scenarios
+  - 38 total tests validating the entire VMS stack
 
 - **GPU Acceleration Optimization**:
   - CUDA and TensorRT execution provider support for YOLOv8
@@ -120,7 +130,6 @@ This project is **under active development**.
 ### 🔜 In Progress
 - Operator UI & rule system
 - Additional AI model integrations (pose estimation, facial recognition)
-- Full end-to-end integration testing with live streams and AI processing
 
 ---
 
