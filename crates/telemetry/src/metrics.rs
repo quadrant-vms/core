@@ -321,6 +321,46 @@ lazy_static! {
         REGISTRY.register(Box::new(metric.clone())).ok();
         metric
     };
+
+    pub static ref AI_SERVICE_GPU_INFERENCE: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "ai_service_gpu_inference_total",
+                "Total number of GPU inference operations",
+            ),
+            &["plugin_type", "execution_provider"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_GPU_UTILIZATION: IntGaugeVec = {
+        let metric = IntGaugeVec::new(
+            Opts::new(
+                "ai_service_gpu_utilization_percent",
+                "GPU utilization percentage",
+            ),
+            &["plugin_type", "device_id"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref AI_SERVICE_INFERENCE_TIME: HistogramVec = {
+        let metric = HistogramVec::new(
+            HistogramOpts::new(
+                "ai_service_inference_time_seconds",
+                "Time spent on inference (excluding pre/post processing)",
+            )
+            .buckets(vec![0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]),
+            &["plugin_type", "execution_provider"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
 }
 
 /// Helper function to encode metrics for Prometheus scraping

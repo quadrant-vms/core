@@ -105,10 +105,21 @@ This project is **under active development**.
   - Clean lifecycle management with cancellation tokens
 - CI-friendly test suite (`cargo test`) covering lease store logic, router contracts, recording lifecycle, pipeline configuration, recorder-coordinator integration, cluster leader election, metrics collection, AI plugin system, frame capture pipeline, recorder AI integration, and end-to-end gateway↔coordinator↔worker↔recorder↔ai-service flows.
 
+- **GPU Acceleration Optimization**:
+  - CUDA and TensorRT execution provider support for YOLOv8
+  - Automatic fallback from TensorRT → CUDA → CPU
+  - Multi-GPU support with device selection
+  - Configurable thread pools (intra/inter-operation parallelism)
+  - GPU memory limit configuration
+  - Performance monitoring with execution provider tracking
+  - Comprehensive metrics for GPU vs CPU inference comparison
+  - Environment variable and JSON configuration support
+  - Detailed GPU setup documentation in `docs/GPU_ACCELERATION.md`
+  - Inference time tracking separate from pre/post-processing
+
 ### 🔜 In Progress
 - Operator UI & rule system
 - Additional AI model integrations (pose estimation, facial recognition)
-- GPU acceleration optimization for YOLOv8
 - Full end-to-end integration testing with live streams and AI processing
 
 ---

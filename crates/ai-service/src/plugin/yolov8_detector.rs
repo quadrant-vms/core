@@ -7,6 +7,7 @@ use base64::Engine;
 use image::DynamicImage;
 use ndarray::{Array, IxDyn};
 use ort::{
+    execution_providers::{CUDAExecutionProvider, TensorRTExecutionProvider, CPUExecutionProvider},
     session::{builder::GraphOptimizationLevel, Session},
     value::Value,
 };
@@ -37,6 +38,26 @@ pub struct YoloV8Config {
     /// COCO class names (default 80 classes)
     #[serde(default = "default_coco_classes")]
     pub class_names: Vec<String>,
+
+    /// Execution provider preference (CPU, CUDA, TensorRT)
+    #[serde(default = "default_execution_provider")]
+    pub execution_provider: String,
+
+    /// GPU device ID (0, 1, 2, etc.)
+    #[serde(default = "default_device_id")]
+    pub device_id: i32,
+
+    /// Number of intra-operation threads
+    #[serde(default = "default_intra_threads")]
+    pub intra_threads: usize,
+
+    /// Number of inter-operation threads
+    #[serde(default = "default_inter_threads")]
+    pub inter_threads: usize,
+
+    /// GPU memory limit in bytes (0 = unlimited)
+    #[serde(default = "default_gpu_mem_limit")]
+    pub gpu_mem_limit: usize,
 }
 
 fn default_confidence() -> f32 {
@@ -74,6 +95,26 @@ fn default_coco_classes() -> Vec<String> {
     .collect()
 }
 
+fn default_execution_provider() -> String {
+    "CUDA".to_string()
+}
+
+fn default_device_id() -> i32 {
+    0
+}
+
+fn default_intra_threads() -> usize {
+    4
+}
+
+fn default_inter_threads() -> usize {
+    1
+}
+
+fn default_gpu_mem_limit() -> usize {
+    0 // unlimited
+}
+
 impl Default for YoloV8Config {
     fn default() -> Self {
         Self {
@@ -83,6 +124,11 @@ impl Default for YoloV8Config {
             max_detections: 100,
             input_size: 640,
             class_names: default_coco_classes(),
+            execution_provider: default_execution_provider(),
+            device_id: default_device_id(),
+            intra_threads: default_intra_threads(),
+            inter_threads: default_inter_threads(),
+            gpu_mem_limit: default_gpu_mem_limit(),
         }
     }
 }
@@ -91,6 +137,7 @@ impl Default for YoloV8Config {
 pub struct YoloV8DetectorPlugin {
     config: YoloV8Config,
     session: Option<Arc<Mutex<Session>>>,
+    execution_provider_used: Arc<Mutex<String>>,
 }
 
 impl YoloV8DetectorPlugin {
@@ -98,6 +145,7 @@ impl YoloV8DetectorPlugin {
         Self {
             config: YoloV8Config::default(),
             session: None,
+            execution_provider_used: Arc::new(Mutex::new("CPU".to_string())),
         }
     }
 
@@ -320,6 +368,36 @@ impl AiPlugin for YoloV8DetectorPlugin {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "List of class names (default: COCO 80 classes)"
+                },
+                "execution_provider": {
+                    "type": "string",
+                    "enum": ["CPU", "CUDA", "TensorRT"],
+                    "default": "CUDA",
+                    "description": "Execution provider (CPU, CUDA, TensorRT)"
+                },
+                "device_id": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0,
+                    "description": "GPU device ID (0, 1, 2, etc.)"
+                },
+                "intra_threads": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 4,
+                    "description": "Number of intra-operation threads"
+                },
+                "inter_threads": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 1,
+                    "description": "Number of inter-operation threads"
+                },
+                "gpu_mem_limit": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "default": 0,
+                    "description": "GPU memory limit in bytes (0 = unlimited)"
                 }
             },
             "required": ["model_path"]
@@ -339,18 +417,128 @@ impl AiPlugin for YoloV8DetectorPlugin {
             self.config = serde_json::from_value(config)?;
         }
 
-        // Initialize ONNX Runtime session
-        let session = Session::builder()?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_intra_threads(4)?
-            .commit_from_file(&self.config.model_path)
-            .context("Failed to load ONNX model")?;
+        // Read GPU configuration from environment variables if set
+        if let Ok(provider) = std::env::var("YOLOV8_EXECUTION_PROVIDER") {
+            self.config.execution_provider = provider;
+        }
+        if let Ok(device_id) = std::env::var("YOLOV8_DEVICE_ID") {
+            if let Ok(id) = device_id.parse::<i32>() {
+                self.config.device_id = id;
+            }
+        }
+        if let Ok(gpu_mem) = std::env::var("YOLOV8_GPU_MEM_LIMIT") {
+            if let Ok(limit) = gpu_mem.parse::<usize>() {
+                self.config.gpu_mem_limit = limit;
+            }
+        }
+
+        // Try to configure execution providers with fallback
+        let provider_preference = self.config.execution_provider.to_uppercase();
+        let (session, actual_provider) = match provider_preference.as_str() {
+            "TENSORRT" => {
+                tracing::info!("Attempting to use TensorRT execution provider (device: {})", self.config.device_id);
+                let result = Session::builder()?
+                    .with_optimization_level(GraphOptimizationLevel::Level3)?
+                    .with_intra_threads(self.config.intra_threads)?
+                    .with_inter_threads(self.config.inter_threads)?
+                    .with_execution_providers([
+                        TensorRTExecutionProvider::default()
+                            .with_device_id(self.config.device_id)
+                            .build(),
+                        CUDAExecutionProvider::default()
+                            .with_device_id(self.config.device_id)
+                            .build(),
+                        CPUExecutionProvider::default().build()
+                    ])?
+                    .commit_from_file(&self.config.model_path);
+
+                match result {
+                    Ok(session) => {
+                        tracing::info!("Successfully configured TensorRT execution provider");
+                        (session, "TensorRT".to_string())
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed with TensorRT, trying CUDA: {}", e);
+                        // Try CUDA
+                        let cuda_result = Session::builder()?
+                            .with_optimization_level(GraphOptimizationLevel::Level3)?
+                            .with_intra_threads(self.config.intra_threads)?
+                            .with_inter_threads(self.config.inter_threads)?
+                            .with_execution_providers([
+                                CUDAExecutionProvider::default()
+                                    .with_device_id(self.config.device_id)
+                                    .build(),
+                                CPUExecutionProvider::default().build()
+                            ])?
+                            .commit_from_file(&self.config.model_path);
+
+                        match cuda_result {
+                            Ok(session) => {
+                                tracing::info!("Fell back to CUDA execution provider");
+                                (session, "CUDA".to_string())
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed with CUDA, using CPU: {}", e);
+                                let cpu_session = Session::builder()?
+                                    .with_optimization_level(GraphOptimizationLevel::Level3)?
+                                    .with_intra_threads(self.config.intra_threads)?
+                                    .with_inter_threads(self.config.inter_threads)?
+                                    .commit_from_file(&self.config.model_path)?;
+                                (cpu_session, "CPU".to_string())
+                            }
+                        }
+                    }
+                }
+            }
+            "CUDA" => {
+                tracing::info!("Attempting to use CUDA execution provider (device: {})", self.config.device_id);
+                let result = Session::builder()?
+                    .with_optimization_level(GraphOptimizationLevel::Level3)?
+                    .with_intra_threads(self.config.intra_threads)?
+                    .with_inter_threads(self.config.inter_threads)?
+                    .with_execution_providers([
+                        CUDAExecutionProvider::default()
+                            .with_device_id(self.config.device_id)
+                            .build(),
+                        CPUExecutionProvider::default().build()
+                    ])?
+                    .commit_from_file(&self.config.model_path);
+
+                match result {
+                    Ok(session) => {
+                        tracing::info!("Successfully configured CUDA execution provider");
+                        (session, "CUDA".to_string())
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed with CUDA, using CPU: {}", e);
+                        let cpu_session = Session::builder()?
+                            .with_optimization_level(GraphOptimizationLevel::Level3)?
+                            .with_intra_threads(self.config.intra_threads)?
+                            .with_inter_threads(self.config.inter_threads)?
+                            .commit_from_file(&self.config.model_path)?;
+                        (cpu_session, "CPU".to_string())
+                    }
+                }
+            }
+            _ => {
+                tracing::info!("Using CPU execution provider");
+                let session = Session::builder()?
+                    .with_optimization_level(GraphOptimizationLevel::Level3)?
+                    .with_intra_threads(self.config.intra_threads)?
+                    .with_inter_threads(self.config.inter_threads)?
+                    .commit_from_file(&self.config.model_path)?;
+                (session, "CPU".to_string())
+            }
+        };
 
         self.session = Some(Arc::new(Mutex::new(session)));
+        *self.execution_provider_used.lock().unwrap() = actual_provider.clone();
 
         tracing::info!(
-            "Initialized YOLOv8 detector with model: {}, confidence: {}, input_size: {}",
+            "Initialized YOLOv8 detector - model: {}, provider: {}, device: {}, confidence: {}, input_size: {}",
             self.config.model_path,
+            actual_provider,
+            self.config.device_id,
             self.config.confidence_threshold,
             self.config.input_size
         );
@@ -382,9 +570,11 @@ impl AiPlugin for YoloV8DetectorPlugin {
         // Convert ndarray to ort Value
         let input_tensor = Value::from_array(input_array)?;
 
-        // Run inference - acquire lock for session
+        // Run inference - acquire lock for session and measure inference time
+        let inference_start = std::time::Instant::now();
         let mut session = session_lock.lock().map_err(|e| anyhow::anyhow!("Failed to lock session: {}", e))?;
         let outputs = session.run(ort::inputs![input_tensor])?;
+        let inference_time = inference_start.elapsed();
 
         // Get output tensor - output is at index 0 (use string key for named outputs)
         let output_value = outputs.get("output0").context("No output tensor found")?;
@@ -408,6 +598,17 @@ impl AiPlugin for YoloV8DetectorPlugin {
             0.0
         };
 
+        let execution_provider = self.execution_provider_used.lock().unwrap().clone();
+
+        // Track GPU/CPU inference metrics
+        telemetry::metrics::AI_SERVICE_GPU_INFERENCE
+            .with_label_values(&[self.id(), &execution_provider])
+            .inc();
+
+        telemetry::metrics::AI_SERVICE_INFERENCE_TIME
+            .with_label_values(&[self.id(), &execution_provider])
+            .observe(inference_time.as_secs_f64());
+
         Ok(AiResult {
             task_id: frame.source_id.clone(),
             timestamp: frame.timestamp,
@@ -420,7 +621,10 @@ impl AiPlugin for YoloV8DetectorPlugin {
                 "frame_height": original_height,
                 "frame_sequence": frame.sequence,
                 "model_path": self.config.model_path,
-                "input_size": self.config.input_size
+                "input_size": self.config.input_size,
+                "execution_provider": execution_provider,
+                "device_id": self.config.device_id,
+                "inference_time_ms": inference_time.as_millis() as u64
             })),
         })
     }
