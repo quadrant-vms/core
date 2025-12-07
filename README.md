@@ -82,7 +82,10 @@ This project is **under active development**.
     - Automatic frame dimension probing with ffprobe
     - Configurable JPEG quality and scaling
     - Frame sequence tracking and timestamp management
-    - Integration-ready for stream-node and recorder-node frame extraction
+    - **Stream-node integration** with periodic frame capture for live AI processing
+    - Configurable capture intervals, resolution, and quality settings
+    - Automatic frame submission to AI service with task management
+    - CancellationToken-based lifecycle management for clean shutdown
   - REST API for AI task lifecycle management (`/v1/tasks`)
   - Coordinator lease integration for distributed AI task management
   - Automatic lease acquisition, renewal, and release for AI tasks
@@ -97,8 +100,9 @@ This project is **under active development**.
 ### 🔜 In Progress
 - Operator UI & rule system
 - Additional AI model integrations (pose estimation, facial recognition)
-- Stream-node and recorder-node integration with frame capture for live AI processing
+- Recorder-node integration with frame capture for live AI processing
 - GPU acceleration optimization for YOLOv8
+- Full end-to-end integration testing with live streams and AI processing
 
 ---
 
