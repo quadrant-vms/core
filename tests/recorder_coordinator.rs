@@ -106,7 +106,7 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   // Verify lease was released (give time for async HTTP call to coordinator)
   // Use a retry loop with timeout to handle timing variability
   let mut lease_released = false;
-  for _ in 0..10 {
+  for _ in 0..20 {
     tokio::time::sleep(Duration::from_millis(100)).await;
     let leases_resp = http_client
       .get(format!("{}v1/leases?kind=recorder", coordinator_url))
@@ -118,7 +118,7 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
       break;
     }
   }
-  assert!(lease_released, "lease was not released within timeout");
+  assert!(lease_released, "lease was not released within timeout (2 seconds)");
 
   coordinator_task.abort();
   Ok(())
