@@ -47,6 +47,9 @@ async fn recorder_acquires_and_releases_lease() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
 
+  // Clear any state from previous tests
+  RECORDING_MANAGER.clear().await;
+
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
   let (coordinator_addr, coordinator_task) = spawn_router(coordinator_router).await?;
@@ -125,6 +128,9 @@ async fn recorder_lease_conflict() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
 
+  // Clear any state from previous tests
+  RECORDING_MANAGER.clear().await;
+
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());
   let (coordinator_addr, coordinator_task) = spawn_router(coordinator_router).await?;
@@ -184,6 +190,9 @@ async fn recorder_lease_conflict() -> Result<()> {
 async fn recorder_lease_renewal() -> Result<()> {
   let _ = tracing_subscriber::fmt::try_init();
   std::env::set_var("MOCK_RECORDING", "1");
+
+  // Clear any state from previous tests
+  RECORDING_MANAGER.clear().await;
 
   // Spawn coordinator
   let coordinator_router = coordinator_routes::router(coordinator_state());

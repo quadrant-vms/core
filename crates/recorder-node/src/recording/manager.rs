@@ -37,6 +37,18 @@ impl RecordingManager {
     }
   }
 
+  /// Clear all recordings and state (for testing only)
+  pub async fn clear(&self) {
+    self.recordings.write().await.clear();
+    self.pipelines.write().await.clear();
+    let renewals = self.renewals.write().await.drain().collect::<Vec<_>>();
+    for (_, token) in renewals {
+      token.cancel();
+    }
+    *self.coordinator.write().await = None;
+    *self.node_id.write().await = None;
+  }
+
   pub async fn set_coordinator(&self, coordinator: Arc<dyn CoordinatorClient>, node_id: String) {
     *self.coordinator.write().await = Some(coordinator);
     *self.node_id.write().await = Some(node_id);
