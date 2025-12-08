@@ -127,8 +127,17 @@ This project is **under active development**.
   - Detailed GPU setup documentation in `docs/GPU_ACCELERATION.md`
   - Inference time tracking separate from pre/post-processing
 
+- **Stateless Architecture** (`ENABLE_STATE_STORE=true`):
+  - StateStore HTTP API in coordinator for persisting stream/recording/AI task state
+  - PostgreSQL-backed persistent state storage via StateStore trait
+  - HTTP client (StateStoreClient) in common crate for remote state access
+  - Admin-gateway integration: automatic state persistence on state changes
+  - Bootstrap logic: restore state from StateStore on admin-gateway restart
+  - State persistence across lease renewals and health check failures
+  - Backward compatible: works with or without StateStore enabled
+  - Environment variable configuration (`ENABLE_STATE_STORE`)
+
 ### 🔜 In Progress
-- Stateless shift: persist stream/recording/AI task state in external store, bootstrap on restart, and replace in-memory registries with coordinator-backed/state-rebuilt workflows
 - Worker rebalance & orphan cleanup: reconcile leases vs. live processes/artifacts on startup to avoid drift after crashes
 - AuthN/AuthZ & multi-tenant controls: API tokens/OIDC, RBAC, tenant isolation, audit logs
 - Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates

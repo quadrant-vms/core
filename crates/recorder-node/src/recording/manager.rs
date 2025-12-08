@@ -123,10 +123,12 @@ impl RecordingManager {
       .unwrap()
       .as_secs();
 
+    let node_id_value = self.node_id.read().await.clone();
+
     let info = RecordingInfo {
       config: req.config.clone(),
       state: RecordingState::Starting,
-      node_id: Some(self.node_id.clone()),
+      node_id: node_id_value,
       lease_id: lease_id.clone(),
       storage_path: None,
       last_error: None,

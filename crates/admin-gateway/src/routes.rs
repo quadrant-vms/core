@@ -99,17 +99,26 @@ async fn start_stream(
 
   {
     let mut streams = state.streams().write().await;
-    streams.insert(config.id.clone(), stream_info);
+    streams.insert(config.id.clone(), stream_info.clone());
   }
+
+  // Persist initial state
+  state.persist_stream(&stream_info).await;
 
   let worker = state.worker();
   if let Err(err) = worker.start_stream(&config).await {
-    {
+    let info = {
       let mut streams = state.streams().write().await;
       if let Some(entry) = streams.get_mut(&config.id) {
         entry.state = StreamState::Error;
         entry.last_error = Some(err.to_string());
+        Some(entry.clone())
+      } else {
+        None
       }
+    };
+    if let Some(info) = info {
+      state.persist_stream(&info).await;
     }
     let coordinator = state.coordinator();
     let _ = coordinator
@@ -120,12 +129,18 @@ async fn start_stream(
     return Err(ApiError::internal(format!("worker start failed: {err}")));
   }
 
-  {
+  let info = {
     let mut streams = state.streams().write().await;
     if let Some(entry) = streams.get_mut(&config.id) {
       entry.state = StreamState::Running;
       entry.last_error = None;
+      Some(entry.clone())
+    } else {
+      None
     }
+  };
+  if let Some(info) = info {
+    state.persist_stream(&info).await;
   }
 
   state
@@ -164,19 +179,35 @@ async fn stop_stream(
   state.cancel_lease_renewal(&stream_id).await;
 
   {
-    let mut streams = state.streams().write().await;
-    if let Some(entry) = streams.get_mut(&stream_id) {
-      entry.state = StreamState::Stopping;
-      entry.last_error = None;
+    let info = {
+      let mut streams = state.streams().write().await;
+      if let Some(entry) = streams.get_mut(&stream_id) {
+        entry.state = StreamState::Stopping;
+        entry.last_error = None;
+        Some(entry.clone())
+      } else {
+        None
+      }
+    };
+    if let Some(info) = info {
+      state.persist_stream(&info).await;
     }
   }
 
   let worker = state.worker();
   if let Err(err) = worker.stop_stream(&stream_id).await {
-    let mut streams = state.streams().write().await;
-    if let Some(entry) = streams.get_mut(&stream_id) {
-      entry.state = StreamState::Error;
-      entry.last_error = Some(err.to_string());
+    let info = {
+      let mut streams = state.streams().write().await;
+      if let Some(entry) = streams.get_mut(&stream_id) {
+        entry.state = StreamState::Error;
+        entry.last_error = Some(err.to_string());
+        Some(entry.clone())
+      } else {
+        None
+      }
+    };
+    if let Some(info) = info {
+      state.persist_stream(&info).await;
     }
     return Err(ApiError::internal(format!("worker stop failed: {err}")));
   }
@@ -192,6 +223,9 @@ async fn stop_stream(
       let mut streams = state.streams().write().await;
       streams.remove(&stream_id);
     }
+
+    // Delete from state store
+    state.delete_stream_state(&stream_id).await;
 
     let message = if release_resp.released {
       None
