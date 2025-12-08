@@ -259,12 +259,19 @@ async fn test_full_pipeline_stream_and_ai_task() -> Result<()> {
     let ai_task_config = AiTaskConfig {
         id: "ai-task-e2e-1".to_string(),
         plugin_type: "mock_object_detector".to_string(),
-        input_stream_id: Some("stream-e2e-1".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-e2e-1".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 2,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/ai-output.json".to_string(),
+        frame_config: common::ai_tasks::AiFrameConfig {
+            frame_interval: 2,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/ai-output.json"
+            }),
         },
     };
 

@@ -5,6 +5,36 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Configuration for frame capture and processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiFrameConfig {
+    /// Process every Nth frame (default: 1)
+    #[serde(default = "default_frame_interval")]
+    pub frame_interval: u32,
+
+    /// Maximum FPS to process (default: no limit)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_fps: Option<u32>,
+
+    /// Skip first N seconds of stream (default: 0)
+    #[serde(default)]
+    pub skip_seconds: u32,
+}
+
+impl Default for AiFrameConfig {
+    fn default() -> Self {
+        Self {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        }
+    }
+}
+
+fn default_frame_interval() -> u32 {
+    1
+}
+
 /// Configuration for an AI task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiTaskConfig {
@@ -14,45 +44,36 @@ pub struct AiTaskConfig {
     /// Plugin type identifier (e.g., "object_detection", "pose_estimation")
     pub plugin_type: String,
 
-    /// Input stream ID to process (if using existing stream)
+    /// Source stream ID to process (if using existing stream)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_stream_id: Option<String>,
+    pub source_stream_id: Option<String>,
 
-    /// Direct input URI (RTSP/HLS/file) if not using stream_id
+    /// Source recording ID to process (if using existing recording)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_uri: Option<String>,
+    pub source_recording_id: Option<String>,
 
     /// Plugin-specific configuration (JSON object)
     #[serde(default)]
     pub model_config: serde_json::Value,
 
-    /// Frame sampling rate (process every Nth frame, default: 1)
-    #[serde(default = "default_frame_rate")]
-    pub frame_rate: u32,
+    /// Frame capture and processing configuration
+    #[serde(default)]
+    pub frame_config: AiFrameConfig,
 
     /// Output format configuration
     pub output: AiOutputConfig,
 }
 
-fn default_frame_rate() -> u32 {
-    1
-}
-
 /// Output configuration for AI task results
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum AiOutputConfig {
-    /// POST results to webhook URL
-    WebhookJson { url: String, headers: Option<serde_json::Value> },
+pub struct AiOutputConfig {
+    /// Output type (webhook, mqtt, rabbitmq, file)
+    #[serde(rename = "type")]
+    pub output_type: String,
 
-    /// Publish to MQTT topic
-    MqttTopic { broker: String, topic: String },
-
-    /// Publish to RabbitMQ exchange
-    RabbitMq { url: String, exchange: String, routing_key: String },
-
-    /// Store in local file (for testing/debugging)
-    LocalFile { path: String },
+    /// Output-specific configuration (JSON object)
+    #[serde(default)]
+    pub config: serde_json::Value,
 }
 
 /// Request to start an AI task
@@ -134,6 +155,10 @@ pub struct AiTaskInfo {
     /// Current state
     pub state: AiTaskState,
 
+    /// Node ID running this task
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<String>,
+
     /// Lease ID if acquired
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lease_id: Option<String>,
@@ -145,6 +170,10 @@ pub struct AiTaskInfo {
     /// Timestamp when task started (Unix timestamp in milliseconds)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<u64>,
+
+    /// Timestamp when task stopped (Unix timestamp in milliseconds)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stopped_at: Option<u64>,
 
     /// Timestamp of last processed frame (Unix timestamp in milliseconds)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -277,16 +306,23 @@ mod tests {
         let config = AiTaskConfig {
             id: "task-1".to_string(),
             plugin_type: "object_detection".to_string(),
-            input_stream_id: Some("stream-123".to_string()),
-            input_uri: None,
+            source_stream_id: Some("stream-123".to_string()),
+            source_recording_id: None,
             model_config: serde_json::json!({
                 "model": "yolov8",
                 "confidence_threshold": 0.5
             }),
-            frame_rate: 5,
-            output: AiOutputConfig::WebhookJson {
-                url: "http://localhost:8080/detections".to_string(),
-                headers: None,
+            frame_config: AiFrameConfig {
+                frame_interval: 5,
+                max_fps: Some(10),
+                skip_seconds: 0,
+            },
+            output: AiOutputConfig {
+                output_type: "webhook".to_string(),
+                config: serde_json::json!({
+                    "url": "http://localhost:8080/detections",
+                    "headers": {}
+                }),
             },
         };
 

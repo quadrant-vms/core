@@ -72,8 +72,11 @@ impl PgStateStore {
 
     fn parse_ai_task_state(s: &str) -> AiTaskState {
         match s {
+            "pending" => AiTaskState::Pending,
             "initializing" => AiTaskState::Initializing,
             "processing" => AiTaskState::Processing,
+            "paused" => AiTaskState::Paused,
+            "stopping" => AiTaskState::Stopping,
             "stopped" => AiTaskState::Stopped,
             "error" => AiTaskState::Error,
             _ => {
@@ -85,8 +88,11 @@ impl PgStateStore {
 
     fn ai_task_state_to_str(state: &AiTaskState) -> &'static str {
         match state {
+            AiTaskState::Pending => "pending",
             AiTaskState::Initializing => "initializing",
             AiTaskState::Processing => "processing",
+            AiTaskState::Paused => "paused",
+            AiTaskState::Stopping => "stopping",
             AiTaskState::Stopped => "stopped",
             AiTaskState::Error => "error",
         }
@@ -547,11 +553,11 @@ impl StateStore for PgStateStore {
             output_config_json,
             frame_config_json,
             state_str,
-            "", // We'll need to add node_id to AiTaskInfo
+            info.node_id.as_deref(),
             info.lease_id.as_deref(),
             info.last_error.as_deref(),
             info.started_at.map(|v| v as i64),
-            None::<i64>, // stopped_at not in AiTaskInfo yet
+            info.stopped_at.map(|v| v as i64),
             info.last_processed_frame.map(|v| v as i64),
             info.frames_processed as i64,
             info.detections_made as i64,
@@ -567,8 +573,8 @@ impl StateStore for PgStateStore {
         let row = sqlx::query!(
             r#"
             SELECT task_id, plugin_type, source_stream_id, source_recording_id,
-                   output_format, output_config, frame_config, state, lease_id, last_error,
-                   started_at, last_processed_frame, frames_processed, detections_made
+                   output_format, output_config, frame_config, state, node_id, lease_id, last_error,
+                   started_at, stopped_at, last_processed_frame, frames_processed, detections_made
             FROM ai_tasks WHERE task_id = $1
             "#,
             task_id
@@ -594,13 +600,16 @@ impl StateStore for PgStateStore {
                     plugin_type: r.plugin_type,
                     source_stream_id: r.source_stream_id,
                     source_recording_id: r.source_recording_id,
+                    model_config: serde_json::Value::Null,
                     output,
                     frame_config,
                 },
                 state: Self::parse_ai_task_state(&r.state),
+                node_id: r.node_id,
                 lease_id: r.lease_id,
                 last_error: r.last_error,
                 started_at: r.started_at.map(|v| v as u64),
+                stopped_at: r.stopped_at.map(|v| v as u64),
                 last_processed_frame: r.last_processed_frame.map(|v| v as u64),
                 frames_processed: r.frames_processed as u64,
                 detections_made: r.detections_made as u64,
@@ -613,8 +622,8 @@ impl StateStore for PgStateStore {
             sqlx::query!(
                 r#"
                 SELECT task_id, plugin_type, source_stream_id, source_recording_id,
-                       output_format, output_config, frame_config, state, lease_id, last_error,
-                       started_at, last_processed_frame, frames_processed, detections_made
+                       output_format, output_config, frame_config, state, node_id, lease_id, last_error,
+                       started_at, stopped_at, last_processed_frame, frames_processed, detections_made
                 FROM ai_tasks WHERE node_id = $1
                 ORDER BY created_at DESC
                 "#,
@@ -626,8 +635,8 @@ impl StateStore for PgStateStore {
             sqlx::query!(
                 r#"
                 SELECT task_id, plugin_type, source_stream_id, source_recording_id,
-                       output_format, output_config, frame_config, state, lease_id, last_error,
-                       started_at, last_processed_frame, frames_processed, detections_made
+                       output_format, output_config, frame_config, state, node_id, lease_id, last_error,
+                       started_at, stopped_at, last_processed_frame, frames_processed, detections_made
                 FROM ai_tasks
                 ORDER BY created_at DESC
                 "#
@@ -654,13 +663,16 @@ impl StateStore for PgStateStore {
                         plugin_type: r.plugin_type,
                         source_stream_id: r.source_stream_id,
                         source_recording_id: r.source_recording_id,
+                        model_config: serde_json::Value::Null,
                         output,
                         frame_config,
                     },
                     state: Self::parse_ai_task_state(&r.state),
+                    node_id: r.node_id,
                     lease_id: r.lease_id,
                     last_error: r.last_error,
                     started_at: r.started_at.map(|v| v as u64),
+                    stopped_at: r.stopped_at.map(|v| v as u64),
                     last_processed_frame: r.last_processed_frame.map(|v| v as u64),
                     frames_processed: r.frames_processed as u64,
                     detections_made: r.detections_made as u64,

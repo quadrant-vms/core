@@ -117,6 +117,7 @@ impl AiServiceState {
         let task_info = AiTaskInfo {
             config: config.clone(),
             state: AiTaskState::Initializing,
+            node_id: Some(self.inner.node_id.clone()),
             lease_id: lease_id.clone(),
             last_error: None,
             started_at: Some(
@@ -125,6 +126,7 @@ impl AiServiceState {
                     .unwrap()
                     .as_millis() as u64,
             ),
+            stopped_at: None,
             last_processed_frame: None,
             frames_processed: 0,
             detections_made: 0,
@@ -178,9 +180,19 @@ impl AiServiceState {
                 }
             }
 
-            // Update task state
-            self.update_task_state(task_id, AiTaskState::Stopped)
-                .await?;
+            // Update task state and set stopped_at timestamp
+            {
+                let mut tasks = self.inner.tasks.write().await;
+                if let Some(task) = tasks.get_mut(task_id) {
+                    task.state = AiTaskState::Stopped;
+                    task.stopped_at = Some(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as u64,
+                    );
+                }
+            }
 
             info!("Stopped AI task: {}", task_id);
             Ok(())

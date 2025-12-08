@@ -88,8 +88,13 @@ async fn start_stream(
   let stream_info = StreamInfo {
     config: config.clone(),
     state: StreamState::Starting,
+    node_id: Some(record.holder_id.clone()),
     lease_id: Some(record.lease_id.clone()),
+    playlist_path: None,
+    output_dir: None,
     last_error: None,
+    started_at: None,
+    stopped_at: None,
   };
 
   {
@@ -271,11 +276,13 @@ async fn start_recording(
   let recording_info = RecordingInfo {
     config: payload.config.clone(),
     state: RecordingState::Starting,
+    node_id: Some(record.holder_id.clone()),
     lease_id: Some(record.lease_id.clone()),
     storage_path: None,
     last_error: None,
     started_at: None,
     stopped_at: None,
+    metadata: None,
   };
 
   {

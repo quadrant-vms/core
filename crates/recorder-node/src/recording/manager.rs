@@ -126,11 +126,13 @@ impl RecordingManager {
     let info = RecordingInfo {
       config: req.config.clone(),
       state: RecordingState::Starting,
+      node_id: Some(self.node_id.clone()),
       lease_id: lease_id.clone(),
       storage_path: None,
       last_error: None,
       started_at: Some(now),
       stopped_at: None,
+      metadata: None,
     };
 
     let mut recordings = self.recordings.write().await;
