@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
+use common::state_store::StateStore;
 use coordinator::{
   cluster::ClusterManager,
   config::{CoordinatorConfig, LeaseStoreType},
+  pg_state_store::PgStateStore,
   routes,
   state::CoordinatorState,
   store::{LeaseStore, MemoryLeaseStore, PostgresLeaseStore},
@@ -17,24 +19,27 @@ async fn main() -> Result<()> {
   let config = CoordinatorConfig::from_env()?;
   let bind_addr = config.bind_addr;
 
-  let store: Arc<dyn LeaseStore> = match config.store_type {
+  let (store, state_store): (Arc<dyn LeaseStore>, Option<Arc<dyn StateStore>>) = match config.store_type {
     LeaseStoreType::Memory => {
-      info!("using in-memory lease store");
-      Arc::new(MemoryLeaseStore::new(
+      info!("using in-memory lease store (no persistent state store)");
+      (Arc::new(MemoryLeaseStore::new(
         config.default_ttl_secs,
         config.max_ttl_secs,
-      ))
+      )), None)
     }
     LeaseStoreType::Postgres => {
       let database_url = config
         .database_url
         .as_ref()
         .expect("DATABASE_URL required for Postgres");
-      info!(url = %database_url, "using PostgreSQL lease store");
-      Arc::new(
+      info!(url = %database_url, "using PostgreSQL lease store and state store");
+      let lease_store = Arc::new(
         PostgresLeaseStore::new(database_url, config.default_ttl_secs, config.max_ttl_secs)
           .await?,
-      )
+      );
+      // Create StateStore using the same pool as LeaseStore
+      let pg_state_store = Arc::new(PgStateStore::new(lease_store.pool().clone())) as Arc<dyn StateStore>;
+      (lease_store, Some(pg_state_store))
     }
   };
 
@@ -70,10 +75,10 @@ async fn main() -> Result<()> {
       heartbeat_sender.start_heartbeat_sender().await;
     });
 
-    CoordinatorState::with_cluster(config.clone(), store, cluster)
+    CoordinatorState::with_cluster(config.clone(), store, state_store, cluster)
   } else {
     info!("clustering disabled, running as standalone coordinator");
-    CoordinatorState::new(config.clone(), store)
+    CoordinatorState::new(config.clone(), store, state_store)
   };
 
   let app = routes::router(state.clone());

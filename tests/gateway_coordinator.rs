@@ -31,7 +31,7 @@ fn coordinator_state() -> CoordinatorState {
         heartbeat_interval_ms: 1000,
     };
     let store: Arc<dyn LeaseStore> = Arc::new(MemoryLeaseStore::new(cfg.default_ttl_secs, cfg.max_ttl_secs));
-    CoordinatorState::new(cfg, store)
+    CoordinatorState::new(cfg, store, None)
 }
 
 async fn spawn_router(router: Router) -> Result<(SocketAddr, JoinHandle<()>)> {

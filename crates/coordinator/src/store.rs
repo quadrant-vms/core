@@ -362,6 +362,11 @@ impl PostgresLeaseStore {
     })
   }
 
+  /// Expose the database pool for use by StateStore
+  pub fn pool(&self) -> &PgPool {
+    &self.pool
+  }
+
   fn normalize_ttl(&self, ttl: u64) -> u64 {
     let ttl = if ttl == 0 { self.default_ttl } else { ttl };
     ttl.min(self.max_ttl).max(5)

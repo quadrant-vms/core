@@ -175,30 +175,18 @@ impl StateStore for PgStateStore {
     }
 
     async fn list_streams(&self, node_id: Option<&str>) -> Result<Vec<StreamInfo>> {
-        let rows = if let Some(nid) = node_id {
-            sqlx::query!(
-                r#"
-                SELECT stream_id, uri, codec, container, state, node_id, lease_id,
-                       playlist_path, output_dir, last_error, started_at, stopped_at
-                FROM streams WHERE node_id = $1
-                ORDER BY created_at DESC
-                "#,
-                nid
-            )
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query!(
-                r#"
-                SELECT stream_id, uri, codec, container, state, node_id, lease_id,
-                       playlist_path, output_dir, last_error, started_at, stopped_at
-                FROM streams
-                ORDER BY created_at DESC
-                "#
-            )
-            .fetch_all(&self.pool)
-            .await?
-        };
+        let rows = sqlx::query!(
+            r#"
+            SELECT stream_id, uri, codec, container, state, node_id, lease_id,
+                   playlist_path, output_dir, last_error, started_at, stopped_at
+            FROM streams
+            WHERE ($1::text IS NULL OR node_id = $1)
+            ORDER BY created_at DESC
+            "#,
+            node_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -262,12 +250,12 @@ impl StateStore for PgStateStore {
 
         let (duration, file_size, resolution, codec_name, bitrate, fps) = if let Some(meta) = &info.metadata {
             (
-                meta.duration_secs.map(|v| v as f64),
+                meta.duration_secs.map(|v| v as f32),
                 meta.file_size_bytes.map(|v| v as i64),
                 meta.resolution.map(|(w, h)| format!("{}x{}", w, h)),
                 meta.video_codec.clone(),
                 meta.bitrate_kbps.map(|v| v as i32),
-                meta.fps.map(|v| v as f64),
+                meta.fps,
             )
         } else {
             (None, None, None, None, None, None)
@@ -396,32 +384,19 @@ impl StateStore for PgStateStore {
     }
 
     async fn list_recordings(&self, node_id: Option<&str>) -> Result<Vec<RecordingInfo>> {
-        let rows = if let Some(nid) = node_id {
-            sqlx::query!(
-                r#"
-                SELECT recording_id, source_stream_id, source_uri, retention_hours, format, state,
-                       node_id, lease_id, storage_path, last_error, started_at, stopped_at,
-                       duration_secs, file_size_bytes, resolution, codec_name, bitrate_kbps, fps
-                FROM recordings WHERE node_id = $1
-                ORDER BY created_at DESC
-                "#,
-                nid
-            )
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query!(
-                r#"
-                SELECT recording_id, source_stream_id, source_uri, retention_hours, format, state,
-                       node_id, lease_id, storage_path, last_error, started_at, stopped_at,
-                       duration_secs, file_size_bytes, resolution, codec_name, bitrate_kbps, fps
-                FROM recordings
-                ORDER BY created_at DESC
-                "#
-            )
-            .fetch_all(&self.pool)
-            .await?
-        };
+        let rows = sqlx::query!(
+            r#"
+            SELECT recording_id, source_stream_id, source_uri, retention_hours, format, state,
+                   node_id, lease_id, storage_path, last_error, started_at, stopped_at,
+                   duration_secs, file_size_bytes, resolution, codec_name, bitrate_kbps, fps
+            FROM recordings
+            WHERE ($1::text IS NULL OR node_id = $1)
+            ORDER BY created_at DESC
+            "#,
+            node_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -618,32 +593,19 @@ impl StateStore for PgStateStore {
     }
 
     async fn list_ai_tasks(&self, node_id: Option<&str>) -> Result<Vec<AiTaskInfo>> {
-        let rows = if let Some(nid) = node_id {
-            sqlx::query!(
-                r#"
-                SELECT task_id, plugin_type, source_stream_id, source_recording_id,
-                       output_format, output_config, frame_config, state, node_id, lease_id, last_error,
-                       started_at, stopped_at, last_processed_frame, frames_processed, detections_made
-                FROM ai_tasks WHERE node_id = $1
-                ORDER BY created_at DESC
-                "#,
-                nid
-            )
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query!(
-                r#"
-                SELECT task_id, plugin_type, source_stream_id, source_recording_id,
-                       output_format, output_config, frame_config, state, node_id, lease_id, last_error,
-                       started_at, stopped_at, last_processed_frame, frames_processed, detections_made
-                FROM ai_tasks
-                ORDER BY created_at DESC
-                "#
-            )
-            .fetch_all(&self.pool)
-            .await?
-        };
+        let rows = sqlx::query!(
+            r#"
+            SELECT task_id, plugin_type, source_stream_id, source_recording_id,
+                   output_format, output_config, frame_config, state, node_id, lease_id, last_error,
+                   started_at, stopped_at, last_processed_frame, frames_processed, detections_made
+            FROM ai_tasks
+            WHERE ($1::text IS NULL OR node_id = $1)
+            ORDER BY created_at DESC
+            "#,
+            node_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
 
         Ok(rows
             .into_iter()

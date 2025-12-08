@@ -1,4 +1,4 @@
-use crate::{cluster::ClusterStatus, error::ApiError, state::CoordinatorState};
+use crate::{cluster::ClusterStatus, error::ApiError, state::CoordinatorState, state_routes};
 use axum::{
   Json, Router,
   extract::{Query, State},
@@ -23,6 +23,7 @@ pub fn router(state: CoordinatorState) -> Router {
     .route("/cluster/status", get(cluster_status))
     .route("/cluster/vote", post(cluster_vote))
     .route("/cluster/heartbeat", post(cluster_heartbeat))
+    .merge(state_routes::state_router())
     .with_state(state)
 }
 
@@ -253,7 +254,7 @@ mod tests {
       heartbeat_interval_ms: 1000,
     };
     let store = Arc::new(MemoryLeaseStore::new(10, 60));
-    CoordinatorState::new(config, store)
+    CoordinatorState::new(config, store, None)
   }
 
   #[tokio::test]

@@ -45,7 +45,7 @@ async fn start_coordinator(
     heartbeat_sender.start_heartbeat_sender().await;
   });
 
-  let state = CoordinatorState::with_cluster(config, store, cluster);
+  let state = CoordinatorState::with_cluster(config, store, None, cluster);
   let app = routes::router(state);
   let listener = TcpListener::bind(bind_addr).await.unwrap();
   let url = format!("http://{}", bind_addr);
