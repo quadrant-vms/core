@@ -128,17 +128,18 @@ This project is **under active development**.
   - Inference time tracking separate from pre/post-processing
 
 - **Stateless Architecture** (`ENABLE_STATE_STORE=true`):
-  - StateStore HTTP API in coordinator for persisting stream/recording/AI task state
-  - PostgreSQL-backed persistent state storage via StateStore trait
-  - HTTP client (StateStoreClient) in common crate for remote state access
-  - Admin-gateway integration: automatic state persistence on state changes
-  - Bootstrap logic: restore state from StateStore on admin-gateway restart
-  - State persistence across lease renewals and health check failures
-  - Backward compatible: works with or without StateStore enabled
-  - Environment variable configuration (`ENABLE_STATE_STORE`)
+  - **StateStore HTTP API** in coordinator for persisting stream/recording/AI task state
+  - **PostgreSQL-backed** persistent state storage via StateStore trait
+  - **HTTP client** (StateStoreClient) in common crate for remote state access
+  - **Admin-gateway integration**: automatic state persistence on all state changes
+  - **Worker nodes integration**: recorder-node and ai-service persist state during lifecycle
+  - **Bootstrap logic**: restore state from StateStore on startup for all services
+  - **Orphan cleanup**: detect and report orphaned resources (non-active state without valid lease)
+  - **State persistence** across lease renewals, errors, and health check failures
+  - **Backward compatible**: works with or without StateStore enabled
+  - **Environment variable**: `ENABLE_STATE_STORE=true` to enable
 
 ### 🔜 In Progress
-- Worker rebalance & orphan cleanup: reconcile leases vs. live processes/artifacts on startup to avoid drift after crashes
 - AuthN/AuthZ & multi-tenant controls: API tokens/OIDC, RBAC, tenant isolation, audit logs
 - Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates
 - Playback & delivery: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching

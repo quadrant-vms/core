@@ -47,6 +47,11 @@ async fn main() -> Result<()> {
       warn!(error = %e, "failed to bootstrap state from StateStore");
     }
 
+    // Cleanup orphans
+    if let Err(e) = state.cleanup_orphans().await {
+      warn!(error = %e, "failed to cleanup orphans");
+    }
+
     state
   } else {
     AppState::new(config.clone(), coordinator, worker, recorder)

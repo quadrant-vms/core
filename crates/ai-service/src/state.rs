@@ -3,6 +3,7 @@ use crate::plugin::registry::PluginRegistry;
 use anyhow::{anyhow, Context, Result};
 use common::ai_tasks::{AiResult, AiTaskConfig, AiTaskInfo, AiTaskState, VideoFrame};
 use common::leases::{LeaseAcquireRequest, LeaseKind, LeaseReleaseRequest, LeaseRenewRequest};
+use common::state_store::StateStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +25,7 @@ struct AiServiceStateInner {
     plugins: PluginRegistry,
     tasks: RwLock<HashMap<String, AiTaskInfo>>,
     renewals: RwLock<HashMap<String, CancellationToken>>,
+    state_store: Option<Arc<dyn StateStore>>,
 }
 
 impl AiServiceState {
@@ -35,6 +37,7 @@ impl AiServiceState {
                 plugins,
                 tasks: RwLock::new(HashMap::new()),
                 renewals: RwLock::new(HashMap::new()),
+                state_store: None,
             }),
         }
     }
@@ -51,8 +54,49 @@ impl AiServiceState {
                 plugins,
                 tasks: RwLock::new(HashMap::new()),
                 renewals: RwLock::new(HashMap::new()),
+                state_store: None,
             }),
         }
+    }
+
+    pub fn with_coordinator_and_state_store(
+        node_id: String,
+        coordinator: Arc<dyn CoordinatorClient>,
+        plugins: PluginRegistry,
+        state_store: Arc<dyn StateStore>,
+    ) -> Self {
+        Self {
+            inner: Arc::new(AiServiceStateInner {
+                node_id,
+                coordinator: Some(coordinator),
+                plugins,
+                tasks: RwLock::new(HashMap::new()),
+                renewals: RwLock::new(HashMap::new()),
+                state_store: Some(state_store),
+            }),
+        }
+    }
+
+    /// Persist AI task state to StateStore if configured
+    async fn persist_task(&self, info: &AiTaskInfo) {
+        if let Some(store) = &self.inner.state_store {
+            if let Err(e) = store.save_ai_task(info).await {
+                warn!(task_id = %info.config.id, error = %e, "failed to persist AI task state");
+            }
+        }
+    }
+
+    /// Bootstrap: restore state from StateStore on startup
+    pub async fn bootstrap(&self) -> Result<()> {
+        if let Some(store) = &self.inner.state_store {
+            let tasks = store.list_ai_tasks(Some(&self.inner.node_id)).await?;
+            let mut tasks_map = self.inner.tasks.write().await;
+            for task in tasks {
+                tasks_map.insert(task.config.id.clone(), task);
+            }
+            info!(node_id = %self.inner.node_id, count = tasks_map.len(), "restored AI tasks from StateStore");
+        }
+        Ok(())
     }
 
     pub fn node_id(&self) -> &str {
@@ -138,6 +182,9 @@ impl AiServiceState {
             tasks.insert(task_id.clone(), task_info.clone());
         }
 
+        // Persist initial task
+        self.persist_task(&task_info).await;
+
         // Start lease renewal if we have a lease
         if let (Some(lid), Some(coordinator)) = (lease_id, &self.inner.coordinator) {
             self.start_renewal_loop(task_id.clone(), lid, coordinator.clone(), lease_ttl_secs)
@@ -202,13 +249,20 @@ impl AiServiceState {
     }
 
     async fn update_task_state(&self, task_id: &str, new_state: AiTaskState) -> Result<()> {
-        let mut tasks = self.inner.tasks.write().await;
-        if let Some(task) = tasks.get_mut(task_id) {
-            task.state = new_state;
-            Ok(())
-        } else {
-            Err(anyhow!("Task '{}' not found", task_id))
+        let info_to_persist = {
+            let mut tasks = self.inner.tasks.write().await;
+            if let Some(task) = tasks.get_mut(task_id) {
+                task.state = new_state;
+                Some(task.clone())
+            } else {
+                return Err(anyhow!("Task '{}' not found", task_id));
+            }
+        };
+
+        if let Some(info) = info_to_persist {
+            self.persist_task(&info).await;
         }
+        Ok(())
     }
 
     pub async fn update_task_stats(&self, task_id: &str, frames_delta: u64, detections_delta: u64) {

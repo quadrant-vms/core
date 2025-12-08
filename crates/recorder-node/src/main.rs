@@ -1,8 +1,10 @@
 use axum::{routing::get, routing::post, Router};
+use common::state_store::StateStore;
+use common::state_store_client::StateStoreClient;
 use std::sync::Arc;
 use telemetry::init as telemetry_init;
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{info, warn};
 
 mod api;
 mod coordinator;
@@ -24,6 +26,23 @@ async fn main() -> anyhow::Result<()> {
     let base = reqwest::Url::parse(&coordinator_url)?;
     let client = Arc::new(HttpCoordinatorClient::new(base)?);
     RECORDING_MANAGER.set_coordinator(client, node_id).await;
+
+    // Initialize StateStore client if enabled
+    let state_store_enabled = std::env::var("ENABLE_STATE_STORE")
+      .unwrap_or_else(|_| "false".to_string())
+      .to_lowercase() == "true";
+
+    if state_store_enabled {
+      let state_store_client: Arc<dyn StateStore> = Arc::new(StateStoreClient::new(coordinator_url));
+      RECORDING_MANAGER.set_state_store(state_store_client).await;
+
+      // Bootstrap: restore state from StateStore
+      if let Err(e) = RECORDING_MANAGER.bootstrap().await {
+        warn!(error = %e, "failed to bootstrap state from StateStore");
+      } else {
+        info!("state store enabled and bootstrapped");
+      }
+    }
   } else {
     info!("COORDINATOR_URL not set, running without lease management");
   }

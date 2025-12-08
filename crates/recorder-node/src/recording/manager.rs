@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use common::{
   leases::{LeaseAcquireRequest, LeaseKind, LeaseReleaseRequest, LeaseRenewRequest},
   recordings::*,
+  state_store::StateStore,
 };
 use lazy_static::lazy_static;
 use std::collections::HashMap;
@@ -26,6 +27,7 @@ pub struct RecordingManager {
   frame_capturers: Arc<RwLock<HashMap<String, CancellationToken>>>,
   coordinator: Arc<RwLock<Option<Arc<dyn CoordinatorClient>>>>,
   node_id: Arc<RwLock<Option<String>>>,
+  state_store: Arc<RwLock<Option<Arc<dyn StateStore>>>>,
 }
 
 impl RecordingManager {
@@ -37,6 +39,7 @@ impl RecordingManager {
       frame_capturers: Arc::new(RwLock::new(HashMap::new())),
       coordinator: Arc::new(RwLock::new(None)),
       node_id: Arc::new(RwLock::new(None)),
+      state_store: Arc::new(RwLock::new(None)),
     }
   }
 
@@ -59,6 +62,35 @@ impl RecordingManager {
   pub async fn set_coordinator(&self, coordinator: Arc<dyn CoordinatorClient>, node_id: String) {
     *self.coordinator.write().await = Some(coordinator);
     *self.node_id.write().await = Some(node_id);
+  }
+
+  pub async fn set_state_store(&self, state_store: Arc<dyn StateStore>) {
+    *self.state_store.write().await = Some(state_store);
+  }
+
+  /// Persist recording state to StateStore if configured
+  async fn persist_recording(&self, info: &RecordingInfo) {
+    if let Some(store) = self.state_store.read().await.as_ref() {
+      if let Err(e) = store.save_recording(info).await {
+        warn!(recording_id = %info.config.id, error = %e, "failed to persist recording state");
+      }
+    }
+  }
+
+  /// Bootstrap: restore state from StateStore on startup
+  pub async fn bootstrap(&self) -> Result<()> {
+    if let Some(store) = self.state_store.read().await.as_ref() {
+      let node_id = self.node_id.read().await.clone();
+      if let Some(node_id) = node_id {
+        let recordings = store.list_recordings(Some(&node_id)).await?;
+        let mut recordings_map = self.recordings.write().await;
+        for recording in recordings {
+          recordings_map.insert(recording.config.id.clone(), recording);
+        }
+        info!(node_id = %node_id, count = recordings_map.len(), "restored recordings from StateStore");
+      }
+    }
+    Ok(())
   }
 
   pub async fn start(&self, req: RecordingStartRequest) -> Result<RecordingStartResponse> {
@@ -138,8 +170,11 @@ impl RecordingManager {
     };
 
     let mut recordings = self.recordings.write().await;
-    recordings.insert(id.clone(), info);
+    recordings.insert(id.clone(), info.clone());
     drop(recordings);
+
+    // Persist initial state
+    self.persist_recording(&info).await;
 
     let pipeline = RecordingPipeline::new(req.config.clone());
     let mut pipelines = self.pipelines.write().await;
@@ -183,13 +218,25 @@ impl RecordingManager {
 
     let recordings_clone = Arc::clone(&self.recordings);
     let pipelines_clone = Arc::clone(&self.pipelines);
+    let state_store_clone = Arc::clone(&self.state_store);
 
     tokio::spawn(async move {
-      let mut recordings = recordings_clone.write().await;
-      if let Some(info) = recordings.get_mut(&id) {
-        info.state = RecordingState::Recording;
+      let info_to_persist = {
+        let mut recordings = recordings_clone.write().await;
+        if let Some(info) = recordings.get_mut(&id) {
+          info.state = RecordingState::Recording;
+          Some(info.clone())
+        } else {
+          None
+        }
+      };
+
+      // Persist state change
+      if let (Some(info), Some(store)) = (info_to_persist, state_store_clone.read().await.as_ref()) {
+        if let Err(e) = store.save_recording(&info).await {
+          warn!(recording_id = %info.config.id, error = %e, "failed to persist recording state");
+        }
       }
-      drop(recordings);
 
       info!(id = %id, "recording pipeline started");
 
@@ -236,24 +283,30 @@ impl RecordingManager {
   }
 
   pub async fn stop(&self, id: &str) -> Result<bool> {
-    let mut recordings = self.recordings.write().await;
-    let info = recordings
-      .get_mut(id)
-      .ok_or_else(|| anyhow!("recording not found"))?;
+    let info_to_persist = {
+      let mut recordings = self.recordings.write().await;
+      let info = recordings
+        .get_mut(id)
+        .ok_or_else(|| anyhow!("recording not found"))?;
 
-    if !info.state.is_active() {
-      return Ok(false);
-    }
+      if !info.state.is_active() {
+        return Ok(false);
+      }
 
-    info.state = RecordingState::Stopping;
-    let now = SystemTime::now()
-      .duration_since(UNIX_EPOCH)
-      .unwrap()
-      .as_secs();
-    info.stopped_at = Some(now);
+      info.state = RecordingState::Stopping;
+      let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+      info.stopped_at = Some(now);
 
-    let lease_id = info.lease_id.clone();
-    drop(recordings);
+      Some((info.lease_id.clone(), info.clone()))
+    };
+
+    let (lease_id, info) = info_to_persist.unwrap();
+
+    // Persist state change
+    self.persist_recording(&info).await;
 
     // Cancel renewal loop
     self.cancel_lease_renewal(id).await;
@@ -284,9 +337,19 @@ impl RecordingManager {
       }
     }
 
-    let mut recordings = self.recordings.write().await;
-    if let Some(info) = recordings.get_mut(id) {
-      info.state = RecordingState::Stopped;
+    let info_to_persist = {
+      let mut recordings = self.recordings.write().await;
+      if let Some(info) = recordings.get_mut(id) {
+        info.state = RecordingState::Stopped;
+        Some(info.clone())
+      } else {
+        None
+      }
+    };
+
+    // Persist final state
+    if let Some(info) = info_to_persist {
+      self.persist_recording(&info).await;
     }
 
     info!(id = %id, "recording stopped");
@@ -314,6 +377,7 @@ impl RecordingManager {
 
     let recordings = Arc::clone(&self.recordings);
     let coordinator = self.coordinator.clone();
+    let state_store = Arc::clone(&self.state_store);
     let interval_secs = ttl_secs / 2;
     let renew_interval = Duration::from_secs(std::cmp::max(interval_secs, 5));
 
@@ -333,20 +397,42 @@ impl RecordingManager {
             if let Some(coordinator) = coordinator_guard.as_ref() {
               match coordinator.renew(&req).await {
                 Ok(_) => {
-                  let mut recordings = recordings.write().await;
-                  if let Some(entry) = recordings.get_mut(&recording_id) {
-                    if entry.state == RecordingState::Error {
-                      entry.state = RecordingState::Recording;
+                  let info_to_persist = {
+                    let mut recordings = recordings.write().await;
+                    if let Some(entry) = recordings.get_mut(&recording_id) {
+                      if entry.state == RecordingState::Error {
+                        entry.state = RecordingState::Recording;
+                      }
+                      entry.last_error = None;
+                      Some(entry.clone())
+                    } else {
+                      None
                     }
-                    entry.last_error = None;
+                  };
+                  // Persist state change
+                  if let (Some(info), Some(store)) = (info_to_persist, state_store.read().await.as_ref()) {
+                    if let Err(e) = store.save_recording(&info).await {
+                      warn!(recording_id = %info.config.id, error = %e, "failed to persist recording state");
+                    }
                   }
                 }
                 Err(err) => {
                   warn!(id = %recording_id, error = %err, "lease renewal failed");
-                  let mut recordings = recordings.write().await;
-                  if let Some(entry) = recordings.get_mut(&recording_id) {
-                    entry.state = RecordingState::Error;
-                    entry.last_error = Some(err.to_string());
+                  let info_to_persist = {
+                    let mut recordings = recordings.write().await;
+                    if let Some(entry) = recordings.get_mut(&recording_id) {
+                      entry.state = RecordingState::Error;
+                      entry.last_error = Some(err.to_string());
+                      Some(entry.clone())
+                    } else {
+                      None
+                    }
+                  };
+                  // Persist error state
+                  if let (Some(info), Some(store)) = (info_to_persist, state_store.read().await.as_ref()) {
+                    if let Err(e) = store.save_recording(&info).await {
+                      warn!(recording_id = %info.config.id, error = %e, "failed to persist recording state");
+                    }
                   }
                   break;
                 }

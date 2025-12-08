@@ -4,9 +4,11 @@ use ai_service::{
     plugin::yolov8_detector::YoloV8DetectorPlugin, plugin::AiPlugin, AiServiceState,
 };
 use anyhow::Result;
+use common::state_store::StateStore;
+use common::state_store_client::StateStoreClient;
 use std::sync::Arc;
 use tokio::{net::TcpListener, sync::RwLock};
-use tracing::info;
+use tracing::{info, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -64,10 +66,34 @@ async fn main() -> Result<()> {
     info!("Plugin registry initialized with {} plugins", plugin_count);
 
     // Create application state
+    let state_store_enabled = std::env::var("ENABLE_STATE_STORE")
+        .unwrap_or_else(|_| "false".to_string())
+        .to_lowercase() == "true";
+
     let state = if let Some(coordinator_url) = config.coordinator_url {
         info!("Connecting to coordinator at: {}", coordinator_url);
-        let coordinator = Arc::new(HttpCoordinatorClient::new(coordinator_url)?);
-        AiServiceState::with_coordinator(config.node_id.clone(), coordinator, registry)
+        let coordinator = Arc::new(HttpCoordinatorClient::new(coordinator_url.clone())?);
+
+        if state_store_enabled {
+            let state_store: Arc<dyn StateStore> = Arc::new(StateStoreClient::new(coordinator_url.to_string()));
+            let state = AiServiceState::with_coordinator_and_state_store(
+                config.node_id.clone(),
+                coordinator,
+                registry,
+                state_store,
+            );
+
+            // Bootstrap: restore state from StateStore
+            if let Err(e) = state.bootstrap().await {
+                warn!(error = %e, "failed to bootstrap state from StateStore");
+            } else {
+                info!("state store enabled and bootstrapped");
+            }
+
+            state
+        } else {
+            AiServiceState::with_coordinator(config.node_id.clone(), coordinator, registry)
+        }
     } else {
         info!("Running in standalone mode (no coordinator)");
         AiServiceState::new(config.node_id.clone(), registry)
