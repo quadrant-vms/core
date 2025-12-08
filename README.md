@@ -128,8 +128,17 @@ This project is **under active development**.
   - Inference time tracking separate from pre/post-processing
 
 ### 🔜 In Progress
-- Operator UI & rule system
-- Additional AI model integrations (pose estimation, facial recognition)
+- Stateless shift: persist stream/recording/AI task state in external store, bootstrap on restart, and replace in-memory registries with coordinator-backed/state-rebuilt workflows
+- Worker rebalance & orphan cleanup: reconcile leases vs. live processes/artifacts on startup to avoid drift after crashes
+- AuthN/AuthZ & multi-tenant controls: API tokens/OIDC, RBAC, tenant isolation, audit logs
+- Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates
+- Playback & delivery: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
+- Storage & retention: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
+- Search & evidencing: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
+- Alerts & automation: rule engine, multi-channel notifications (Email/SMS/Webhook/MQTT), suppression/severity, scheduling
+- Observability: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
+- Operator UI: dashboards for devices/streams/recordings/AI tasks, incident workflows
+- Additional AI model integrations: pose estimation, facial recognition
 
 ---
 

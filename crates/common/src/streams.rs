@@ -35,6 +35,16 @@ pub struct StreamInfo {
   pub state: StreamState,
   pub lease_id: Option<String>,
   pub last_error: Option<String>,
+  #[serde(default)]
+  pub node_id: Option<String>,
+  #[serde(default)]
+  pub playlist_path: Option<String>,
+  #[serde(default)]
+  pub output_dir: Option<String>,
+  #[serde(default)]
+  pub started_at: Option<u64>,
+  #[serde(default)]
+  pub stopped_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

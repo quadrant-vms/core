@@ -47,7 +47,7 @@ impl RecordingState {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordingMetadata {
   pub duration_secs: Option<u64>,
   pub file_size_bytes: Option<u64>,
@@ -58,7 +58,7 @@ pub struct RecordingMetadata {
   pub fps: Option<f32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordingInfo {
   pub config: RecordingConfig,
   pub state: RecordingState,
@@ -67,6 +67,10 @@ pub struct RecordingInfo {
   pub last_error: Option<String>,
   pub started_at: Option<u64>,
   pub stopped_at: Option<u64>,
+  #[serde(default)]
+  pub node_id: Option<String>,
+  #[serde(default)]
+  pub metadata: Option<RecordingMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
