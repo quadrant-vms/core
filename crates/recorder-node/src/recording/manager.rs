@@ -262,10 +262,24 @@ impl RecordingManager {
           // Extract metadata after successful recording
           info!(id = %id, "recording completed, extracting metadata");
           match pipeline.extract_metadata().await {
-            Ok(_metadata) => {
-              info!(id = %id, "metadata extraction successful");
-              // Metadata is logged but not stored in RecordingInfo yet
-              // TODO: Add metadata field to RecordingInfo
+            Ok(metadata) => {
+              info!(id = %id, metadata = ?metadata, "metadata extraction successful");
+              // Store metadata in RecordingInfo
+              let info_to_persist = {
+                let mut recordings = recordings_clone.write().await;
+                if let Some(info) = recordings.get_mut(&id) {
+                  info.metadata = Some(metadata);
+                  Some(info.clone())
+                } else {
+                  None
+                }
+              };
+              // Persist metadata
+              if let (Some(info), Some(store)) = (info_to_persist, state_store_clone.read().await.as_ref()) {
+                if let Err(e) = store.save_recording(&info).await {
+                  warn!(recording_id = %info.config.id, error = %e, "failed to persist recording metadata");
+                }
+              }
             }
             Err(e) => {
               warn!(id = %id, error = %e, "metadata extraction failed");

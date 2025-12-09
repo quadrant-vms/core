@@ -799,6 +799,11 @@ mod tests {
           state: StreamState::Running,
           lease_id: Some("lease-abc".into()),
           last_error: None,
+          node_id: Some("test-node".into()),
+          playlist_path: Some("/data/hls/stream-1/index.m3u8".into()),
+          output_dir: Some("/data/hls/stream-1".into()),
+          started_at: None,
+          stopped_at: None,
         },
       );
     }
