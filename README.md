@@ -167,7 +167,26 @@ This project is **under active development**.
     - `ORPHAN_CLEANUP_INTERVAL_SECS=300` for cleanup interval (default: 5 minutes)
 
 ### 🔜 In Progress
-- AuthN/AuthZ & multi-tenant controls: API tokens/OIDC, RBAC, tenant isolation, audit logs
+
+#### Current Focus: Authentication & Authorization
+- **Phase 1: Research & Design**
+  - Design authentication architecture (centralized vs distributed)
+  - Research Rust auth libraries (jsonwebtoken, oauth2, oidc-client)
+  - Design database schema for users, roles, permissions, and tenants
+- **Phase 2: Core Authentication**
+  - Implement user authentication (API tokens + JWT)
+  - Implement OIDC/OAuth2 integration for SSO
+- **Phase 3: Authorization**
+  - Implement RBAC (Role-Based Access Control) system
+  - Add tenant isolation and multi-tenancy support
+- **Phase 4: Integration**
+  - Create auth middleware for all REST APIs
+  - Implement audit logging system
+- **Phase 5: Testing & Documentation**
+  - Add auth integration tests
+  - Update documentation with auth configuration guide
+
+#### Upcoming Features
 - Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates
 - Playback & delivery: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - Storage & retention: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
