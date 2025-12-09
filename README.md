@@ -127,17 +127,44 @@ This project is **under active development**.
   - Detailed GPU setup documentation in `docs/GPU_ACCELERATION.md`
   - Inference time tracking separate from pre/post-processing
 
-- **Stateless Architecture** (`ENABLE_STATE_STORE=true`):
+- **Stateless Architecture & High Availability** (`ENABLE_STATE_STORE=true`):
   - **StateStore HTTP API** in coordinator for persisting stream/recording/AI task state
   - **PostgreSQL-backed** persistent state storage via StateStore trait
   - **HTTP client** (StateStoreClient) in common crate for remote state access
   - **Admin-gateway integration**: automatic state persistence on all state changes
   - **Worker nodes integration**: recorder-node and ai-service persist state during lifecycle
   - **Bootstrap logic**: restore state from StateStore on startup for all services
-  - **Orphan cleanup**: detect and report orphaned resources (non-active state without valid lease)
+  - **Automated orphan cleanup**: detect and automatically remove orphaned resources
+    - Cleanup runs on startup and periodically (configurable via `ORPHAN_CLEANUP_INTERVAL_SECS`)
+    - Default interval: 300 seconds (5 minutes)
+    - Removes orphaned streams/recordings (non-active state with stale leases)
+    - In-memory and persistent state cleanup
+  - **Multi-instance coordination** for active-active HA deployments:
+    - StateStore shared across multiple coordinator instances via PostgreSQL
+    - Worker nodes connect to any coordinator for state operations
+    - Automatic state synchronization across cluster
+    - Supports distributed worker nodes across multiple admin-gateway instances
+    - Complete HA deployment guide in `docs/HA_DEPLOYMENT.md`
+  - **State migration tools** (`state-migrate` binary):
+    - `check` - Verify database schema and migrations
+    - `list-orphans` - List orphaned resources with filtering
+    - `cleanup-orphans` - Clean up orphans (with dry-run mode)
+    - `export` - Export all state to JSON for backup/migration
+    - `import` - Import state from JSON (with skip-existing option)
+    - `vacuum` - Database maintenance (VACUUM ANALYZE)
+    - `stats` - Show comprehensive state store statistics
+  - **Comprehensive integration tests** (`tests/stateless_integration.rs`):
+    - StateStore save/retrieve/update operations
+    - List by node_id filtering
+    - Orphan detection logic validation
+    - HTTP API endpoint testing
+    - State persistence across restarts
+    - Bootstrap recovery scenarios
   - **State persistence** across lease renewals, errors, and health check failures
   - **Backward compatible**: works with or without StateStore enabled
-  - **Environment variable**: `ENABLE_STATE_STORE=true` to enable
+  - **Environment variables**:
+    - `ENABLE_STATE_STORE=true` to enable state persistence
+    - `ORPHAN_CLEANUP_INTERVAL_SECS=300` for cleanup interval (default: 5 minutes)
 
 ### 🔜 In Progress
 - AuthN/AuthZ & multi-tenant controls: API tokens/OIDC, RBAC, tenant isolation, audit logs

@@ -166,28 +166,41 @@ impl AppState {
   /// but no active lease (likely due to crashes/restarts)
   pub async fn cleanup_orphans(&self) -> anyhow::Result<()> {
     if let Some(store) = &self.inner.state_store {
-      let coordinator = self.coordinator();
+      let _coordinator = self.coordinator();
 
       // List all streams and recordings from state store
       let streams = store.list_streams(Some(self.node_id())).await?;
       let recordings = store.list_recordings(Some(self.node_id())).await?;
 
-      let mut orphaned_streams = 0;
-      let mut orphaned_recordings = 0;
+      let mut cleaned_streams = 0;
+      let mut cleaned_recordings = 0;
 
       // Check each stream for active lease
       for stream in streams {
         if let Some(lease_id) = &stream.lease_id {
-          // Query coordinator to see if lease still exists
-          // For now, we'll mark streams without running state as potential orphans
+          // Check if stream is in non-active state (orphaned)
           if !stream.state.is_active() {
             tracing::warn!(
               stream_id = %stream.config.id,
               lease_id = %lease_id,
               state = ?stream.state,
-              "found orphaned stream (non-active state)"
+              "cleaning up orphaned stream"
             );
-            orphaned_streams += 1;
+
+            // Delete from StateStore
+            if let Err(e) = store.delete_stream(&stream.config.id).await {
+              tracing::error!(
+                stream_id = %stream.config.id,
+                error = %e,
+                "failed to delete orphaned stream from state store"
+              );
+            } else {
+              cleaned_streams += 1;
+            }
+
+            // Remove from in-memory state
+            let mut streams_map = self.streams().write().await;
+            streams_map.remove(&stream.config.id);
           }
         }
       }
@@ -200,18 +213,32 @@ impl AppState {
               recording_id = %recording.config.id,
               lease_id = %lease_id,
               state = ?recording.state,
-              "found orphaned recording (non-active state)"
+              "cleaning up orphaned recording"
             );
-            orphaned_recordings += 1;
+
+            // Delete from StateStore
+            if let Err(e) = store.delete_recording(&recording.config.id).await {
+              tracing::error!(
+                recording_id = %recording.config.id,
+                error = %e,
+                "failed to delete orphaned recording from state store"
+              );
+            } else {
+              cleaned_recordings += 1;
+            }
+
+            // Remove from in-memory state
+            let mut recordings_map = self.recordings().write().await;
+            recordings_map.remove(&recording.config.id);
           }
         }
       }
 
-      if orphaned_streams > 0 || orphaned_recordings > 0 {
+      if cleaned_streams > 0 || cleaned_recordings > 0 {
         tracing::info!(
-          orphaned_streams = orphaned_streams,
-          orphaned_recordings = orphaned_recordings,
-          "orphan cleanup completed - manual intervention may be required"
+          cleaned_streams = cleaned_streams,
+          cleaned_recordings = cleaned_recordings,
+          "orphan cleanup completed - removed orphaned resources"
         );
       } else {
         tracing::info!("no orphans detected");

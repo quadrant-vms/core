@@ -47,10 +47,32 @@ async fn main() -> Result<()> {
       warn!(error = %e, "failed to bootstrap state from StateStore");
     }
 
-    // Cleanup orphans
+    // Initial cleanup of orphans
     if let Err(e) = state.cleanup_orphans().await {
       warn!(error = %e, "failed to cleanup orphans");
     }
+
+    // Start periodic orphan cleanup task
+    let cleanup_state = state.clone();
+    tokio::spawn(async move {
+      let cleanup_interval = std::time::Duration::from_secs(
+        std::env::var("ORPHAN_CLEANUP_INTERVAL_SECS")
+          .ok()
+          .and_then(|v| v.parse().ok())
+          .unwrap_or(300) // Default: 5 minutes
+      );
+
+      let mut interval = tokio::time::interval(cleanup_interval);
+      interval.tick().await; // Skip first tick (already cleaned up above)
+
+      loop {
+        interval.tick().await;
+        info!("running periodic orphan cleanup");
+        if let Err(e) = cleanup_state.cleanup_orphans().await {
+          warn!(error = %e, "periodic orphan cleanup failed");
+        }
+      }
+    });
 
     state
   } else {
