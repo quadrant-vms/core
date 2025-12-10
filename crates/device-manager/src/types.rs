@@ -349,7 +349,7 @@ pub struct GotoPresetRequest {
 
 // PTZ Tour Types
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
 #[sqlx(type_name = "tour_state", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum TourState {

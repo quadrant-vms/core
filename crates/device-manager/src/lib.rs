@@ -5,6 +5,7 @@ pub mod ptz_routes;
 pub mod routes_simple;
 pub mod state;
 pub mod store;
+pub mod tour_executor;
 pub mod types;
 
 pub use health_monitor::HealthMonitor;
@@ -13,4 +14,5 @@ pub use ptz_client::{create_ptz_client, PtzClient};
 pub use routes_simple as routes;
 pub use state::DeviceManagerState;
 pub use store::DeviceStore;
+pub use tour_executor::TourExecutor;
 pub use types::*;

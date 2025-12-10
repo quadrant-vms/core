@@ -54,6 +54,8 @@ pub fn router(state: DeviceManagerState) -> Router {
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/steps/:step_id", delete(delete_ptz_tour_step))
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/start", post(start_ptz_tour))
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/stop", post(stop_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/pause", post(pause_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/resume", post(resume_ptz_tour))
         .with_state(state)
 }
 
@@ -223,11 +225,11 @@ async fn probe_device(
     };
 
     let username = device.username.as_deref();
-    let password = device
+    let password_decrypted = device
         .password_encrypted
         .as_ref()
-        .and_then(|enc| state.store.decrypt_password(enc).ok())
-        .as_deref();
+        .and_then(|enc| state.store.decrypt_password(enc).ok());
+    let password = password_decrypted.as_deref();
 
     match state
         .prober
@@ -601,9 +603,15 @@ async fn start_ptz_tour(
     State(state): State<DeviceManagerState>,
     Path((_device_id, tour_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    match state.store.update_ptz_tour_state(&tour_id, TourState::Running).await {
-        Ok(_) => (StatusCode::OK, Json(json!({"status": "started"}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    match state.tour_executor.start_tour(tour_id).await {
+        Ok(_) => {
+            info!("PTZ tour started");
+            (StatusCode::OK, Json(json!({"status": "started"}))).into_response()
+        }
+        Err(e) => {
+            error!("failed to start tour: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()
+        }
     }
 }
 
@@ -611,9 +619,47 @@ async fn stop_ptz_tour(
     State(state): State<DeviceManagerState>,
     Path((_device_id, tour_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    match state.store.update_ptz_tour_state(&tour_id, TourState::Stopped).await {
-        Ok(_) => (StatusCode::OK, Json(json!({"status": "stopped"}))).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    match state.tour_executor.stop_tour(&tour_id).await {
+        Ok(_) => {
+            info!("PTZ tour stopped");
+            (StatusCode::OK, Json(json!({"status": "stopped"}))).into_response()
+        }
+        Err(e) => {
+            error!("failed to stop tour: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()
+        }
+    }
+}
+
+async fn pause_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.tour_executor.pause_tour(&tour_id).await {
+        Ok(_) => {
+            info!("PTZ tour paused");
+            (StatusCode::OK, Json(json!({"status": "paused"}))).into_response()
+        }
+        Err(e) => {
+            error!("failed to pause tour: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()
+        }
+    }
+}
+
+async fn resume_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.tour_executor.resume_tour(&tour_id).await {
+        Ok(_) => {
+            info!("PTZ tour resumed");
+            (StatusCode::OK, Json(json!({"status": "resumed"}))).into_response()
+        }
+        Err(e) => {
+            error!("failed to resume tour: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()
+        }
     }
 }
 

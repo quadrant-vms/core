@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use device_manager::{DeviceManagerState, DeviceProber, DeviceStore, HealthMonitor};
+use device_manager::{DeviceManagerState, DeviceProber, DeviceStore, HealthMonitor, TourExecutor};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -32,6 +32,11 @@ async fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(3);
 
+    let ptz_timeout_secs = std::env::var("PTZ_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
+
     // Initialize store
     info!("connecting to database");
     let store = Arc::new(DeviceStore::new(&database_url).await?);
@@ -39,8 +44,11 @@ async fn main() -> Result<()> {
     // Initialize prober
     let prober = Arc::new(DeviceProber::new(probe_timeout_secs));
 
+    // Initialize tour executor
+    let tour_executor = Arc::new(TourExecutor::new(Arc::clone(&store), ptz_timeout_secs));
+
     // Create state
-    let state = DeviceManagerState::new(Arc::clone(&store), Arc::clone(&prober));
+    let state = DeviceManagerState::new(Arc::clone(&store), Arc::clone(&prober), Arc::clone(&tour_executor));
 
     // Start health monitor in background
     let health_monitor = HealthMonitor::new(

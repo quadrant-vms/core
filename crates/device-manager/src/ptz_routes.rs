@@ -858,18 +858,20 @@ pub async fn start_ptz_tour(
             .into_response();
     }
 
-    // Start tour execution (will be implemented in tour engine)
-    match state.store.update_ptz_tour_state(&tour_id, TourState::Running).await {
+    // Start tour execution
+    match state.tour_executor.start_tour(tour_id.clone()).await {
         Ok(_) => {
             info!(tour_id = %tour_id, "PTZ tour started");
-            // TODO: Trigger tour execution engine
             (StatusCode::OK, Json(json!({"status": "started"}))).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => {
+            error!(tour_id = %tour_id, error = %e, "failed to start tour");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -887,16 +889,79 @@ pub async fn stop_ptz_tour(
             .into_response();
     }
 
-    match state.store.update_ptz_tour_state(&tour_id, TourState::Stopped).await {
+    match state.tour_executor.stop_tour(&tour_id).await {
         Ok(_) => {
             info!(tour_id = %tour_id, "PTZ tour stopped");
             (StatusCode::OK, Json(json!({"status": "stopped"}))).into_response()
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
+        Err(e) => {
+            error!(tour_id = %tour_id, error = %e, "failed to stop tour");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Pause PTZ tour
+pub async fn pause_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    RequireAuth(auth_ctx): RequireAuth,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth_ctx.has_permission("device:update") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "permission denied"})),
         )
-            .into_response(),
+            .into_response();
+    }
+
+    match state.tour_executor.pause_tour(&tour_id).await {
+        Ok(_) => {
+            info!(tour_id = %tour_id, "PTZ tour paused");
+            (StatusCode::OK, Json(json!({"status": "paused"}))).into_response()
+        }
+        Err(e) => {
+            error!(tour_id = %tour_id, error = %e, "failed to pause tour");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Resume PTZ tour
+pub async fn resume_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    RequireAuth(auth_ctx): RequireAuth,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !auth_ctx.has_permission("device:update") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    match state.tour_executor.resume_tour(&tour_id).await {
+        Ok(_) => {
+            info!(tour_id = %tour_id, "PTZ tour resumed");
+            (StatusCode::OK, Json(json!({"status": "resumed"}))).into_response()
+        }
+        Err(e) => {
+            error!(tour_id = %tour_id, error = %e, "failed to resume tour");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     }
 }
 

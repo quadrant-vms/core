@@ -284,15 +284,26 @@ This project is **under active development**.
   - **ONVIF integration**: SOAP-based communication with ONVIF-compliant cameras
   - **Mock client**: Testing and development support for non-PTZ devices
   - **Store operations**: Full CRUD operations for presets and tours
-  - **Tour execution**: State management for running, pausing, and stopping tours
+  - **Tour execution engine**: Background worker for automated tour execution
+    - Multi-tour support (concurrent tours on different devices)
+    - State management (running, paused, stopped)
+    - Loop support for continuous patrol
+    - Graceful cancellation with CancellationToken
+    - Automatic state synchronization with database
+    - Configurable dwell times and speeds per waypoint
+    - Preset and absolute position support
+  - **Tour control REST API**:
+    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/start` - Start tour execution
+    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/stop` - Stop running tour
+    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/pause` - Pause running tour
+    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/resume` - Resume paused tour
   - **Environment variables**:
     - `PTZ_TIMEOUT_SECS` - PTZ command timeout (default: 10)
 
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **PTZ tour execution engine**: Background worker for automated tour execution
-- **Advanced device control**: Camera configuration push, firmware update management
+- **Advanced device control**: Camera configuration push, firmware update management, ONVIF device discovery
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
