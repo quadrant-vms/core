@@ -187,6 +187,10 @@ INSERT INTO permissions (permission_id, resource, action, description) VALUES
     ('ai_task:create', 'ai_task', 'create', 'Create new AI tasks'),
     ('ai_task:update', 'ai_task', 'update', 'Update AI task configuration'),
     ('ai_task:delete', 'ai_task', 'delete', 'Stop and delete AI tasks'),
+    ('device:read', 'device', 'read', 'View device information'),
+    ('device:create', 'device', 'create', 'Create and onboard new devices'),
+    ('device:update', 'device', 'update', 'Update device configuration'),
+    ('device:delete', 'device', 'delete', 'Delete devices'),
     ('user:read', 'user', 'read', 'View user information'),
     ('user:create', 'user', 'create', 'Create new users'),
     ('user:update', 'user', 'update', 'Update user information'),
@@ -220,7 +224,7 @@ ON CONFLICT (role_id) DO NOTHING;
 -- Grant operator permissions
 INSERT INTO role_permissions (role_id, permission_id)
 SELECT 'operator', permission_id FROM permissions
-WHERE resource IN ('stream', 'recording', 'ai_task')
+WHERE resource IN ('stream', 'recording', 'ai_task', 'device')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
 
 -- Insert default viewer role

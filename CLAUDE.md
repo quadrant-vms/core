@@ -84,6 +84,26 @@ This is a **Cargo workspace** with multiple crates:
    - Entry point: `crates/ai-service/src/main.rs`
    - **Status**: Core plugin architecture complete
 
+8. **auth-service** (`crates/auth-service/`)
+   - Centralized authentication and authorization service
+   - JWT-based authentication with API token support
+   - Role-Based Access Control (RBAC) system
+   - Multi-tenancy support with resource quotas
+   - Audit logging for security compliance
+   - PostgreSQL-backed user/role/permission storage
+   - Entry point: `crates/auth-service/src/main.rs`
+   - **Status**: Core auth system complete (OIDC/OAuth2 pending)
+
+9. **device-manager** (`crates/device-manager/`)
+   - Camera and device management system
+   - Device onboarding and RTSP probing
+   - Automated health monitoring
+   - Multi-protocol support (RTSP, ONVIF, HTTP, RTMP, WebRTC)
+   - PostgreSQL-backed device storage
+   - REST API for device operations
+   - Entry point: `crates/device-manager/src/main.rs`
+   - **Status**: Core device management complete
+
 ### Key Files
 
 - `Cargo.toml` - Workspace manifest
@@ -141,28 +161,27 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: AI Model Plugin Architecture
-- ✅ ai-service crate with extensible plugin system
-- ✅ Plugin trait interface (AiPlugin) for custom integrations
-- ✅ Plugin registry with dynamic registration
-- ✅ Mock object detection plugin for testing
-- ✅ REST API for AI task lifecycle (/v1/tasks, /v1/plugins)
-- ✅ Coordinator lease integration for AI tasks
-- ✅ Automatic lease acquisition, renewal, and release
-- ✅ State management with task tracking
-- ✅ Multiple output format support (webhook, MQTT, RabbitMQ, file)
-- ✅ Frame-based processing configuration
-- ✅ Comprehensive AI metrics (tasks, frames, detections, latency)
-- ✅ Health check and readiness endpoints
-- ✅ Integration tests for plugin system
-- ✅ Standalone and coordinator-integrated deployment modes
+**Recently Completed**: Device & Topology Management
+- ✅ device-manager crate with comprehensive camera management
+- ✅ Device onboarding and registration (cameras, NVRs, encoders)
+- ✅ RTSP device probing with ffprobe (codec/resolution detection)
+- ✅ Multi-protocol support (RTSP, ONVIF, HTTP, RTMP, WebRTC)
+- ✅ Automated health monitoring with configurable intervals
+- ✅ Health history tracking and status transitions
+- ✅ Device categorization (types, zones, tags, metadata)
+- ✅ Batch device update operations
+- ✅ PostgreSQL-backed storage with event audit trail
+- ✅ Secure credential management (encrypted passwords)
+- ✅ Integration with auth-service (permissions, tenant isolation)
+- ✅ REST API for all device operations
+- ✅ Integration tests for device management
 
-**Next Feature**: Real AI Model Integrations
-- 🔜 YOLOv8 object detection plugin
-- 🔜 Pose estimation plugin
-- 🔜 Facial recognition plugin
-- 🔜 Frame capture from stream-node/recorder-node
-- 🔜 GPU acceleration support
+**Next Feature**: PTZ & Advanced Device Control
+- 🔜 PTZ command support (pan, tilt, zoom)
+- 🔜 Camera configuration push
+- 🔜 Firmware update management
+- 🔜 ONVIF device discovery
+- 🔜 Device capability negotiation
 
 ### Common Tasks
 

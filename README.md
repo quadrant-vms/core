@@ -189,7 +189,7 @@ This project is **under active development**.
     - Request context injection
     - Support for both JWT and API token authentication
   - **Comprehensive permission system**:
-    - Resource-based permissions (stream, recording, ai_task, user, role, tenant, audit)
+    - Resource-based permissions (stream, recording, ai_task, device, user, role, tenant, audit)
     - Action-based controls (read, create, update, delete)
     - Built-in roles: System Administrator, Operator, Viewer
     - Custom role creation and management
@@ -211,7 +211,7 @@ This project is **under active development**.
     - System tenant pre-configured
     - Default admin user (username: admin, password: admin123 - CHANGE IN PRODUCTION!)
     - Built-in roles: system-admin, operator, viewer
-    - 25 default permissions covering all resources
+    - 29 default permissions covering all resources (including device management)
   - **Integration tests** (`tests/auth_integration.rs`):
     - JWT generation and verification
     - Password hashing and validation
@@ -226,17 +226,65 @@ This project is **under active development**.
     - `JWT_EXPIRATION_SECS` - Token expiration time (default: 3600)
     - `AUTH_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8083)
 
+- **Device & Topology Management**:
+  - `device-manager`: Comprehensive camera and device management system
+    - **Device onboarding and registration**: Add cameras, NVRs, encoders to the system
+    - **RTSP device probing**: Automatic capability detection using ffprobe
+      - Video codec detection (H.264, H.265, MJPEG, etc.)
+      - Audio codec detection
+      - Resolution discovery
+      - Metadata extraction (manufacturer, model)
+    - **Multi-protocol support**: RTSP, ONVIF, HTTP, RTMP, WebRTC
+    - **Device categorization**: Types (camera, NVR, encoder, other), zones, tags
+    - **Health monitoring system**:
+      - Automated periodic health checks
+      - Configurable check intervals per device
+      - Status tracking (online, offline, error, maintenance, provisioning)
+      - Health history with timestamps and response times
+      - Consecutive failure tracking
+      - Automatic status transitions based on health check results
+    - **Batch operations**: Update multiple devices simultaneously
+    - **PostgreSQL-backed storage**: Persistent device state, health history, events
+    - **Device event audit trail**: Tracks all device state changes and operations
+    - **Secure credential management**: Encrypted storage of device passwords
+    - **Rich device metadata**:
+      - Manufacturer, model, firmware version
+      - Location and zone assignment
+      - Custom tags for organization
+      - Device capabilities (PTZ, audio, motion detection)
+      - Supported codecs and resolutions
+      - Auto-start, recording, and AI enablement flags
+    - **REST API** for all device operations:
+      - CRUD operations for devices
+      - Device health status and history endpoints
+      - On-demand device probing
+      - Batch update endpoint
+    - **Integration with auth-service**:
+      - Tenant-isolated device management
+      - Permission-based access control (device:read, device:create, device:update, device:delete)
+      - Operator role includes device management permissions
+    - **Integration tests** (`tests/device_manager_integration.rs`):
+      - Device CRUD operations
+      - Health tracking and history
+      - Store operations validation
+    - **Environment variables**:
+      - `DATABASE_URL` - PostgreSQL connection string
+      - `DEVICE_MANAGER_ADDR` - Bind address (default: 127.0.0.1:8084)
+      - `PROBE_TIMEOUT_SECS` - Device probe timeout (default: 10)
+      - `HEALTH_CHECK_INTERVAL_SECS` - Global health check interval (default: 30)
+      - `MAX_CONSECUTIVE_FAILURES` - Failures before marking as error (default: 3)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates
-- Playback & delivery: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
-- Storage & retention: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
-- Search & evidencing: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
-- Alerts & automation: rule engine, multi-channel notifications (Email/SMS/Webhook/MQTT), suppression/severity, scheduling
-- Observability: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
-- Operator UI: dashboards for devices/streams/recordings/AI tasks, incident workflows
-- Additional AI model integrations: pose estimation, facial recognition
+- **PTZ & advanced device control**: PTZ commands, camera configuration push, firmware update management
+- **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
+- **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
+- **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
+- **Alerts & automation**: rule engine, multi-channel notifications (Email/SMS/Webhook/MQTT), suppression/severity, scheduling
+- **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
+- **Operator UI**: dashboards for devices/streams/recordings/AI tasks, incident workflows
+- **Additional AI model integrations**: pose estimation, facial recognition
 
 ---
 

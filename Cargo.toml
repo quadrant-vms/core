@@ -7,6 +7,8 @@ members = [
   "crates/admin-gateway",
   "crates/coordinator",
   "crates/ai-service",
+  "crates/auth-service",
+  "crates/device-manager",
 ]
 resolver = "2"
 
@@ -20,6 +22,8 @@ admin-gateway = { path = "crates/admin-gateway" }
 coordinator = { path = "crates/coordinator" }
 recorder-node = { path = "crates/recorder-node" }
 ai-service = { path = "crates/ai-service" }
+auth-service = { path = "crates/auth-service" }
+device-manager = { path = "crates/device-manager" }
 common = { path = "crates/common" }
 
 [dev-dependencies]
@@ -27,9 +31,11 @@ anyhow = "1"
 axum = "0.7"
 axum-test = "16"
 base64 = "0.22"
+chrono = "0.4"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 tokio-util = "0.7"
 reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1"
 async-trait = "0.1"
 tracing-subscriber = "0.3"
+device-manager = { path = "crates/device-manager" }
