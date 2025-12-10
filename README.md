@@ -274,10 +274,25 @@ This project is **under active development**.
       - `HEALTH_CHECK_INTERVAL_SECS` - Global health check interval (default: 30)
       - `MAX_CONSECUTIVE_FAILURES` - Failures before marking as error (default: 3)
 
+- **PTZ Control System** (device-manager):
+  - **PTZ movement commands**: Pan, tilt, zoom, absolute/relative positioning, home position
+  - **PTZ client architecture**: Extensible client interface with ONVIF implementation
+  - **Preset management**: Create, update, delete, and navigate to PTZ presets
+  - **Tour system**: Define and execute patrol tours with multiple waypoints
+  - **Database schema**: PostgreSQL tables for presets, tours, and tour steps
+  - **REST API endpoints**: Complete API for PTZ control, presets, and tours
+  - **ONVIF integration**: SOAP-based communication with ONVIF-compliant cameras
+  - **Mock client**: Testing and development support for non-PTZ devices
+  - **Store operations**: Full CRUD operations for presets and tours
+  - **Tour execution**: State management for running, pausing, and stopping tours
+  - **Environment variables**:
+    - `PTZ_TIMEOUT_SECS` - PTZ command timeout (default: 10)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **PTZ & advanced device control**: PTZ commands, camera configuration push, firmware update management
+- **PTZ tour execution engine**: Background worker for automated tour execution
+- **Advanced device control**: Camera configuration push, firmware update management
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata

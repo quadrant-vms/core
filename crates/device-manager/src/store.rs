@@ -1,7 +1,7 @@
 use crate::types::*;
 use anyhow::{Context, Result};
 use chrono::Utc;
-use sqlx::{PgPool, Row};
+use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -164,22 +164,22 @@ impl DeviceStore {
             "#,
         );
 
-        let mut conditions = Vec::new();
+        let mut param_count = 0;
         if query.tenant_id.is_some() {
-            conditions.push("tenant_id = $1");
+            param_count += 1;
+            sql.push_str(&format!(" AND tenant_id = ${}", param_count));
         }
         if query.status.is_some() {
-            conditions.push(format!("status = ${}", conditions.len() + 1));
+            param_count += 1;
+            sql.push_str(&format!(" AND status = ${}", param_count));
         }
         if query.device_type.is_some() {
-            conditions.push(format!("device_type = ${}", conditions.len() + 1));
+            param_count += 1;
+            sql.push_str(&format!(" AND device_type = ${}", param_count));
         }
         if query.zone.is_some() {
-            conditions.push(format!("zone = ${}", conditions.len() + 1));
-        }
-
-        for condition in conditions {
-            sql.push_str(&format!(" AND {}", condition));
+            param_count += 1;
+            sql.push_str(&format!(" AND zone = ${}", param_count));
         }
 
         sql.push_str(" ORDER BY created_at DESC");
@@ -479,6 +479,346 @@ impl DeviceStore {
             .decode(encrypted)
             .context("failed to decode password")?;
         Ok(String::from_utf8(bytes).context("invalid utf8 in password")?)
+    }
+
+    // PTZ Preset Methods
+
+    /// Create a new PTZ preset
+    pub async fn create_ptz_preset(
+        &self,
+        device_id: &str,
+        req: CreatePtzPresetRequest,
+        position: PtzPosition,
+    ) -> Result<PtzPreset> {
+        let preset_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let preset = sqlx::query_as!(
+            PtzPreset,
+            r#"
+            INSERT INTO ptz_presets (preset_id, device_id, name, position, description, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $6)
+            RETURNING preset_id, device_id, name, position as "position: PtzPosition",
+                      description, thumbnail_url, created_at, updated_at
+            "#,
+            preset_id,
+            device_id,
+            req.name,
+            serde_json::to_value(&position)?,
+            req.description,
+            now,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to create PTZ preset")?;
+
+        Ok(preset)
+    }
+
+    /// Get PTZ preset by ID
+    pub async fn get_ptz_preset(&self, preset_id: &str) -> Result<Option<PtzPreset>> {
+        let preset = sqlx::query_as!(
+            PtzPreset,
+            r#"
+            SELECT preset_id, device_id, name, position as "position: PtzPosition",
+                   description, thumbnail_url, created_at, updated_at
+            FROM ptz_presets
+            WHERE preset_id = $1
+            "#,
+            preset_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to fetch PTZ preset")?;
+
+        Ok(preset)
+    }
+
+    /// List PTZ presets for a device
+    pub async fn list_ptz_presets(&self, device_id: &str) -> Result<Vec<PtzPreset>> {
+        let presets = sqlx::query_as!(
+            PtzPreset,
+            r#"
+            SELECT preset_id, device_id, name, position as "position: PtzPosition",
+                   description, thumbnail_url, created_at, updated_at
+            FROM ptz_presets
+            WHERE device_id = $1
+            ORDER BY name ASC
+            "#,
+            device_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list PTZ presets")?;
+
+        Ok(presets)
+    }
+
+    /// Update PTZ preset
+    pub async fn update_ptz_preset(
+        &self,
+        preset_id: &str,
+        req: UpdatePtzPresetRequest,
+    ) -> Result<PtzPreset> {
+        let preset = sqlx::query_as!(
+            PtzPreset,
+            r#"
+            UPDATE ptz_presets
+            SET
+                name = COALESCE($2, name),
+                description = COALESCE($3, description),
+                position = COALESCE($4, position),
+                updated_at = NOW()
+            WHERE preset_id = $1
+            RETURNING preset_id, device_id, name, position as "position: PtzPosition",
+                      description, thumbnail_url, created_at, updated_at
+            "#,
+            preset_id,
+            req.name,
+            req.description,
+            req.position.as_ref().map(|p| serde_json::to_value(p).unwrap()),
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to update PTZ preset")?;
+
+        Ok(preset)
+    }
+
+    /// Delete PTZ preset
+    pub async fn delete_ptz_preset(&self, preset_id: &str) -> Result<()> {
+        sqlx::query!("DELETE FROM ptz_presets WHERE preset_id = $1", preset_id)
+            .execute(&self.pool)
+            .await
+            .context("failed to delete PTZ preset")?;
+
+        Ok(())
+    }
+
+    // PTZ Tour Methods
+
+    /// Create a new PTZ tour
+    pub async fn create_ptz_tour(
+        &self,
+        device_id: &str,
+        req: CreatePtzTourRequest,
+    ) -> Result<PtzTour> {
+        let tour_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let tour = sqlx::query_as!(
+            PtzTour,
+            r#"
+            INSERT INTO ptz_tours (tour_id, device_id, name, description, state, loop_enabled, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $6)
+            RETURNING tour_id, device_id, name, description,
+                      state as "state: TourState",
+                      loop_enabled, created_at, updated_at
+            "#,
+            tour_id,
+            device_id,
+            req.name,
+            req.description,
+            req.loop_enabled,
+            now,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to create PTZ tour")?;
+
+        Ok(tour)
+    }
+
+    /// Get PTZ tour by ID
+    pub async fn get_ptz_tour(&self, tour_id: &str) -> Result<Option<PtzTour>> {
+        let tour = sqlx::query_as!(
+            PtzTour,
+            r#"
+            SELECT tour_id, device_id, name, description,
+                   state as "state: TourState",
+                   loop_enabled, created_at, updated_at
+            FROM ptz_tours
+            WHERE tour_id = $1
+            "#,
+            tour_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to fetch PTZ tour")?;
+
+        Ok(tour)
+    }
+
+    /// List PTZ tours for a device
+    pub async fn list_ptz_tours(&self, device_id: &str) -> Result<Vec<PtzTour>> {
+        let tours = sqlx::query_as!(
+            PtzTour,
+            r#"
+            SELECT tour_id, device_id, name, description,
+                   state as "state: TourState",
+                   loop_enabled, created_at, updated_at
+            FROM ptz_tours
+            WHERE device_id = $1
+            ORDER BY name ASC
+            "#,
+            device_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list PTZ tours")?;
+
+        Ok(tours)
+    }
+
+    /// Update PTZ tour
+    pub async fn update_ptz_tour(
+        &self,
+        tour_id: &str,
+        req: UpdatePtzTourRequest,
+    ) -> Result<PtzTour> {
+        let tour = sqlx::query_as!(
+            PtzTour,
+            r#"
+            UPDATE ptz_tours
+            SET
+                name = COALESCE($2, name),
+                description = COALESCE($3, description),
+                loop_enabled = COALESCE($4, loop_enabled),
+                updated_at = NOW()
+            WHERE tour_id = $1
+            RETURNING tour_id, device_id, name, description,
+                      state as "state: TourState",
+                      loop_enabled, created_at, updated_at
+            "#,
+            tour_id,
+            req.name,
+            req.description,
+            req.loop_enabled,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to update PTZ tour")?;
+
+        Ok(tour)
+    }
+
+    /// Update PTZ tour state
+    pub async fn update_ptz_tour_state(&self, tour_id: &str, state: TourState) -> Result<()> {
+        sqlx::query!(
+            "UPDATE ptz_tours SET state = $2, updated_at = NOW() WHERE tour_id = $1",
+            tour_id,
+            state as TourState,
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to update PTZ tour state")?;
+
+        Ok(())
+    }
+
+    /// Delete PTZ tour
+    pub async fn delete_ptz_tour(&self, tour_id: &str) -> Result<()> {
+        sqlx::query!("DELETE FROM ptz_tours WHERE tour_id = $1", tour_id)
+            .execute(&self.pool)
+            .await
+            .context("failed to delete PTZ tour")?;
+
+        Ok(())
+    }
+
+    // PTZ Tour Step Methods
+
+    /// Add step to PTZ tour
+    pub async fn add_ptz_tour_step(
+        &self,
+        tour_id: &str,
+        req: AddTourStepRequest,
+    ) -> Result<PtzTourStep> {
+        let step_id = Uuid::new_v4().to_string();
+
+        // Get the next sequence order
+        let next_order = sqlx::query!(
+            "SELECT COALESCE(MAX(sequence_order), -1) + 1 as next_order FROM ptz_tour_steps WHERE tour_id = $1",
+            tour_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to get next sequence order")?
+        .next_order
+        .unwrap_or(0);
+
+        let step = sqlx::query_as!(
+            PtzTourStep,
+            r#"
+            INSERT INTO ptz_tour_steps (step_id, tour_id, sequence_order, preset_id, position, dwell_time_ms, speed)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING step_id, tour_id, sequence_order, preset_id,
+                      position as "position: Option<PtzPosition>",
+                      dwell_time_ms, speed
+            "#,
+            step_id,
+            tour_id,
+            next_order,
+            req.preset_id,
+            req.position.as_ref().map(|p| serde_json::to_value(p).unwrap()),
+            req.dwell_time_ms as i64,
+            req.speed,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to add PTZ tour step")?;
+
+        Ok(step)
+    }
+
+    /// Get steps for a tour
+    pub async fn get_ptz_tour_steps(&self, tour_id: &str) -> Result<Vec<PtzTourStep>> {
+        let steps = sqlx::query_as!(
+            PtzTourStep,
+            r#"
+            SELECT step_id, tour_id, sequence_order, preset_id,
+                   position as "position: Option<PtzPosition>",
+                   dwell_time_ms, speed
+            FROM ptz_tour_steps
+            WHERE tour_id = $1
+            ORDER BY sequence_order ASC
+            "#,
+            tour_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to get PTZ tour steps")?;
+
+        Ok(steps)
+    }
+
+    /// Delete PTZ tour step
+    pub async fn delete_ptz_tour_step(&self, step_id: &str) -> Result<()> {
+        sqlx::query!("DELETE FROM ptz_tour_steps WHERE step_id = $1", step_id)
+            .execute(&self.pool)
+            .await
+            .context("failed to delete PTZ tour step")?;
+
+        Ok(())
+    }
+
+    /// Reorder PTZ tour steps
+    pub async fn reorder_ptz_tour_steps(&self, tour_id: &str, step_ids: Vec<String>) -> Result<()> {
+        let mut tx = self.pool.begin().await?;
+
+        for (idx, step_id) in step_ids.iter().enumerate() {
+            sqlx::query!(
+                "UPDATE ptz_tour_steps SET sequence_order = $1 WHERE step_id = $2 AND tour_id = $3",
+                idx as i32,
+                step_id,
+                tour_id
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
     }
 }
 

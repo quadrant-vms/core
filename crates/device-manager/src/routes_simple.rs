@@ -1,6 +1,7 @@
 // Simplified routes without auth for initial implementation
 // TODO: Add proper authentication using auth-service integration
 
+use crate::ptz_client::create_ptz_client;
 use crate::state::DeviceManagerState;
 use crate::types::*;
 use axum::{
@@ -28,6 +29,31 @@ pub fn router(state: DeviceManagerState) -> Router {
         .route("/v1/devices/:device_id/health", get(get_device_health))
         .route("/v1/devices/:device_id/health/history", get(get_health_history))
         .route("/v1/devices/batch", put(batch_update_devices))
+        // PTZ Control routes
+        .route("/v1/devices/:device_id/ptz/move", post(ptz_move))
+        .route("/v1/devices/:device_id/ptz/stop", post(ptz_stop))
+        .route("/v1/devices/:device_id/ptz/zoom", post(ptz_zoom))
+        .route("/v1/devices/:device_id/ptz/absolute", post(ptz_goto_absolute))
+        .route("/v1/devices/:device_id/ptz/home", post(ptz_goto_home))
+        .route("/v1/devices/:device_id/ptz/status", get(ptz_get_status))
+        .route("/v1/devices/:device_id/ptz/capabilities", get(ptz_get_capabilities))
+        // PTZ Preset routes
+        .route("/v1/devices/:device_id/ptz/presets", post(create_ptz_preset))
+        .route("/v1/devices/:device_id/ptz/presets", get(list_ptz_presets))
+        .route("/v1/devices/:device_id/ptz/presets/:preset_id", get(get_ptz_preset))
+        .route("/v1/devices/:device_id/ptz/presets/:preset_id", put(update_ptz_preset))
+        .route("/v1/devices/:device_id/ptz/presets/:preset_id", delete(delete_ptz_preset))
+        .route("/v1/devices/:device_id/ptz/presets/:preset_id/goto", post(goto_ptz_preset))
+        // PTZ Tour routes
+        .route("/v1/devices/:device_id/ptz/tours", post(create_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours", get(list_ptz_tours))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id", get(get_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id", put(update_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id", delete(delete_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/steps", post(add_ptz_tour_step))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/steps/:step_id", delete(delete_ptz_tour_step))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/start", post(start_ptz_tour))
+        .route("/v1/devices/:device_id/ptz/tours/:tour_id/stop", post(stop_ptz_tour))
         .with_state(state)
 }
 
@@ -298,4 +324,315 @@ async fn batch_update_devices(
 
     let response = BatchUpdateResponse { succeeded, failed };
     (StatusCode::OK, Json(response)).into_response()
+}
+
+// PTZ Control Handlers
+
+async fn ptz_move(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<PtzMoveRequest>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.move_camera(&req).await {
+            Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_stop(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<PtzStopRequest>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.stop(&req).await {
+            Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_zoom(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<PtzZoomRequest>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.zoom(&req).await {
+            Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_goto_absolute(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<PtzAbsolutePositionRequest>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.goto_absolute_position(&req).await {
+            Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_goto_home(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.goto_home().await {
+            Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_get_status(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.get_status().await {
+            Ok(status) => (StatusCode::OK, Json(status)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+async fn ptz_get_capabilities(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.get_capabilities().await {
+            Ok(capabilities) => (StatusCode::OK, Json(capabilities)).into_response(),
+            Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => response,
+    }
+}
+
+// PTZ Preset Handlers
+
+async fn create_ptz_preset(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<CreatePtzPresetRequest>,
+) -> impl IntoResponse {
+    let position = match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => match client.get_status().await {
+            Ok(status) => status.position,
+            Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        },
+        Err(response) => return response,
+    };
+
+    match state.store.create_ptz_preset(&device_id, req, position).await {
+        Ok(preset) => (StatusCode::CREATED, Json(preset)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn list_ptz_presets(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    match state.store.list_ptz_presets(&device_id).await {
+        Ok(presets) => (StatusCode::OK, Json(presets)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn get_ptz_preset(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, preset_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.store.get_ptz_preset(&preset_id).await {
+        Ok(Some(preset)) => (StatusCode::OK, Json(preset)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, Json(json!({"error": "preset not found"}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn update_ptz_preset(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, preset_id)): Path<(String, String)>,
+    Json(req): Json<UpdatePtzPresetRequest>,
+) -> impl IntoResponse {
+    match state.store.update_ptz_preset(&preset_id, req).await {
+        Ok(preset) => (StatusCode::OK, Json(preset)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn delete_ptz_preset(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, preset_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.store.delete_ptz_preset(&preset_id).await {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn goto_ptz_preset(
+    State(state): State<DeviceManagerState>,
+    Path((device_id, preset_id)): Path<(String, String)>,
+    Json(req): Json<GotoPresetRequest>,
+) -> impl IntoResponse {
+    let preset = match state.store.get_ptz_preset(&preset_id).await {
+        Ok(Some(preset)) => preset,
+        Ok(None) => return (StatusCode::NOT_FOUND, Json(json!({"error": "preset not found"}))).into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    };
+
+    match get_device_and_create_client(&state, &device_id).await {
+        Ok(client) => {
+            let absolute_req = PtzAbsolutePositionRequest {
+                pan: preset.position.pan,
+                tilt: preset.position.tilt,
+                zoom: preset.position.zoom,
+                speed: req.speed,
+            };
+            match client.goto_absolute_position(&absolute_req).await {
+                Ok(_) => (StatusCode::OK, Json(json!({"status": "ok"}))).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+            }
+        }
+        Err(response) => response,
+    }
+}
+
+// PTZ Tour Handlers
+
+async fn create_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(req): Json<CreatePtzTourRequest>,
+) -> impl IntoResponse {
+    match state.store.create_ptz_tour(&device_id, req).await {
+        Ok(tour) => (StatusCode::CREATED, Json(tour)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn list_ptz_tours(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    match state.store.list_ptz_tours(&device_id).await {
+        Ok(tours) => (StatusCode::OK, Json(tours)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn get_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let tour = match state.store.get_ptz_tour(&tour_id).await {
+        Ok(Some(tour)) => tour,
+        Ok(None) => return (StatusCode::NOT_FOUND, Json(json!({"error": "tour not found"}))).into_response(),
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    };
+
+    let steps = match state.store.get_ptz_tour_steps(&tour_id).await {
+        Ok(steps) => steps,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    };
+
+    (StatusCode::OK, Json(json!({"tour": tour, "steps": steps}))).into_response()
+}
+
+async fn update_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+    Json(req): Json<UpdatePtzTourRequest>,
+) -> impl IntoResponse {
+    match state.store.update_ptz_tour(&tour_id, req).await {
+        Ok(tour) => (StatusCode::OK, Json(tour)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn delete_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.store.delete_ptz_tour(&tour_id).await {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn add_ptz_tour_step(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+    Json(req): Json<AddTourStepRequest>,
+) -> impl IntoResponse {
+    match state.store.add_ptz_tour_step(&tour_id, req).await {
+        Ok(step) => (StatusCode::CREATED, Json(step)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn delete_ptz_tour_step(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, _tour_id, step_id)): Path<(String, String, String)>,
+) -> impl IntoResponse {
+    match state.store.delete_ptz_tour_step(&step_id).await {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn start_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.store.update_ptz_tour_state(&tour_id, TourState::Running).await {
+        Ok(_) => (StatusCode::OK, Json(json!({"status": "started"}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn stop_ptz_tour(
+    State(state): State<DeviceManagerState>,
+    Path((_device_id, tour_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    match state.store.update_ptz_tour_state(&tour_id, TourState::Stopped).await {
+        Ok(_) => (StatusCode::OK, Json(json!({"status": "stopped"}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+// Helper function
+async fn get_device_and_create_client(
+    state: &DeviceManagerState,
+    device_id: &str,
+) -> Result<std::sync::Arc<dyn crate::ptz_client::PtzClient>, axum::response::Response> {
+    let device = match state.store.get_device(device_id).await {
+        Ok(Some(device)) => device,
+        Ok(None) => return Err((StatusCode::NOT_FOUND, Json(json!({"error": "device not found"}))).into_response()),
+        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()),
+    };
+
+    let username = device.username.clone();
+    let password = device.password_encrypted.as_ref().and_then(|enc| state.store.decrypt_password(enc).ok());
+
+    match create_ptz_client(&device.protocol, &device.primary_uri, username, password) {
+        Ok(client) => Ok(client),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()),
+    }
 }
