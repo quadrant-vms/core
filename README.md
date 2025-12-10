@@ -166,25 +166,67 @@ This project is **under active development**.
     - `ENABLE_STATE_STORE=true` to enable state persistence
     - `ORPHAN_CLEANUP_INTERVAL_SECS=300` for cleanup interval (default: 5 minutes)
 
-### 🔜 In Progress
+- **Authentication & Authorization System**:
+  - `auth-service`: Centralized authentication service
+    - **User management**: Create, read, update, delete users
+    - **JWT-based authentication**: Secure token-based API access
+    - **API tokens**: Long-lived tokens for service-to-service authentication
+    - **Role-Based Access Control (RBAC)**: Fine-grained permission system
+    - **Multi-tenancy support**: Isolated tenant environments with resource quotas
+    - **Audit logging**: Complete security audit trail for compliance
+    - **PostgreSQL-backed storage**: Users, roles, permissions, tenants, tokens, audit logs
+    - **OIDC/OAuth2 SSO Integration**: Single Sign-On with external identity providers
+      - Google Workspace / Google Identity support
+      - Microsoft Azure AD / Entra ID support
+      - Keycloak support
+      - Generic custom OIDC provider support
+      - Automatic user provisioning on first SSO login
+      - OIDC identity linking and management
+      - CSRF-protected authorization flow
+  - **auth_middleware** (common crate): Shared authentication middleware
+    - JWT token verification and validation
+    - Permission checking utilities
+    - Request context injection
+    - Support for both JWT and API token authentication
+  - **Comprehensive permission system**:
+    - Resource-based permissions (stream, recording, ai_task, user, role, tenant, audit)
+    - Action-based controls (read, create, update, delete)
+    - Built-in roles: System Administrator, Operator, Viewer
+    - Custom role creation and management
+    - Permission inheritance through roles
+    - System admin bypass for all permission checks
+  - **Tenant isolation**:
+    - Separate users and roles per tenant
+    - Resource quotas (max_users, max_streams, max_recordings, max_ai_tasks)
+    - Tenant-scoped audit logs
+    - Cross-tenant access only for system admins
+  - **Security features**:
+    - Argon2 password hashing
+    - Secure API token generation (cryptographically random)
+    - Token expiration and revocation
+    - Configurable JWT expiration (default: 1 hour)
+    - Last login tracking
+    - Audit log with IP address and user agent tracking
+  - **Default system setup**:
+    - System tenant pre-configured
+    - Default admin user (username: admin, password: admin123 - CHANGE IN PRODUCTION!)
+    - Built-in roles: system-admin, operator, viewer
+    - 25 default permissions covering all resources
+  - **Integration tests** (`tests/auth_integration.rs`):
+    - JWT generation and verification
+    - Password hashing and validation
+    - API token lifecycle
+    - Permission checking logic
+    - System admin privilege escalation
+  - **Complete documentation** in `docs/AUTHENTICATION.md`
+  - **REST API** for all auth operations
+  - **Environment variables**:
+    - `DATABASE_URL` - PostgreSQL connection string
+    - `JWT_SECRET` - Secret key for JWT signing (CHANGE IN PRODUCTION!)
+    - `JWT_EXPIRATION_SECS` - Token expiration time (default: 3600)
+    - `AUTH_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8083)
 
-#### Current Focus: Authentication & Authorization
-- **Phase 1: Research & Design**
-  - Design authentication architecture (centralized vs distributed)
-  - Research Rust auth libraries (jsonwebtoken, oauth2, oidc-client)
-  - Design database schema for users, roles, permissions, and tenants
-- **Phase 2: Core Authentication**
-  - Implement user authentication (API tokens + JWT)
-  - Implement OIDC/OAuth2 integration for SSO
-- **Phase 3: Authorization**
-  - Implement RBAC (Role-Based Access Control) system
-  - Add tenant isolation and multi-tenancy support
-- **Phase 4: Integration**
-  - Create auth middleware for all REST APIs
-  - Implement audit logging system
-- **Phase 5: Testing & Documentation**
-  - Add auth integration tests
-  - Update documentation with auth configuration guide
+### 🔜 In Progress
 
 #### Upcoming Features
 - Device & topology management: camera onboarding/probing, health checks/alerts, PTZ/config push, batch updates
