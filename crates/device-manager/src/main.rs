@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
-use device_manager::{DeviceManagerState, DeviceProber, DeviceStore, HealthMonitor, TourExecutor};
+use device_manager::{
+    DeviceManagerState, DeviceProber, DeviceStore, HealthMonitor, OnvifDiscoveryClient,
+    TourExecutor,
+};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -37,6 +40,11 @@ async fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(10);
 
+    let discovery_timeout_secs = std::env::var("DISCOVERY_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(5);
+
     // Initialize store
     info!("connecting to database");
     let store = Arc::new(DeviceStore::new(&database_url).await?);
@@ -47,8 +55,16 @@ async fn main() -> Result<()> {
     // Initialize tour executor
     let tour_executor = Arc::new(TourExecutor::new(Arc::clone(&store), ptz_timeout_secs));
 
+    // Initialize discovery client
+    let discovery_client = Arc::new(OnvifDiscoveryClient::new(discovery_timeout_secs));
+
     // Create state
-    let state = DeviceManagerState::new(Arc::clone(&store), Arc::clone(&prober), Arc::clone(&tour_executor));
+    let state = DeviceManagerState::new(
+        Arc::clone(&store),
+        Arc::clone(&prober),
+        Arc::clone(&tour_executor),
+        Arc::clone(&discovery_client),
+    );
 
     // Start health monitor in background
     let health_monitor = HealthMonitor::new(

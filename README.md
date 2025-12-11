@@ -300,10 +300,29 @@ This project is **under active development**.
   - **Environment variables**:
     - `PTZ_TIMEOUT_SECS` - PTZ command timeout (default: 10)
 
+- **ONVIF Device Discovery** (device-manager):
+  - **WS-Discovery protocol**: Automatic network scanning for ONVIF-compliant devices
+  - **UDP multicast probe**: Discovers cameras, NVRs, and encoders on local network
+  - **Device metadata extraction**: Manufacturer, model, hardware ID, location from ONVIF scopes
+  - **Asynchronous scanning**: Background discovery with non-blocking API
+  - **Scan management**: Start, cancel, and track multiple discovery scans
+  - **PostgreSQL-backed storage**: Persistent storage of discovery scans and found devices
+  - **Device import workflow**: Discovered devices can be imported into device registry
+  - **REST API endpoints**:
+    - `POST /v1/discovery/scan` - Start new discovery scan
+    - `GET /v1/discovery/scans` - List all discovery scans
+    - `GET /v1/discovery/scans/:scan_id` - Get scan status and details
+    - `GET /v1/discovery/scans/:scan_id/devices` - List discovered devices for a scan
+    - `POST /v1/discovery/scans/:scan_id/cancel` - Cancel running scan
+  - **GetDeviceInformation support**: Fetch detailed device info via ONVIF
+  - **Automatic cleanup**: Configurable retention for old discovery data
+  - **Environment variables**:
+    - `DISCOVERY_TIMEOUT_SECS` - Discovery scan timeout (default: 5)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **Advanced device control**: Camera configuration push, firmware update management, ONVIF device discovery
+- **Advanced device control**: Camera configuration push, firmware update management
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata

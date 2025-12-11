@@ -29,6 +29,12 @@ pub fn router(state: DeviceManagerState) -> Router {
         .route("/v1/devices/:device_id/health", get(get_device_health))
         .route("/v1/devices/:device_id/health/history", get(get_health_history))
         .route("/v1/devices/batch", put(batch_update_devices))
+        // Discovery routes
+        .route("/v1/discovery/scan", post(start_discovery_scan))
+        .route("/v1/discovery/scans", get(list_discovery_scans))
+        .route("/v1/discovery/scans/:scan_id", get(get_discovery_scan))
+        .route("/v1/discovery/scans/:scan_id/devices", get(get_discovered_devices))
+        .route("/v1/discovery/scans/:scan_id/cancel", post(cancel_discovery_scan))
         // PTZ Control routes
         .route("/v1/devices/:device_id/ptz/move", post(ptz_move))
         .route("/v1/devices/:device_id/ptz/stop", post(ptz_stop))
@@ -659,6 +665,142 @@ async fn resume_ptz_tour(
         Err(e) => {
             error!("failed to resume tour: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()
+        }
+    }
+}
+
+// Discovery endpoints
+
+async fn start_discovery_scan(
+    State(state): State<DeviceManagerState>,
+) -> impl IntoResponse {
+    info!("starting ONVIF device discovery scan");
+
+    // Start scan
+    let scan_id = match state.discovery_client.start_scan().await {
+        Ok(id) => id,
+        Err(e) => {
+            error!("failed to start discovery scan: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    // Spawn background task to perform discovery
+    let discovery_client = state.discovery_client.clone();
+    let store = state.store.clone();
+    let scan_id_clone = scan_id.clone();
+
+    tokio::spawn(async move {
+        match discovery_client.discover_devices(&scan_id_clone).await {
+            Ok(result) => {
+                info!(
+                    scan_id = %scan_id_clone,
+                    devices_found = result.total_found,
+                    "discovery scan completed"
+                );
+
+                // Save scan to database
+                if let Some(scan) = discovery_client.get_scan_status(&scan_id_clone).await {
+                    if let Err(e) = store.save_discovery_scan(&scan).await {
+                        error!("failed to save discovery scan: {}", e);
+                    }
+                }
+
+                // Save discovered devices to database
+                for device in result.devices {
+                    if let Err(e) = store.save_discovered_device(&scan_id_clone, &device).await {
+                        error!("failed to save discovered device: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                error!(scan_id = %scan_id_clone, error = %e, "discovery scan failed");
+            }
+        }
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({
+            "scan_id": scan_id,
+            "status": "running",
+            "message": "Discovery scan started"
+        })),
+    )
+        .into_response()
+}
+
+async fn list_discovery_scans(
+    State(state): State<DeviceManagerState>,
+) -> impl IntoResponse {
+    match state.discovery_client.list_scans().await {
+        scans => {
+            info!(count = scans.len(), "listed discovery scans");
+            (StatusCode::OK, Json(json!({"scans": scans}))).into_response()
+        }
+    }
+}
+
+async fn get_discovery_scan(
+    State(state): State<DeviceManagerState>,
+    Path(scan_id): Path<String>,
+) -> impl IntoResponse {
+    match state.discovery_client.get_scan_status(&scan_id).await {
+        Some(scan) => {
+            info!(scan_id = %scan_id, "retrieved discovery scan");
+            (StatusCode::OK, Json(scan)).into_response()
+        }
+        None => {
+            error!(scan_id = %scan_id, "discovery scan not found");
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "scan not found"})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_discovered_devices(
+    State(state): State<DeviceManagerState>,
+    Path(scan_id): Path<String>,
+) -> impl IntoResponse {
+    match state.store.list_discovered_devices(&scan_id).await {
+        Ok(devices) => {
+            info!(scan_id = %scan_id, count = devices.len(), "listed discovered devices");
+            (StatusCode::OK, Json(json!({"devices": devices}))).into_response()
+        }
+        Err(e) => {
+            error!(scan_id = %scan_id, error = %e, "failed to list discovered devices");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn cancel_discovery_scan(
+    State(state): State<DeviceManagerState>,
+    Path(scan_id): Path<String>,
+) -> impl IntoResponse {
+    match state.discovery_client.cancel_scan(&scan_id).await {
+        Ok(_) => {
+            info!(scan_id = %scan_id, "discovery scan cancelled");
+            (StatusCode::OK, Json(json!({"status": "cancelled"}))).into_response()
+        }
+        Err(e) => {
+            error!(scan_id = %scan_id, error = %e, "failed to cancel scan");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
         }
     }
 }

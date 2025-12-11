@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE discovered_devices\n            SET imported = TRUE, imported_device_id = $1, imported_at = NOW()\n            WHERE discovery_id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d993f6f05b68ad76c89df95d3e46656aa34024a0d595538d96715142682c86b5"
+}

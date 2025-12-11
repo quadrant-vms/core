@@ -820,6 +820,208 @@ impl DeviceStore {
         tx.commit().await?;
         Ok(())
     }
+
+    /// Save discovery scan to database
+    pub async fn save_discovery_scan(&self, scan: &crate::discovery::DiscoveryScan) -> Result<()> {
+        sqlx::query!(
+            r#"
+            INSERT INTO discovery_scans (scan_id, started_at, completed_at, devices_found, status, error_message)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (scan_id) DO UPDATE SET
+                completed_at = EXCLUDED.completed_at,
+                devices_found = EXCLUDED.devices_found,
+                status = EXCLUDED.status,
+                error_message = EXCLUDED.error_message
+            "#,
+            scan.scan_id,
+            scan.started_at,
+            scan.completed_at,
+            scan.devices_found as i32,
+            format!("{:?}", scan.status).to_lowercase(),
+            scan.error_message
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to save discovery scan")?;
+
+        Ok(())
+    }
+
+    /// Get discovery scan by ID
+    pub async fn get_discovery_scan(&self, scan_id: &str) -> Result<Option<crate::discovery::DiscoveryScan>> {
+        let row = sqlx::query!(
+            r#"
+            SELECT scan_id, started_at, completed_at, devices_found, status, error_message
+            FROM discovery_scans
+            WHERE scan_id = $1
+            "#,
+            scan_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to get discovery scan")?;
+
+        Ok(row.map(|r| crate::discovery::DiscoveryScan {
+            scan_id: r.scan_id,
+            started_at: r.started_at,
+            completed_at: r.completed_at,
+            devices_found: r.devices_found as usize,
+            status: match r.status.as_str() {
+                "running" => crate::discovery::DiscoveryScanStatus::Running,
+                "completed" => crate::discovery::DiscoveryScanStatus::Completed,
+                "failed" => crate::discovery::DiscoveryScanStatus::Failed,
+                "cancelled" => crate::discovery::DiscoveryScanStatus::Cancelled,
+                _ => crate::discovery::DiscoveryScanStatus::Failed,
+            },
+            error_message: r.error_message,
+        }))
+    }
+
+    /// List all discovery scans
+    pub async fn list_discovery_scans(&self, limit: Option<i64>) -> Result<Vec<crate::discovery::DiscoveryScan>> {
+        let limit = limit.unwrap_or(100);
+
+        let rows = sqlx::query!(
+            r#"
+            SELECT scan_id, started_at, completed_at, devices_found, status, error_message
+            FROM discovery_scans
+            ORDER BY started_at DESC
+            LIMIT $1
+            "#,
+            limit
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list discovery scans")?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::discovery::DiscoveryScan {
+                scan_id: r.scan_id,
+                started_at: r.started_at,
+                completed_at: r.completed_at,
+                devices_found: r.devices_found as usize,
+                status: match r.status.as_str() {
+                    "running" => crate::discovery::DiscoveryScanStatus::Running,
+                    "completed" => crate::discovery::DiscoveryScanStatus::Completed,
+                    "failed" => crate::discovery::DiscoveryScanStatus::Failed,
+                    "cancelled" => crate::discovery::DiscoveryScanStatus::Cancelled,
+                    _ => crate::discovery::DiscoveryScanStatus::Failed,
+                },
+                error_message: r.error_message,
+            })
+            .collect())
+    }
+
+    /// Save discovered device to database
+    pub async fn save_discovered_device(
+        &self,
+        scan_id: &str,
+        device: &crate::discovery::DiscoveredDevice,
+    ) -> Result<String> {
+        let discovery_id = Uuid::new_v4().to_string();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO discovered_devices (
+                discovery_id, scan_id, device_service_url, scopes, types, xaddrs,
+                manufacturer, model, hardware_id, name, location, discovered_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            "#,
+            discovery_id,
+            scan_id,
+            device.device_service_url,
+            &device.scopes,
+            &device.types,
+            &device.xaddrs,
+            device.manufacturer,
+            device.model,
+            device.hardware_id,
+            device.name,
+            device.location,
+            device.discovered_at
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to save discovered device")?;
+
+        Ok(discovery_id)
+    }
+
+    /// List discovered devices for a scan
+    pub async fn list_discovered_devices(
+        &self,
+        scan_id: &str,
+    ) -> Result<Vec<crate::discovery::DiscoveredDevice>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT device_service_url, scopes, types, xaddrs, manufacturer, model,
+                   hardware_id, name, location, discovered_at
+            FROM discovered_devices
+            WHERE scan_id = $1
+            ORDER BY discovered_at DESC
+            "#,
+            scan_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list discovered devices")?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| crate::discovery::DiscoveredDevice {
+                device_service_url: r.device_service_url,
+                scopes: r.scopes,
+                types: r.types,
+                xaddrs: r.xaddrs,
+                manufacturer: r.manufacturer,
+                model: r.model,
+                hardware_id: r.hardware_id,
+                name: r.name,
+                location: r.location,
+                discovered_at: r.discovered_at,
+            })
+            .collect())
+    }
+
+    /// Mark discovered device as imported
+    pub async fn mark_discovered_device_imported(
+        &self,
+        discovery_id: &str,
+        device_id: &str,
+    ) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE discovered_devices
+            SET imported = TRUE, imported_device_id = $1, imported_at = NOW()
+            WHERE discovery_id = $2
+            "#,
+            device_id,
+            discovery_id
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to mark device as imported")?;
+
+        Ok(())
+    }
+
+    /// Delete old discovery scans and their discovered devices
+    pub async fn cleanup_old_discovery_scans(&self, days: i32) -> Result<u64> {
+        let result = sqlx::query!(
+            r#"
+            DELETE FROM discovery_scans
+            WHERE started_at < NOW() - INTERVAL '1 day' * $1
+            "#,
+            days as f64
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to cleanup old discovery scans")?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]

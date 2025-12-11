@@ -1,0 +1,278 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE devices\n            SET\n                name = COALESCE($2, name),\n                manufacturer = COALESCE($3, manufacturer),\n                model = COALESCE($4, model),\n                firmware_version = COALESCE($5, firmware_version),\n                primary_uri = COALESCE($6, primary_uri),\n                secondary_uri = COALESCE($7, secondary_uri),\n                username = COALESCE($8, username),\n                password_encrypted = COALESCE($9, password_encrypted),\n                location = COALESCE($10, location),\n                zone = COALESCE($11, zone),\n                tags = COALESCE($12, tags),\n                description = COALESCE($13, description),\n                notes = COALESCE($14, notes),\n                health_check_interval_secs = COALESCE($15, health_check_interval_secs),\n                auto_start = COALESCE($16, auto_start),\n                recording_enabled = COALESCE($17, recording_enabled),\n                ai_enabled = COALESCE($18, ai_enabled),\n                status = COALESCE($19, status),\n                metadata = COALESCE($20, metadata),\n                updated_at = NOW()\n            WHERE device_id = $1\n            RETURNING\n                device_id as \"device_id!\", tenant_id as \"tenant_id!\", name as \"name!\",\n                device_type as \"device_type!: DeviceType\",\n                manufacturer, model, firmware_version,\n                primary_uri as \"primary_uri!\", secondary_uri,\n                protocol as \"protocol!: ConnectionProtocol\",\n                username, password_encrypted,\n                location, zone, tags as \"tags!\",\n                status as \"status!: DeviceStatus\",\n                last_seen_at, last_health_check_at,\n                health_check_interval_secs as \"health_check_interval_secs!\", consecutive_failures as \"consecutive_failures!\",\n                capabilities, video_codecs as \"video_codecs!\", audio_codecs as \"audio_codecs!\", resolutions as \"resolutions!\",\n                description, notes, metadata,\n                auto_start as \"auto_start!\", recording_enabled as \"recording_enabled!\", ai_enabled as \"ai_enabled!\",\n                created_at as \"created_at!\", updated_at as \"updated_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "device_type!: DeviceType",
+        "type_info": {
+          "Custom": {
+            "name": "device_type",
+            "kind": {
+              "Enum": [
+                "camera",
+                "nvr",
+                "encoder",
+                "other"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "manufacturer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "firmware_version",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "primary_uri!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "secondary_uri",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "protocol!: ConnectionProtocol",
+        "type_info": {
+          "Custom": {
+            "name": "connection_protocol",
+            "kind": {
+              "Enum": [
+                "rtsp",
+                "onvif",
+                "http",
+                "rtmp",
+                "webrtc"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "password_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "location",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "zone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "tags!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "status!: DeviceStatus",
+        "type_info": {
+          "Custom": {
+            "name": "device_status",
+            "kind": {
+              "Enum": [
+                "online",
+                "offline",
+                "error",
+                "maintenance",
+                "provisioning"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "last_seen_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "last_health_check_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 18,
+        "name": "health_check_interval_secs!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 19,
+        "name": "consecutive_failures!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 20,
+        "name": "capabilities",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 21,
+        "name": "video_codecs!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 22,
+        "name": "audio_codecs!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 23,
+        "name": "resolutions!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 24,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 25,
+        "name": "notes",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 26,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 27,
+        "name": "auto_start!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 28,
+        "name": "recording_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 29,
+        "name": "ai_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 30,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 31,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text",
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bool",
+        {
+          "Custom": {
+            "name": "device_status",
+            "kind": {
+              "Enum": [
+                "online",
+                "offline",
+                "error",
+                "maintenance",
+                "provisioning"
+              ]
+            }
+          }
+        },
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "45f78be90676fe50d593d6621420a8991db39f9cdeb0f6a8cb7ddeed506ddef1"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM ptz_presets WHERE preset_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cf50ed29b788867255e59dbf515d56198e7704dc6a6fd09a0d0f74647ccafa2"
+}

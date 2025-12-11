@@ -1,0 +1,75 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT tour_id as \"tour_id!\", device_id as \"device_id!\", name as \"name!\", description,\n                   state as \"state!: TourState\",\n                   loop_enabled as \"loop_enabled!\", created_at as \"created_at!\", updated_at as \"updated_at!\"\n            FROM ptz_tours\n            WHERE device_id = $1\n            ORDER BY name ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tour_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state!: TourState",
+        "type_info": {
+          "Custom": {
+            "name": "tour_state",
+            "kind": {
+              "Enum": [
+                "stopped",
+                "running",
+                "paused"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "loop_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "cf0dbe4184bf91370386348c38d598eaa31b7469bfcbd2f09352caf50c6ebd54"
+}

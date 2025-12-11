@@ -1,3 +1,4 @@
+pub mod discovery;
 pub mod health_monitor;
 pub mod prober;
 pub mod ptz_client;
@@ -8,6 +9,7 @@ pub mod store;
 pub mod tour_executor;
 pub mod types;
 
+pub use discovery::OnvifDiscoveryClient;
 pub use health_monitor::HealthMonitor;
 pub use prober::DeviceProber;
 pub use ptz_client::{create_ptz_client, PtzClient};
