@@ -1222,6 +1222,429 @@ impl DeviceStore {
 
         Ok(result.rows_affected())
     }
+
+    // ============================================================================
+    // Firmware Update Operations
+    // ============================================================================
+
+    /// Create a new firmware update record
+    pub async fn create_firmware_update(
+        &self,
+        device_id: &str,
+        firmware_version: &str,
+        firmware_file_path: &str,
+        firmware_file_size: i64,
+        firmware_checksum: &str,
+        previous_firmware_version: Option<&str>,
+        manufacturer: Option<&str>,
+        model: Option<&str>,
+        release_notes: Option<&str>,
+        initiated_by: Option<&str>,
+        max_retries: i32,
+    ) -> Result<FirmwareUpdate> {
+        let update_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let update = sqlx::query_as!(
+            FirmwareUpdate,
+            r#"
+            INSERT INTO firmware_updates (
+                update_id, device_id, firmware_version, firmware_file_path,
+                firmware_file_size, firmware_checksum, status, progress_percent,
+                retry_count, max_retries, previous_firmware_version,
+                manufacturer, model, release_notes, initiated_by, initiated_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, 'pending', 0, 0, $7, $8, $9, $10, $11, $12, $13, $13)
+            RETURNING
+                update_id, device_id, firmware_version, firmware_file_path,
+                firmware_file_size, firmware_checksum,
+                status as "status!: FirmwareUpdateStatus",
+                progress_percent, error_message, retry_count, max_retries,
+                previous_firmware_version, manufacturer, model, release_notes, release_date,
+                can_rollback, rollback_data,
+                initiated_by, initiated_at, started_at, completed_at, updated_at
+            "#,
+            update_id,
+            device_id,
+            firmware_version,
+            firmware_file_path,
+            firmware_file_size,
+            firmware_checksum,
+            max_retries,
+            previous_firmware_version,
+            manufacturer,
+            model,
+            release_notes,
+            initiated_by,
+            now
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to create firmware update")?;
+
+        Ok(update)
+    }
+
+    /// Update firmware update status
+    pub async fn update_firmware_status(
+        &self,
+        update_id: &str,
+        status: FirmwareUpdateStatus,
+        progress_percent: i32,
+        error_message: Option<&str>,
+    ) -> Result<()> {
+        let status_str = status.to_string();
+        let now = Utc::now();
+
+        let mut started_at: Option<chrono::DateTime<Utc>> = None;
+        let mut completed_at: Option<chrono::DateTime<Utc>> = None;
+
+        // Set started_at if moving to installing status
+        if status == FirmwareUpdateStatus::Installing {
+            started_at = Some(now);
+        }
+
+        // Set completed_at if moving to terminal status
+        if matches!(status, FirmwareUpdateStatus::Completed | FirmwareUpdateStatus::Failed | FirmwareUpdateStatus::Cancelled) {
+            completed_at = Some(now);
+        }
+
+        if let Some(started_at_val) = started_at {
+            sqlx::query!(
+                r#"
+                UPDATE firmware_updates
+                SET status = $2, progress_percent = $3, error_message = $4, started_at = $5, updated_at = CURRENT_TIMESTAMP
+                WHERE update_id = $1
+                "#,
+                update_id,
+                status_str,
+                progress_percent,
+                error_message,
+                started_at_val
+            )
+            .execute(&self.pool)
+            .await
+            .context("failed to update firmware status")?;
+        } else if let Some(completed_at_val) = completed_at {
+            sqlx::query!(
+                r#"
+                UPDATE firmware_updates
+                SET status = $2, progress_percent = $3, error_message = $4, completed_at = $5, updated_at = CURRENT_TIMESTAMP
+                WHERE update_id = $1
+                "#,
+                update_id,
+                status_str,
+                progress_percent,
+                error_message,
+                completed_at_val
+            )
+            .execute(&self.pool)
+            .await
+            .context("failed to update firmware status")?;
+        } else {
+            sqlx::query!(
+                r#"
+                UPDATE firmware_updates
+                SET status = $2, progress_percent = $3, error_message = $4, updated_at = CURRENT_TIMESTAMP
+                WHERE update_id = $1
+                "#,
+                update_id,
+                status_str,
+                progress_percent,
+                error_message
+            )
+            .execute(&self.pool)
+            .await
+            .context("failed to update firmware status")?;
+        }
+
+        Ok(())
+    }
+
+    /// Get firmware update by ID
+    pub async fn get_firmware_update(&self, update_id: &str) -> Result<FirmwareUpdate> {
+        let update = sqlx::query_as!(
+            FirmwareUpdate,
+            r#"
+            SELECT
+                update_id, device_id, firmware_version, firmware_file_path,
+                firmware_file_size, firmware_checksum,
+                status as "status!: FirmwareUpdateStatus",
+                progress_percent, error_message, retry_count, max_retries,
+                previous_firmware_version, manufacturer, model, release_notes, release_date,
+                can_rollback, rollback_data,
+                initiated_by, initiated_at, started_at, completed_at, updated_at
+            FROM firmware_updates
+            WHERE update_id = $1
+            "#,
+            update_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to get firmware update")?;
+
+        Ok(update)
+    }
+
+    /// List firmware updates with optional filters
+    pub async fn list_firmware_updates(&self, query: &FirmwareUpdateListQuery) -> Result<Vec<FirmwareUpdate>> {
+        let limit = query.limit.unwrap_or(100);
+        let offset = query.offset.unwrap_or(0);
+
+        let status_str = query.status.as_ref().map(|s| s.to_string());
+
+        let updates = sqlx::query_as!(
+            FirmwareUpdate,
+            r#"
+            SELECT
+                update_id, device_id, firmware_version, firmware_file_path,
+                firmware_file_size, firmware_checksum,
+                status as "status!: FirmwareUpdateStatus",
+                progress_percent, error_message, retry_count, max_retries,
+                previous_firmware_version, manufacturer, model, release_notes, release_date,
+                can_rollback, rollback_data,
+                initiated_by, initiated_at, started_at, completed_at, updated_at
+            FROM firmware_updates
+            WHERE ($1::TEXT IS NULL OR device_id = $1)
+              AND ($2::TEXT IS NULL OR status = $2)
+            ORDER BY initiated_at DESC
+            LIMIT $3 OFFSET $4
+            "#,
+            query.device_id.as_deref(),
+            status_str.as_deref(),
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list firmware updates")?;
+
+        Ok(updates)
+    }
+
+    /// Get firmware update history
+    pub async fn get_firmware_update_history(&self, update_id: &str) -> Result<Vec<FirmwareUpdateHistory>> {
+        let history = sqlx::query_as!(
+            FirmwareUpdateHistory,
+            r#"
+            SELECT history_id, update_id, status, progress_percent, message, metadata, recorded_at
+            FROM firmware_update_history
+            WHERE update_id = $1
+            ORDER BY recorded_at ASC
+            "#,
+            update_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to get firmware update history")?;
+
+        Ok(history)
+    }
+
+    /// Increment retry count for firmware update
+    pub async fn increment_firmware_retry_count(&self, update_id: &str) -> Result<i32> {
+        let result = sqlx::query!(
+            r#"
+            UPDATE firmware_updates
+            SET retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP
+            WHERE update_id = $1
+            RETURNING retry_count
+            "#,
+            update_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to increment retry count")?;
+
+        Ok(result.retry_count)
+    }
+
+    /// Cancel firmware update
+    pub async fn cancel_firmware_update(&self, update_id: &str) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE firmware_updates
+            SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+            WHERE update_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')
+            "#,
+            update_id
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to cancel firmware update")?;
+
+        Ok(())
+    }
+
+    // ============================================================================
+    // Firmware File Catalog Operations
+    // ============================================================================
+
+    /// Upload firmware file to catalog
+    pub async fn create_firmware_file(
+        &self,
+        manufacturer: &str,
+        model: &str,
+        firmware_version: &str,
+        file_path: &str,
+        file_size: i64,
+        checksum: &str,
+        release_notes: Option<&str>,
+        release_date: Option<chrono::DateTime<Utc>>,
+        min_device_version: Option<&str>,
+        compatible_models: Option<&[String]>,
+        uploaded_by: Option<&str>,
+    ) -> Result<FirmwareFile> {
+        let file_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let compatible_models_arr = compatible_models.unwrap_or(&[]);
+
+        let file = sqlx::query_as!(
+            FirmwareFile,
+            r#"
+            INSERT INTO firmware_files (
+                file_id, manufacturer, model, firmware_version, file_path,
+                file_size, checksum, release_notes, release_date,
+                min_device_version, compatible_models, uploaded_by, uploaded_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            RETURNING
+                file_id, manufacturer, model, firmware_version, file_path,
+                file_size, checksum, mime_type, release_notes, release_date,
+                min_device_version, compatible_models, metadata,
+                is_verified, is_deprecated, uploaded_by, uploaded_at, verified_at
+            "#,
+            file_id,
+            manufacturer,
+            model,
+            firmware_version,
+            file_path,
+            file_size,
+            checksum,
+            release_notes,
+            release_date,
+            min_device_version,
+            compatible_models_arr,
+            uploaded_by,
+            now
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to create firmware file")?;
+
+        Ok(file)
+    }
+
+    /// Get firmware file by ID
+    pub async fn get_firmware_file(&self, file_id: &str) -> Result<FirmwareFile> {
+        let file = sqlx::query_as!(
+            FirmwareFile,
+            r#"
+            SELECT
+                file_id, manufacturer, model, firmware_version, file_path,
+                file_size, checksum, mime_type, release_notes, release_date,
+                min_device_version, compatible_models, metadata,
+                is_verified, is_deprecated, uploaded_by, uploaded_at, verified_at
+            FROM firmware_files
+            WHERE file_id = $1
+            "#,
+            file_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to get firmware file")?;
+
+        Ok(file)
+    }
+
+    /// List firmware files with optional filters
+    pub async fn list_firmware_files(&self, query: &FirmwareFileListQuery) -> Result<Vec<FirmwareFile>> {
+        let limit = query.limit.unwrap_or(100);
+        let offset = query.offset.unwrap_or(0);
+
+        let files = sqlx::query_as!(
+            FirmwareFile,
+            r#"
+            SELECT
+                file_id, manufacturer, model, firmware_version, file_path,
+                file_size, checksum, mime_type, release_notes, release_date,
+                min_device_version, compatible_models, metadata,
+                is_verified, is_deprecated, uploaded_by, uploaded_at, verified_at
+            FROM firmware_files
+            WHERE ($1::TEXT IS NULL OR manufacturer = $1)
+              AND ($2::TEXT IS NULL OR model = $2)
+              AND ($3::BOOLEAN IS NULL OR is_verified = $3)
+              AND ($4::BOOLEAN IS NULL OR is_deprecated = $4)
+            ORDER BY uploaded_at DESC
+            LIMIT $5 OFFSET $6
+            "#,
+            query.manufacturer.as_deref(),
+            query.model.as_deref(),
+            query.is_verified,
+            query.is_deprecated,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .context("failed to list firmware files")?;
+
+        Ok(files)
+    }
+
+    /// Mark firmware file as verified
+    pub async fn verify_firmware_file(&self, file_id: &str) -> Result<()> {
+        let now = Utc::now();
+
+        sqlx::query!(
+            r#"
+            UPDATE firmware_files
+            SET is_verified = true, verified_at = $2
+            WHERE file_id = $1
+            "#,
+            file_id,
+            now
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to verify firmware file")?;
+
+        Ok(())
+    }
+
+    /// Mark firmware file as deprecated
+    pub async fn deprecate_firmware_file(&self, file_id: &str) -> Result<()> {
+        sqlx::query!(
+            r#"
+            UPDATE firmware_files
+            SET is_deprecated = true
+            WHERE file_id = $1
+            "#,
+            file_id
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to deprecate firmware file")?;
+
+        Ok(())
+    }
+
+    /// Delete firmware file from catalog
+    pub async fn delete_firmware_file(&self, file_id: &str) -> Result<()> {
+        sqlx::query!(
+            r#"
+            DELETE FROM firmware_files
+            WHERE file_id = $1
+            "#,
+            file_id
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to delete firmware file")?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

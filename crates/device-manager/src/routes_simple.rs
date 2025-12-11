@@ -69,6 +69,18 @@ pub fn router(state: DeviceManagerState) -> Router {
         .route("/v1/devices/:device_id/configuration", get(get_current_configuration))
         .route("/v1/devices/:device_id/configuration/history", get(get_configuration_history))
         .route("/v1/devices/:device_id/configuration/:config_id", get(get_configuration_by_id))
+        // Firmware Management routes
+        .route("/v1/firmware/files", post(crate::firmware_routes::upload_firmware_file))
+        .route("/v1/firmware/files", get(crate::firmware_routes::list_firmware_files))
+        .route("/v1/firmware/files/:file_id", get(crate::firmware_routes::get_firmware_file))
+        .route("/v1/firmware/files/:file_id/verify", post(crate::firmware_routes::verify_firmware_file))
+        .route("/v1/firmware/files/:file_id", delete(crate::firmware_routes::delete_firmware_file))
+        .route("/v1/firmware/updates", get(crate::firmware_routes::list_firmware_updates))
+        .route("/v1/firmware/updates/:update_id", get(crate::firmware_routes::get_firmware_update))
+        .route("/v1/firmware/updates/:update_id/history", get(crate::firmware_routes::get_firmware_update_history))
+        .route("/v1/firmware/updates/:update_id/cancel", post(crate::firmware_routes::cancel_firmware_update))
+        .route("/v1/devices/:device_id/firmware/update", post(crate::firmware_routes::initiate_firmware_update))
+        .route("/v1/devices/:device_id/firmware/updates", get(crate::firmware_routes::list_device_firmware_updates))
         .with_state(state)
 }
 

@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO device_configurations (\n                config_id, device_id, requested_config, applied_config,\n                status, error_message, applied_by, created_at, applied_at\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n            RETURNING\n                config_id as \"config_id!\",\n                device_id as \"device_id!\",\n                requested_config as \"requested_config!\",\n                applied_config,\n                status as \"status!: ConfigurationStatus\",\n                error_message,\n                applied_by,\n                created_at as \"created_at!\",\n                applied_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "config_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_config!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "applied_config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: ConfigurationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "configuration_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "applied",
+                "failed",
+                "partiallyapplied"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "applied_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "applied_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        {
+          "Custom": {
+            "name": "configuration_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "applied",
+                "failed",
+                "partiallyapplied"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "3f8fddb9ab1d5b9f6541ea71b82e3d3c44eab38ed25561f8e96cbc315e254a6f"
+}

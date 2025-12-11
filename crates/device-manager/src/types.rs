@@ -497,3 +497,166 @@ pub struct ConfigurationHistoryQuery {
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
+
+// Firmware Update Types
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[sqlx(type_name = "text")]
+#[serde(rename_all = "lowercase")]
+pub enum FirmwareUpdateStatus {
+    Pending,
+    Uploading,
+    Uploaded,
+    Installing,
+    Rebooting,
+    Verifying,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl std::fmt::Display for FirmwareUpdateStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FirmwareUpdateStatus::Pending => write!(f, "pending"),
+            FirmwareUpdateStatus::Uploading => write!(f, "uploading"),
+            FirmwareUpdateStatus::Uploaded => write!(f, "uploaded"),
+            FirmwareUpdateStatus::Installing => write!(f, "installing"),
+            FirmwareUpdateStatus::Rebooting => write!(f, "rebooting"),
+            FirmwareUpdateStatus::Verifying => write!(f, "verifying"),
+            FirmwareUpdateStatus::Completed => write!(f, "completed"),
+            FirmwareUpdateStatus::Failed => write!(f, "failed"),
+            FirmwareUpdateStatus::Cancelled => write!(f, "cancelled"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FirmwareUpdate {
+    pub update_id: String,
+    pub device_id: String,
+    pub firmware_version: String,
+    pub firmware_file_path: String,
+    pub firmware_file_size: i64,
+    pub firmware_checksum: String,
+
+    // Status tracking
+    pub status: FirmwareUpdateStatus,
+    pub progress_percent: i32,
+
+    // Error handling
+    pub error_message: Option<String>,
+    pub retry_count: i32,
+    pub max_retries: i32,
+
+    // Metadata
+    pub previous_firmware_version: Option<String>,
+    pub manufacturer: Option<String>,
+    pub model: Option<String>,
+    pub release_notes: Option<String>,
+    pub release_date: Option<DateTime<Utc>>,
+
+    // Rollback support
+    pub can_rollback: bool,
+    pub rollback_data: Option<JsonValue>,
+
+    // Audit
+    pub initiated_by: Option<String>,
+    pub initiated_at: DateTime<Utc>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FirmwareUpdateHistory {
+    pub history_id: i64,
+    pub update_id: String,
+    pub status: String,
+    pub progress_percent: i32,
+    pub message: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub recorded_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FirmwareFile {
+    pub file_id: String,
+    pub manufacturer: String,
+    pub model: String,
+    pub firmware_version: String,
+
+    // File information
+    pub file_path: String,
+    pub file_size: i64,
+    pub checksum: String,
+    pub mime_type: Option<String>,
+
+    // Metadata
+    pub release_notes: Option<String>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub min_device_version: Option<String>,
+    pub compatible_models: Vec<String>,
+    pub metadata: Option<JsonValue>,
+
+    // Validation
+    pub is_verified: bool,
+    pub is_deprecated: bool,
+
+    // Timestamps
+    pub uploaded_by: Option<String>,
+    pub uploaded_at: DateTime<Utc>,
+    pub verified_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitiateFirmwareUpdateRequest {
+    pub firmware_file_id: Option<String>, // Use existing file from catalog
+    pub firmware_file: Option<Vec<u8>>,   // Or upload new file
+    pub firmware_version: String,
+    pub manufacturer: Option<String>,
+    pub model: Option<String>,
+    pub release_notes: Option<String>,
+    pub max_retries: Option<i32>,
+    pub force: bool, // Force update even if same/older version
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadFirmwareFileRequest {
+    pub manufacturer: String,
+    pub model: String,
+    pub firmware_version: String,
+    pub firmware_file_base64: Option<String>, // Base64-encoded firmware file data
+    pub release_notes: Option<String>,
+    pub release_date: Option<DateTime<Utc>>,
+    pub min_device_version: Option<String>,
+    pub compatible_models: Option<Vec<String>>,
+    pub metadata: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirmwareUpdateProgressReport {
+    pub update_id: String,
+    pub status: FirmwareUpdateStatus,
+    pub progress_percent: i32,
+    pub message: Option<String>,
+    pub estimated_time_remaining_secs: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirmwareUpdateListQuery {
+    pub device_id: Option<String>,
+    pub status: Option<FirmwareUpdateStatus>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirmwareFileListQuery {
+    pub manufacturer: Option<String>,
+    pub model: Option<String>,
+    pub is_verified: Option<bool>,
+    pub is_deprecated: Option<bool>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}

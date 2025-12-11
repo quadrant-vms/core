@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT\n                    config_id, device_id, requested_config, applied_config,\n                    status as \"status!: ConfigurationStatus\",\n                    error_message, applied_by, created_at, applied_at\n                FROM device_configurations\n                WHERE device_id = $1 AND status = $2\n                ORDER BY created_at DESC\n                LIMIT $3 OFFSET $4\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "config_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "applied_config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: ConfigurationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "configuration_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "applied",
+                "failed",
+                "partiallyapplied"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "applied_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "applied_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "configuration_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "applied",
+                "failed",
+                "partiallyapplied"
+              ]
+            }
+          }
+        },
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "80cebbde49000e0fe700bc8a7e5458295fc7cb2c9d8b098f6b624d6fa41ffda7"
+}

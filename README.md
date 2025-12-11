@@ -339,10 +339,27 @@ This project is **under active development**.
   - **Status tracking**: pending, applied, failed, partiallyapplied states
   - **Automatic triggers**: Database triggers for status updates and event logging
 
+- **Firmware Update Management** (device-manager):
+  - **Firmware file catalog**: Centralized firmware storage with versioning
+  - **Upload and validation**: SHA-256 checksum validation, file storage, metadata tracking
+  - **ONVIF firmware upgrades**: Automated firmware upload and installation for ONVIF devices
+  - **Update progress tracking**: Real-time status monitoring (pending, uploading, installing, rebooting, verifying, completed)
+  - **History and audit trail**: Complete firmware update history with timestamps and error tracking
+  - **Retry mechanism**: Configurable automatic retry logic with exponential backoff
+  - **Rollback support**: Preserve previous firmware version data for potential rollback
+  - **REST API endpoints**:
+    - Firmware file management (`/v1/firmware/files`)
+    - Firmware update operations (`/v1/firmware/updates`)
+    - Device-specific firmware updates (`/v1/devices/:device_id/firmware/update`)
+  - **Database schema**: `firmware_files`, `firmware_updates`, `firmware_update_history` tables
+  - **Background execution**: Async firmware update executor with cancellation support
+  - **Multi-protocol support**: ONVIF primary, mock client for testing
+  - **Environment variables**:
+    - `FIRMWARE_STORAGE_ROOT` - Firmware file storage location (default: ./data/firmware)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **Advanced device control**: Firmware update management
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata

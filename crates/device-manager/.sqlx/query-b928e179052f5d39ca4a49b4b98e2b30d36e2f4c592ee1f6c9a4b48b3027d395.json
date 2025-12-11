@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE firmware_updates\n            SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP\n            WHERE update_id = $1 AND status NOT IN ('completed', 'failed', 'cancelled')\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b928e179052f5d39ca4a49b4b98e2b30d36e2f4c592ee1f6c9a4b48b3027d395"
+}

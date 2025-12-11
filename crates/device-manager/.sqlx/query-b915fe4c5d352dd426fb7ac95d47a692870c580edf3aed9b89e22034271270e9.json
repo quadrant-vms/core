@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE firmware_files\n            SET is_deprecated = true\n            WHERE file_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b915fe4c5d352dd426fb7ac95d47a692870c580edf3aed9b89e22034271270e9"
+}

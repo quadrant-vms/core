@@ -1,4 +1,8 @@
 pub mod discovery;
+pub mod firmware_client;
+pub mod firmware_executor;
+pub mod firmware_routes;
+pub mod firmware_storage;
 pub mod health_monitor;
 pub mod imaging_client;
 pub mod prober;
@@ -11,6 +15,9 @@ pub mod tour_executor;
 pub mod types;
 
 pub use discovery::OnvifDiscoveryClient;
+pub use firmware_client::{create_firmware_client, FirmwareClient};
+pub use firmware_executor::FirmwareExecutor;
+pub use firmware_storage::FirmwareStorage;
 pub use health_monitor::HealthMonitor;
 pub use imaging_client::{create_imaging_client, ImagingClient};
 pub use prober::DeviceProber;

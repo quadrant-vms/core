@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE firmware_updates\n            SET retry_count = retry_count + 1, updated_at = CURRENT_TIMESTAMP\n            WHERE update_id = $1\n            RETURNING retry_count\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "retry_count",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4468cfe85b4d32de37475cc2c06a64258e67cb792dcc067b30fdc08f75a0921f"
+}

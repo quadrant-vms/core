@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use device_manager::{
-    DeviceManagerState, DeviceProber, DeviceStore, HealthMonitor, OnvifDiscoveryClient,
-    TourExecutor,
+    DeviceManagerState, DeviceProber, DeviceStore, FirmwareExecutor, FirmwareStorage,
+    HealthMonitor, OnvifDiscoveryClient, TourExecutor,
 };
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -45,6 +45,9 @@ async fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(5);
 
+    let firmware_storage_root = std::env::var("FIRMWARE_STORAGE_ROOT")
+        .unwrap_or_else(|_| "./data/firmware".to_string());
+
     // Initialize store
     info!("connecting to database");
     let store = Arc::new(DeviceStore::new(&database_url).await?);
@@ -58,12 +61,31 @@ async fn main() -> Result<()> {
     // Initialize discovery client
     let discovery_client = Arc::new(OnvifDiscoveryClient::new(discovery_timeout_secs));
 
+    // Initialize firmware storage
+    info!("initializing firmware storage at {}", firmware_storage_root);
+    let firmware_storage = Arc::new(
+        FirmwareStorage::new(&firmware_storage_root)
+            .context("failed to create firmware storage")?,
+    );
+    firmware_storage
+        .init()
+        .await
+        .context("failed to initialize firmware storage")?;
+
+    // Initialize firmware executor
+    let firmware_executor = Arc::new(FirmwareExecutor::new(
+        (*store).clone(),
+        (*firmware_storage).clone(),
+    ));
+
     // Create state
     let state = DeviceManagerState::new(
         Arc::clone(&store),
         Arc::clone(&prober),
         Arc::clone(&tour_executor),
         Arc::clone(&discovery_client),
+        Arc::clone(&firmware_executor),
+        Arc::clone(&firmware_storage),
     );
 
     // Start health monitor in background

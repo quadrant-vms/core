@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE firmware_files\n            SET is_verified = true, verified_at = $2\n            WHERE file_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4dc815d926e17125a065188871608a484f611d8774477de0a7a1ec1cb0ab7509"
+}

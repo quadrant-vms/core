@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE firmware_updates\n                SET status = $2, progress_percent = $3, error_message = $4, updated_at = CURRENT_TIMESTAMP\n                WHERE update_id = $1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "23120261f6802337a59eed4ecd40fa74c5883e4518343065e4e860645314b745"
+}
