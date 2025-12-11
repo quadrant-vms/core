@@ -1022,6 +1022,206 @@ impl DeviceStore {
 
         Ok(result.rows_affected())
     }
+
+    // Device Configuration Management
+
+    /// Save a new device configuration
+    pub async fn save_device_configuration(
+        &self,
+        config: DeviceConfiguration,
+    ) -> Result<DeviceConfiguration> {
+        let saved = sqlx::query_as!(
+            DeviceConfiguration,
+            r#"
+            INSERT INTO device_configurations (
+                config_id, device_id, requested_config, applied_config,
+                status, error_message, applied_by, created_at, applied_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING
+                config_id as "config_id!",
+                device_id as "device_id!",
+                requested_config as "requested_config!",
+                applied_config,
+                status as "status!: ConfigurationStatus",
+                error_message,
+                applied_by,
+                created_at as "created_at!",
+                applied_at
+            "#,
+            config.config_id,
+            config.device_id,
+            config.requested_config,
+            config.applied_config,
+            config.status as ConfigurationStatus,
+            config.error_message,
+            config.applied_by,
+            config.created_at,
+            config.applied_at
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to save device configuration")?;
+
+        Ok(saved)
+    }
+
+    /// Get a specific configuration by ID
+    pub async fn get_device_configuration(&self, config_id: &str) -> Result<DeviceConfiguration> {
+        let config = sqlx::query_as!(
+            DeviceConfiguration,
+            r#"
+            SELECT
+                config_id, device_id, requested_config, applied_config,
+                status as "status!: ConfigurationStatus",
+                error_message, applied_by, created_at, applied_at
+            FROM device_configurations
+            WHERE config_id = $1
+            "#,
+            config_id
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to get device configuration")?;
+
+        Ok(config)
+    }
+
+    /// Update configuration status and applied config
+    pub async fn update_device_configuration_status(
+        &self,
+        config_id: &str,
+        status: ConfigurationStatus,
+        applied_config: Option<serde_json::Value>,
+        error_message: Option<String>,
+    ) -> Result<DeviceConfiguration> {
+        let updated = sqlx::query_as!(
+            DeviceConfiguration,
+            r#"
+            UPDATE device_configurations
+            SET status = $2,
+                applied_config = $3,
+                error_message = $4
+            WHERE config_id = $1
+            RETURNING
+                config_id, device_id, requested_config, applied_config,
+                status as "status!: ConfigurationStatus",
+                error_message, applied_by, created_at, applied_at
+            "#,
+            config_id,
+            status as ConfigurationStatus,
+            applied_config,
+            error_message
+        )
+        .fetch_one(&self.pool)
+        .await
+        .context("failed to update device configuration status")?;
+
+        Ok(updated)
+    }
+
+    /// Get latest configuration for a device
+    pub async fn get_latest_device_configuration(
+        &self,
+        device_id: &str,
+    ) -> Result<Option<DeviceConfiguration>> {
+        let config = sqlx::query_as!(
+            DeviceConfiguration,
+            r#"
+            SELECT
+                config_id, device_id, requested_config, applied_config,
+                status as "status!: ConfigurationStatus",
+                error_message, applied_by, created_at, applied_at
+            FROM device_configurations
+            WHERE device_id = $1
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#,
+            device_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .context("failed to get latest device configuration")?;
+
+        Ok(config)
+    }
+
+    /// List configuration history for a device
+    pub async fn list_device_configuration_history(
+        &self,
+        query: ConfigurationHistoryQuery,
+    ) -> Result<Vec<DeviceConfiguration>> {
+        let limit = query.limit.unwrap_or(50);
+        let offset = query.offset.unwrap_or(0);
+
+        let configs = if let Some(status) = query.status {
+            sqlx::query_as!(
+                DeviceConfiguration,
+                r#"
+                SELECT
+                    config_id, device_id, requested_config, applied_config,
+                    status as "status!: ConfigurationStatus",
+                    error_message, applied_by, created_at, applied_at
+                FROM device_configurations
+                WHERE device_id = $1 AND status = $2
+                ORDER BY created_at DESC
+                LIMIT $3 OFFSET $4
+                "#,
+                query.device_id,
+                status as ConfigurationStatus,
+                limit,
+                offset
+            )
+            .fetch_all(&self.pool)
+            .await
+            .context("failed to list device configuration history")?
+        } else {
+            sqlx::query_as!(
+                DeviceConfiguration,
+                r#"
+                SELECT
+                    config_id, device_id, requested_config, applied_config,
+                    status as "status!: ConfigurationStatus",
+                    error_message, applied_by, created_at, applied_at
+                FROM device_configurations
+                WHERE device_id = $1
+                ORDER BY created_at DESC
+                LIMIT $2 OFFSET $3
+                "#,
+                query.device_id,
+                limit,
+                offset
+            )
+            .fetch_all(&self.pool)
+            .await
+            .context("failed to list device configuration history")?
+        };
+
+        Ok(configs)
+    }
+
+    /// Delete old configuration history
+    pub async fn cleanup_old_configurations(&self, device_id: &str, keep_count: i64) -> Result<u64> {
+        let result = sqlx::query!(
+            r#"
+            DELETE FROM device_configurations
+            WHERE config_id IN (
+                SELECT config_id
+                FROM device_configurations
+                WHERE device_id = $1
+                ORDER BY created_at DESC
+                OFFSET $2
+            )
+            "#,
+            device_id,
+            keep_count
+        )
+        .execute(&self.pool)
+        .await
+        .context("failed to cleanup old configurations")?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]

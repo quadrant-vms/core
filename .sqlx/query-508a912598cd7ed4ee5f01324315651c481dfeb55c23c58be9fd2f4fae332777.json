@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO device_health_history\n            (device_id, status, response_time_ms, error_message, checked_at)\n            VALUES ($1, $2, $3, $4, $5)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "device_status",
+            "kind": {
+              "Enum": [
+                "online",
+                "offline",
+                "error",
+                "maintenance",
+                "provisioning"
+              ]
+            }
+          }
+        },
+        "Int4",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "508a912598cd7ed4ee5f01324315651c481dfeb55c23c58be9fd2f4fae332777"
+}

@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                history_id as \"history_id!\",\n                device_id as \"device_id!\",\n                status as \"status!: DeviceStatus\",\n                response_time_ms,\n                error_message,\n                metadata,\n                checked_at as \"checked_at!\"\n            FROM device_health_history\n            WHERE device_id = $1\n            ORDER BY checked_at DESC\n            LIMIT $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "history_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "status!: DeviceStatus",
+        "type_info": {
+          "Custom": {
+            "name": "device_status",
+            "kind": {
+              "Enum": [
+                "online",
+                "offline",
+                "error",
+                "maintenance",
+                "provisioning"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "response_time_ms",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "checked_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2caca282e775589a6425835fffc088f606998b89f3ee9d288f2195c824a8efa6"
+}

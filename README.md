@@ -319,10 +319,30 @@ This project is **under active development**.
   - **Environment variables**:
     - `DISCOVERY_TIMEOUT_SECS` - Discovery scan timeout (default: 5)
 
+- **Camera Configuration Push** (device-manager):
+  - **ONVIF imaging service integration**: Remote camera configuration management
+  - **Video encoder configuration**: Codec (H.264/H.265/MJPEG), resolution, framerate, bitrate, GOP size, quality
+  - **Image settings**: Brightness, contrast, saturation, sharpness, hue adjustments
+  - **Advanced features**: IR mode (auto/on/off), Wide Dynamic Range (WDR) control
+  - **Audio configuration**: Enable/disable audio, codec selection, bitrate settings
+  - **Network settings**: Multicast configuration, RTSP port customization
+  - **Configuration history tracking**: PostgreSQL-backed storage of all configuration changes
+  - **Partial success handling**: Graceful handling of partially applied configurations
+  - **Audit trail**: Event logging for all configuration attempts
+  - **Multi-protocol support**: ONVIF primary, mock client for testing
+  - **REST API endpoints**:
+    - `POST /v1/devices/:device_id/configuration` - Apply camera configuration
+    - `GET /v1/devices/:device_id/configuration` - Get current device configuration
+    - `GET /v1/devices/:device_id/configuration/history` - List configuration history
+    - `GET /v1/devices/:device_id/configuration/:config_id` - Get specific configuration by ID
+  - **Database schema**: `device_configurations` table with status tracking, applied settings, and error handling
+  - **Status tracking**: pending, applied, failed, partiallyapplied states
+  - **Automatic triggers**: Database triggers for status updates and event logging
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **Advanced device control**: Camera configuration push, firmware update management
+- **Advanced device control**: Firmware update management
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata

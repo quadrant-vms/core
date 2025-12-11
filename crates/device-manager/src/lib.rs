@@ -1,5 +1,6 @@
 pub mod discovery;
 pub mod health_monitor;
+pub mod imaging_client;
 pub mod prober;
 pub mod ptz_client;
 pub mod ptz_routes;
@@ -11,6 +12,7 @@ pub mod types;
 
 pub use discovery::OnvifDiscoveryClient;
 pub use health_monitor::HealthMonitor;
+pub use imaging_client::{create_imaging_client, ImagingClient};
 pub use prober::DeviceProber;
 pub use ptz_client::{create_ptz_client, PtzClient};
 pub use routes_simple as routes;

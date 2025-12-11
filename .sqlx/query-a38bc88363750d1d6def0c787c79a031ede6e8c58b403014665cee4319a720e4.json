@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO discovery_scans (scan_id, started_at, completed_at, devices_found, status, error_message)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            ON CONFLICT (scan_id) DO UPDATE SET\n                completed_at = EXCLUDED.completed_at,\n                devices_found = EXCLUDED.devices_found,\n                status = EXCLUDED.status,\n                error_message = EXCLUDED.error_message\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4",
+        "Varchar",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a38bc88363750d1d6def0c787c79a031ede6e8c58b403014665cee4319a720e4"
+}

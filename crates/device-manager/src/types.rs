@@ -420,3 +420,80 @@ pub struct PtzCapabilities {
     pub zoom_range: Option<(f32, f32)>,
     pub max_presets: Option<u32>,
 }
+
+// Camera Configuration Types
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[sqlx(type_name = "configuration_status", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+pub enum ConfigurationStatus {
+    Pending,
+    Applied,
+    Failed,
+    PartiallyApplied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CameraConfigurationRequest {
+    // Video encoding settings
+    pub video_codec: Option<String>, // "h264", "h265", "mjpeg"
+    pub resolution: Option<String>,  // "1920x1080", "1280x720", etc.
+    pub framerate: Option<u32>,      // fps
+    pub bitrate: Option<u32>,        // kbps
+    pub gop_size: Option<u32>,       // keyframe interval (Group of Pictures)
+    pub quality: Option<String>,     // "low", "medium", "high"
+
+    // Image settings
+    pub brightness: Option<f32>,     // 0.0-1.0
+    pub contrast: Option<f32>,       // 0.0-1.0
+    pub saturation: Option<f32>,     // 0.0-1.0
+    pub sharpness: Option<f32>,      // 0.0-1.0
+    pub hue: Option<f32>,            // 0.0-1.0
+
+    // Audio settings
+    pub audio_enabled: Option<bool>,
+    pub audio_codec: Option<String>, // "aac", "pcm", "g711"
+    pub audio_bitrate: Option<u32>,  // kbps
+
+    // Network settings
+    pub multicast_enabled: Option<bool>,
+    pub multicast_address: Option<String>,
+    pub rtsp_port: Option<u32>,
+
+    // Other settings
+    pub ir_mode: Option<String>,     // "auto", "on", "off"
+    pub wdr_enabled: Option<bool>,   // Wide Dynamic Range
+    pub metadata: Option<JsonValue>,  // Additional custom settings
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CameraConfigurationResponse {
+    pub config_id: String,
+    pub device_id: String,
+    pub status: ConfigurationStatus,
+    pub applied_settings: HashMap<String, JsonValue>,
+    pub failed_settings: Option<HashMap<String, String>>, // setting_name -> error_message
+    pub error_message: Option<String>,
+    pub applied_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct DeviceConfiguration {
+    pub config_id: String,
+    pub device_id: String,
+    pub requested_config: JsonValue,
+    pub applied_config: Option<JsonValue>,
+    pub status: ConfigurationStatus,
+    pub error_message: Option<String>,
+    pub applied_by: Option<String>, // user_id
+    pub created_at: DateTime<Utc>,
+    pub applied_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfigurationHistoryQuery {
+    pub device_id: String,
+    pub status: Option<ConfigurationStatus>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}

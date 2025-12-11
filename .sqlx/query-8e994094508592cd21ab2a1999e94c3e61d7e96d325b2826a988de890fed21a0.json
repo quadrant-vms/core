@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE ptz_tours\n            SET\n                name = COALESCE($2, name),\n                description = COALESCE($3, description),\n                loop_enabled = COALESCE($4, loop_enabled),\n                updated_at = NOW()\n            WHERE tour_id = $1\n            RETURNING tour_id as \"tour_id!\", device_id as \"device_id!\", name as \"name!\", description,\n                      state as \"state!: TourState\",\n                      loop_enabled as \"loop_enabled!\", created_at as \"created_at!\", updated_at as \"updated_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tour_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state!: TourState",
+        "type_info": {
+          "Custom": {
+            "name": "tour_state",
+            "kind": {
+              "Enum": [
+                "stopped",
+                "running",
+                "paused"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "loop_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "8e994094508592cd21ab2a1999e94c3e61d7e96d325b2826a988de890fed21a0"
+}

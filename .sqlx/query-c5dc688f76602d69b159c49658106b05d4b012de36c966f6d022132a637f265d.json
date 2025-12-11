@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT step_id as \"step_id!\", tour_id as \"tour_id!\", sequence_order as \"sequence_order!\", preset_id,\n                   position as \"position: PtzPosition\",\n                   dwell_time_ms as \"dwell_time_ms!\", speed as \"speed!\"\n            FROM ptz_tour_steps\n            WHERE tour_id = $1\n            ORDER BY sequence_order ASC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "step_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "tour_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence_order!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "preset_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "position: PtzPosition",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "dwell_time_ms!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "speed!",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "c5dc688f76602d69b159c49658106b05d4b012de36c966f6d022132a637f265d"
+}

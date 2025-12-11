@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE ptz_presets\n            SET\n                name = COALESCE($2, name),\n                description = COALESCE($3, description),\n                position = COALESCE($4, position),\n                updated_at = NOW()\n            WHERE preset_id = $1\n            RETURNING preset_id as \"preset_id!\", device_id as \"device_id!\", name as \"name!\", position as \"position!: PtzPosition\",\n                      description, thumbnail_url, created_at as \"created_at!\", updated_at as \"updated_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "preset_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "position!: PtzPosition",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "thumbnail_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "bbd9e1329c8f80be43299a33804bd4b14b62a32fa734d0bc0e15b2d5f81e8728"
+}

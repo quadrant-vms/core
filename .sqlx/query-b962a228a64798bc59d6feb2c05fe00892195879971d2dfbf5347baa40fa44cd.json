@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE ptz_tour_steps SET sequence_order = $1 WHERE step_id = $2 AND tour_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b962a228a64798bc59d6feb2c05fe00892195879971d2dfbf5347baa40fa44cd"
+}

@@ -1,6 +1,7 @@
 // Simplified routes without auth for initial implementation
 // TODO: Add proper authentication using auth-service integration
 
+use crate::imaging_client::create_imaging_client;
 use crate::ptz_client::create_ptz_client;
 use crate::state::DeviceManagerState;
 use crate::types::*;
@@ -11,6 +12,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use chrono::Utc;
 use serde_json::json;
 use std::collections::HashMap;
 use tracing::{error, info};
@@ -62,6 +64,11 @@ pub fn router(state: DeviceManagerState) -> Router {
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/stop", post(stop_ptz_tour))
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/pause", post(pause_ptz_tour))
         .route("/v1/devices/:device_id/ptz/tours/:tour_id/resume", post(resume_ptz_tour))
+        // Camera Configuration routes
+        .route("/v1/devices/:device_id/configuration", post(configure_camera))
+        .route("/v1/devices/:device_id/configuration", get(get_current_configuration))
+        .route("/v1/devices/:device_id/configuration/history", get(get_configuration_history))
+        .route("/v1/devices/:device_id/configuration/:config_id", get(get_configuration_by_id))
         .with_state(state)
 }
 
@@ -822,5 +829,174 @@ async fn get_device_and_create_client(
     match create_ptz_client(&device.protocol, &device.primary_uri, username, password) {
         Ok(client) => Ok(client),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()),
+    }
+}
+
+// Helper function for creating imaging clients
+async fn get_device_and_create_imaging_client(
+    state: &DeviceManagerState,
+    device_id: &str,
+) -> Result<std::sync::Arc<dyn crate::imaging_client::ImagingClient>, axum::response::Response> {
+    let device = match state.store.get_device(device_id).await {
+        Ok(Some(device)) => device,
+        Ok(None) => return Err((StatusCode::NOT_FOUND, Json(json!({"error": "device not found"}))).into_response()),
+        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()),
+    };
+
+    let username = device.username.clone();
+    let password = device.password_encrypted.as_ref().and_then(|enc| state.store.decrypt_password(enc).ok());
+
+    match create_imaging_client(&device.protocol, &device.primary_uri, username, password, device_id) {
+        Ok(client) => Ok(client),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response()),
+    }
+}
+
+// Camera Configuration Handlers
+
+/// Configure camera settings
+async fn configure_camera(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Json(config_request): Json<CameraConfigurationRequest>,
+) -> impl IntoResponse {
+    info!(device_id = %device_id, "configuring camera");
+
+    // Get device and create imaging client
+    let imaging_client = match get_device_and_create_imaging_client(&state, &device_id).await {
+        Ok(client) => client,
+        Err(response) => return response,
+    };
+
+    // Apply configuration to device
+    let response = match imaging_client.configure_camera(&config_request).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            error!(device_id = %device_id, error = %e, "failed to configure camera");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to configure camera: {}", e)})),
+            )
+                .into_response();
+        }
+    };
+
+    // Save configuration to database
+    let config = DeviceConfiguration {
+        config_id: response.config_id.clone(),
+        device_id: device_id.clone(),
+        requested_config: serde_json::to_value(&config_request).unwrap_or_default(),
+        applied_config: Some(serde_json::to_value(&response.applied_settings).unwrap_or_default()),
+        status: response.status.clone(),
+        error_message: response.error_message.clone(),
+        applied_by: None, // TODO: Get from auth context
+        created_at: Utc::now(),
+        applied_at: response.applied_at,
+    };
+
+    match state.store.save_device_configuration(config).await {
+        Ok(_) => {
+            info!(device_id = %device_id, config_id = %response.config_id, "camera configuration saved");
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Err(e) => {
+            error!(device_id = %device_id, error = %e, "failed to save configuration");
+            // Return the response even if saving failed
+            (StatusCode::OK, Json(response)).into_response()
+        }
+    }
+}
+
+/// Get current camera configuration (from device)
+async fn get_current_configuration(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+) -> impl IntoResponse {
+    info!(device_id = %device_id, "getting current camera configuration");
+
+    let imaging_client = match get_device_and_create_imaging_client(&state, &device_id).await {
+        Ok(client) => client,
+        Err(response) => return response,
+    };
+
+    match imaging_client.get_camera_configuration().await {
+        Ok(config) => (StatusCode::OK, Json(config)).into_response(),
+        Err(e) => {
+            error!(device_id = %device_id, error = %e, "failed to get camera configuration");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Get configuration history for a device
+async fn get_configuration_history(
+    State(state): State<DeviceManagerState>,
+    Path(device_id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    info!(device_id = %device_id, "getting configuration history");
+
+    let status = params.get("status").and_then(|s| {
+        serde_json::from_value::<ConfigurationStatus>(serde_json::json!(s)).ok()
+    });
+
+    let limit = params
+        .get("limit")
+        .and_then(|l| l.parse::<i64>().ok());
+
+    let offset = params
+        .get("offset")
+        .and_then(|o| o.parse::<i64>().ok());
+
+    let query = ConfigurationHistoryQuery {
+        device_id: device_id.clone(),
+        status,
+        limit,
+        offset,
+    };
+
+    match state.store.list_device_configuration_history(query).await {
+        Ok(history) => (StatusCode::OK, Json(history)).into_response(),
+        Err(e) => {
+            error!(device_id = %device_id, error = %e, "failed to get configuration history");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Get specific configuration by ID
+async fn get_configuration_by_id(
+    State(state): State<DeviceManagerState>,
+    Path((device_id, config_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    info!(device_id = %device_id, config_id = %config_id, "getting configuration by id");
+
+    match state.store.get_device_configuration(&config_id).await {
+        Ok(config) => {
+            if config.device_id != device_id {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "configuration not found for this device"})),
+                )
+                    .into_response();
+            }
+            (StatusCode::OK, Json(config)).into_response()
+        }
+        Err(e) => {
+            error!(device_id = %device_id, config_id = %config_id, error = %e, "failed to get configuration");
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "configuration not found"})),
+            )
+                .into_response()
+        }
     }
 }

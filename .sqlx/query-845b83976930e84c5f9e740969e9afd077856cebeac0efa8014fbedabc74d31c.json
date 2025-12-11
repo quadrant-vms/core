@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM ptz_tour_steps WHERE step_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "845b83976930e84c5f9e740969e9afd077856cebeac0efa8014fbedabc74d31c"
+}

@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT device_service_url, scopes, types, xaddrs, manufacturer, model,\n                   hardware_id, name, location, discovered_at\n            FROM discovered_devices\n            WHERE scan_id = $1\n            ORDER BY discovered_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_service_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "scopes",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 2,
+        "name": "types",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "xaddrs",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "manufacturer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "hardware_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "location",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "discovered_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "8496746668fde1801d56b1b6faa88d3fa3303f5a1233bdf81f2b63ba17b98688"
+}

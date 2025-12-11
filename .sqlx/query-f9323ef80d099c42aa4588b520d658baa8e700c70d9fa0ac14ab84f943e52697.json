@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE devices\n            SET\n                status = $2::device_status,\n                last_health_check_at = $3,\n                last_seen_at = CASE WHEN $2::device_status = 'online' THEN $3 ELSE last_seen_at END,\n                consecutive_failures = CASE\n                    WHEN $2::device_status IN ('online', 'maintenance') THEN 0\n                    ELSE consecutive_failures + 1\n                END,\n                updated_at = NOW()\n            WHERE device_id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        {
+          "Custom": {
+            "name": "device_status",
+            "kind": {
+              "Enum": [
+                "online",
+                "offline",
+                "error",
+                "maintenance",
+                "provisioning"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9323ef80d099c42aa4588b520d658baa8e700c70d9fa0ac14ab84f943e52697"
+}

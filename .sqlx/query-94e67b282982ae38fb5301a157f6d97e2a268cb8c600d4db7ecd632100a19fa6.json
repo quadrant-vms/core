@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO ptz_tour_steps (step_id, tour_id, sequence_order, preset_id, position, dwell_time_ms, speed)\n            VALUES ($1, $2, $3, $4, $5, $6, $7)\n            RETURNING step_id as \"step_id!\", tour_id as \"tour_id!\", sequence_order as \"sequence_order!\", preset_id,\n                      position as \"position: PtzPosition\",\n                      dwell_time_ms as \"dwell_time_ms!\", speed as \"speed!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "step_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "tour_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence_order!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "preset_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "position: PtzPosition",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "dwell_time_ms!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "speed!",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Jsonb",
+        "Int8",
+        "Float4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "94e67b282982ae38fb5301a157f6d97e2a268cb8c600d4db7ecd632100a19fa6"
+}

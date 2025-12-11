@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO ptz_tours (tour_id, device_id, name, description, state, loop_enabled, created_at, updated_at)\n            VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $6)\n            RETURNING tour_id as \"tour_id!\", device_id as \"device_id!\", name as \"name!\", description,\n                      state as \"state!: TourState\",\n                      loop_enabled as \"loop_enabled!\", created_at as \"created_at!\", updated_at as \"updated_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tour_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "state!: TourState",
+        "type_info": {
+          "Custom": {
+            "name": "tour_state",
+            "kind": {
+              "Enum": [
+                "stopped",
+                "running",
+                "paused"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "loop_enabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5e30dbc53202ad0c071fff437cab0084c702657ca35e98d99080291b9b31bdf7"
+}

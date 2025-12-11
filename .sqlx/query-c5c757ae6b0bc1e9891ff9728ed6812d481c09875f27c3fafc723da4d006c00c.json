@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                config_id, device_id, requested_config, applied_config,\n                status as \"status!: ConfigurationStatus\",\n                error_message, applied_by, created_at, applied_at\n            FROM device_configurations\n            WHERE config_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "config_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "requested_config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "applied_config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: ConfigurationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "configuration_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "applied",
+                "failed",
+                "partiallyapplied"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "error_message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "applied_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "applied_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "c5c757ae6b0bc1e9891ff9728ed6812d481c09875f27c3fafc723da4d006c00c"
+}
