@@ -230,7 +230,7 @@ impl TourExecutor {
                 }
 
                 // Dwell at position
-                let dwell_duration = Duration::from_millis(step.dwell_time_ms);
+                let dwell_duration = Duration::from_millis(step.dwell_time_ms as u64);
                 tokio::select! {
                     _ = sleep(dwell_duration) => {},
                     _ = cancellation_token.cancelled() => {

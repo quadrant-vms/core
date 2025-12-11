@@ -342,16 +342,22 @@ impl DeviceProber {
                 .await
             }
             ConnectionProtocol::Http => {
-                timeout(
+                let http_result = timeout(
                     Duration::from_secs(self.timeout_secs),
                     reqwest::get(uri),
                 )
-                .await
-                .map(|r| r.map(|_| std::process::Output {
-                    status: std::process::ExitStatus::default(),
-                    stdout: Vec::new(),
-                    stderr: Vec::new(),
-                }))
+                .await;
+
+                // Convert reqwest::Error to std::io::Error for consistency
+                match http_result {
+                    Ok(Ok(_response)) => Ok(Ok(std::process::Output {
+                        status: std::process::ExitStatus::default(),
+                        stdout: Vec::new(),
+                        stderr: Vec::new(),
+                    })),
+                    Ok(Err(e)) => Ok(Err(std::io::Error::new(std::io::ErrorKind::Other, e))),
+                    Err(e) => Err(e),
+                }
             }
             _ => {
                 return Ok((false, 0, Some(format!("Protocol {:?} health check not implemented", protocol))));

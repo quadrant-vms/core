@@ -20,11 +20,12 @@ async fn main() -> Result<()> {
         .context("failed to connect to database")?;
 
     // Run migrations
-    info!("running database migrations");
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .context("failed to run migrations")?;
+    // NOTE: Migrations manually applied - SQLx has issues with shared migration table across services
+    // info!("running database migrations");
+    // sqlx::migrate!("./migrations")
+    //     .run(&pool)
+    //     .await
+    //     .context("failed to run migrations")?;
 
     // Create repository and service
     let repository = AuthRepository::new(pool);

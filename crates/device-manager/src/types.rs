@@ -377,7 +377,7 @@ pub struct PtzTourStep {
     pub sequence_order: i32,
     pub preset_id: Option<String>,
     pub position: Option<PtzPosition>,
-    pub dwell_time_ms: u64,
+    pub dwell_time_ms: i64,
     pub speed: f32,
 }
 
@@ -399,7 +399,7 @@ pub struct UpdatePtzTourRequest {
 pub struct AddTourStepRequest {
     pub preset_id: Option<String>,
     pub position: Option<PtzPosition>,
-    pub dwell_time_ms: u64,
+    pub dwell_time_ms: i64,
     pub speed: f32,
 }
 

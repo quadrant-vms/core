@@ -13,7 +13,7 @@ use axum::{
 };
 use serde_json::json;
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 pub fn router(state: DeviceManagerState) -> Router {
     Router::new()

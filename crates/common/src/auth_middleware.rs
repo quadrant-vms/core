@@ -198,3 +198,33 @@ pub fn require_permission(ctx: &AuthContext, permission: &str) -> Result<(), Res
     }
     Ok(())
 }
+
+/// Axum extractor for requiring authentication
+/// Usage: `RequireAuth(auth_ctx): RequireAuth` in route handlers
+pub struct RequireAuth(pub AuthContext);
+
+#[axum::async_trait]
+impl<S> axum::extract::FromRequestParts<S> for RequireAuth
+where
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<AuthContext>()
+            .cloned()
+            .map(RequireAuth)
+            .ok_or_else(|| {
+                (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": "Authentication required" })),
+                )
+                    .into_response()
+            })
+    }
+}

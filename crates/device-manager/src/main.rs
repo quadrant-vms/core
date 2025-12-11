@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     telemetry::init();
 
     // Load configuration from environment
-    let bind_addr = std::env::var("DEVICE_MANAGER_ADDR")
+    let bind_addr: std::net::SocketAddr = std::env::var("DEVICE_MANAGER_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8084".to_string())
         .parse()
         .context("invalid bind address")?;

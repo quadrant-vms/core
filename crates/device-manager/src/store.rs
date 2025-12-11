@@ -62,20 +62,20 @@ impl DeviceStore {
                 NULL, ARRAY[]::TEXT[], ARRAY[]::TEXT[], ARRAY[]::TEXT[], 0
             )
             RETURNING
-                device_id, tenant_id, name,
-                device_type as "device_type: DeviceType",
+                device_id as "device_id!", tenant_id as "tenant_id!", name as "name!",
+                device_type as "device_type!: DeviceType",
                 manufacturer, model, firmware_version,
-                primary_uri, secondary_uri,
-                protocol as "protocol: ConnectionProtocol",
+                primary_uri as "primary_uri!", secondary_uri,
+                protocol as "protocol!: ConnectionProtocol",
                 username, password_encrypted,
-                location, zone, tags,
-                status as "status: DeviceStatus",
+                location, zone, tags as "tags!",
+                status as "status!: DeviceStatus",
                 last_seen_at, last_health_check_at,
-                health_check_interval_secs, consecutive_failures,
-                capabilities, video_codecs, audio_codecs, resolutions,
+                health_check_interval_secs as "health_check_interval_secs!", consecutive_failures as "consecutive_failures!",
+                capabilities, video_codecs as "video_codecs!", audio_codecs as "audio_codecs!", resolutions as "resolutions!",
                 description, notes, metadata,
-                auto_start, recording_enabled, ai_enabled,
-                created_at, updated_at
+                auto_start as "auto_start!", recording_enabled as "recording_enabled!", ai_enabled as "ai_enabled!",
+                created_at as "created_at!", updated_at as "updated_at!"
             "#,
             device_id,
             tenant_id,
@@ -114,20 +114,20 @@ impl DeviceStore {
             Device,
             r#"
             SELECT
-                device_id, tenant_id, name,
-                device_type as "device_type: DeviceType",
+                device_id as "device_id!", tenant_id as "tenant_id!", name as "name!",
+                device_type as "device_type!: DeviceType",
                 manufacturer, model, firmware_version,
-                primary_uri, secondary_uri,
-                protocol as "protocol: ConnectionProtocol",
+                primary_uri as "primary_uri!", secondary_uri,
+                protocol as "protocol!: ConnectionProtocol",
                 username, password_encrypted,
-                location, zone, tags,
-                status as "status: DeviceStatus",
+                location, zone, tags as "tags!",
+                status as "status!: DeviceStatus",
                 last_seen_at, last_health_check_at,
-                health_check_interval_secs, consecutive_failures,
-                capabilities, video_codecs, audio_codecs, resolutions,
+                health_check_interval_secs as "health_check_interval_secs!", consecutive_failures as "consecutive_failures!",
+                capabilities, video_codecs as "video_codecs!", audio_codecs as "audio_codecs!", resolutions as "resolutions!",
                 description, notes, metadata,
-                auto_start, recording_enabled, ai_enabled,
-                created_at, updated_at
+                auto_start as "auto_start!", recording_enabled as "recording_enabled!", ai_enabled as "ai_enabled!",
+                created_at as "created_at!", updated_at as "updated_at!"
             FROM devices
             WHERE device_id = $1
             "#,
@@ -145,20 +145,20 @@ impl DeviceStore {
         let mut sql = String::from(
             r#"
             SELECT
-                device_id, tenant_id, name,
-                device_type as "device_type: DeviceType",
+                device_id as "device_id!", tenant_id as "tenant_id!", name as "name!",
+                device_type as "device_type!: DeviceType",
                 manufacturer, model, firmware_version,
-                primary_uri, secondary_uri,
-                protocol as "protocol: ConnectionProtocol",
+                primary_uri as "primary_uri!", secondary_uri,
+                protocol as "protocol!: ConnectionProtocol",
                 username, password_encrypted,
-                location, zone, tags,
-                status as "status: DeviceStatus",
+                location, zone, tags as "tags!",
+                status as "status!: DeviceStatus",
                 last_seen_at, last_health_check_at,
-                health_check_interval_secs, consecutive_failures,
-                capabilities, video_codecs, audio_codecs, resolutions,
+                health_check_interval_secs as "health_check_interval_secs!", consecutive_failures as "consecutive_failures!",
+                capabilities, video_codecs as "video_codecs!", audio_codecs as "audio_codecs!", resolutions as "resolutions!",
                 description, notes, metadata,
-                auto_start, recording_enabled, ai_enabled,
-                created_at, updated_at
+                auto_start as "auto_start!", recording_enabled as "recording_enabled!", ai_enabled as "ai_enabled!",
+                created_at as "created_at!", updated_at as "updated_at!"
             FROM devices
             WHERE 1=1
             "#,
@@ -221,7 +221,7 @@ impl DeviceStore {
         req: UpdateDeviceRequest,
     ) -> Result<Device> {
         // Get current device for comparison
-        let current = self
+        let _current = self
             .get_device(device_id)
             .await?
             .context("device not found")?;
@@ -255,20 +255,20 @@ impl DeviceStore {
                 updated_at = NOW()
             WHERE device_id = $1
             RETURNING
-                device_id, tenant_id, name,
-                device_type as "device_type: DeviceType",
+                device_id as "device_id!", tenant_id as "tenant_id!", name as "name!",
+                device_type as "device_type!: DeviceType",
                 manufacturer, model, firmware_version,
-                primary_uri, secondary_uri,
-                protocol as "protocol: ConnectionProtocol",
+                primary_uri as "primary_uri!", secondary_uri,
+                protocol as "protocol!: ConnectionProtocol",
                 username, password_encrypted,
-                location, zone, tags,
-                status as "status: DeviceStatus",
+                location, zone, tags as "tags!",
+                status as "status!: DeviceStatus",
                 last_seen_at, last_health_check_at,
-                health_check_interval_secs, consecutive_failures,
-                capabilities, video_codecs, audio_codecs, resolutions,
+                health_check_interval_secs as "health_check_interval_secs!", consecutive_failures as "consecutive_failures!",
+                capabilities, video_codecs as "video_codecs!", audio_codecs as "audio_codecs!", resolutions as "resolutions!",
                 description, notes, metadata,
-                auto_start, recording_enabled, ai_enabled,
-                created_at, updated_at
+                auto_start as "auto_start!", recording_enabled as "recording_enabled!", ai_enabled as "ai_enabled!",
+                created_at as "created_at!", updated_at as "updated_at!"
             "#,
             device_id,
             req.name,
@@ -326,18 +326,18 @@ impl DeviceStore {
             r#"
             UPDATE devices
             SET
-                status = $2,
+                status = $2::device_status,
                 last_health_check_at = $3,
-                last_seen_at = CASE WHEN $2 = 'online' THEN $3 ELSE last_seen_at END,
+                last_seen_at = CASE WHEN $2::device_status = 'online' THEN $3 ELSE last_seen_at END,
                 consecutive_failures = CASE
-                    WHEN $2 IN ('online', 'maintenance') THEN 0
+                    WHEN $2::device_status IN ('online', 'maintenance') THEN 0
                     ELSE consecutive_failures + 1
                 END,
                 updated_at = NOW()
             WHERE device_id = $1
             "#,
             device_id,
-            status as DeviceStatus,
+            status.clone() as DeviceStatus,
             now,
         )
         .execute(&self.pool)
@@ -378,13 +378,13 @@ impl DeviceStore {
             DeviceHealthHistory,
             r#"
             SELECT
-                history_id,
-                device_id,
-                status as "status: DeviceStatus",
+                history_id as "history_id!",
+                device_id as "device_id!",
+                status as "status!: DeviceStatus",
                 response_time_ms,
                 error_message,
                 metadata,
-                checked_at
+                checked_at as "checked_at!"
             FROM device_health_history
             WHERE device_id = $1
             ORDER BY checked_at DESC
@@ -406,20 +406,20 @@ impl DeviceStore {
             Device,
             r#"
             SELECT
-                device_id, tenant_id, name,
-                device_type as "device_type: DeviceType",
+                device_id as "device_id!", tenant_id as "tenant_id!", name as "name!",
+                device_type as "device_type!: DeviceType",
                 manufacturer, model, firmware_version,
-                primary_uri, secondary_uri,
-                protocol as "protocol: ConnectionProtocol",
+                primary_uri as "primary_uri!", secondary_uri,
+                protocol as "protocol!: ConnectionProtocol",
                 username, password_encrypted,
-                location, zone, tags,
-                status as "status: DeviceStatus",
+                location, zone, tags as "tags!",
+                status as "status!: DeviceStatus",
                 last_seen_at, last_health_check_at,
-                health_check_interval_secs, consecutive_failures,
-                capabilities, video_codecs, audio_codecs, resolutions,
+                health_check_interval_secs as "health_check_interval_secs!", consecutive_failures as "consecutive_failures!",
+                capabilities, video_codecs as "video_codecs!", audio_codecs as "audio_codecs!", resolutions as "resolutions!",
                 description, notes, metadata,
-                auto_start, recording_enabled, ai_enabled,
-                created_at, updated_at
+                auto_start as "auto_start!", recording_enabled as "recording_enabled!", ai_enabled as "ai_enabled!",
+                created_at as "created_at!", updated_at as "updated_at!"
             FROM devices
             WHERE
                 status NOT IN ('maintenance', 'provisioning')
@@ -498,8 +498,8 @@ impl DeviceStore {
             r#"
             INSERT INTO ptz_presets (preset_id, device_id, name, position, description, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, $6)
-            RETURNING preset_id, device_id, name, position as "position: PtzPosition",
-                      description, thumbnail_url, created_at, updated_at
+            RETURNING preset_id as "preset_id!", device_id as "device_id!", name as "name!", position as "position!: PtzPosition",
+                      description, thumbnail_url, created_at as "created_at!", updated_at as "updated_at!"
             "#,
             preset_id,
             device_id,
@@ -520,8 +520,8 @@ impl DeviceStore {
         let preset = sqlx::query_as!(
             PtzPreset,
             r#"
-            SELECT preset_id, device_id, name, position as "position: PtzPosition",
-                   description, thumbnail_url, created_at, updated_at
+            SELECT preset_id as "preset_id!", device_id as "device_id!", name as "name!", position as "position!: PtzPosition",
+                   description, thumbnail_url, created_at as "created_at!", updated_at as "updated_at!"
             FROM ptz_presets
             WHERE preset_id = $1
             "#,
@@ -539,8 +539,8 @@ impl DeviceStore {
         let presets = sqlx::query_as!(
             PtzPreset,
             r#"
-            SELECT preset_id, device_id, name, position as "position: PtzPosition",
-                   description, thumbnail_url, created_at, updated_at
+            SELECT preset_id as "preset_id!", device_id as "device_id!", name as "name!", position as "position!: PtzPosition",
+                   description, thumbnail_url, created_at as "created_at!", updated_at as "updated_at!"
             FROM ptz_presets
             WHERE device_id = $1
             ORDER BY name ASC
@@ -570,8 +570,8 @@ impl DeviceStore {
                 position = COALESCE($4, position),
                 updated_at = NOW()
             WHERE preset_id = $1
-            RETURNING preset_id, device_id, name, position as "position: PtzPosition",
-                      description, thumbnail_url, created_at, updated_at
+            RETURNING preset_id as "preset_id!", device_id as "device_id!", name as "name!", position as "position!: PtzPosition",
+                      description, thumbnail_url, created_at as "created_at!", updated_at as "updated_at!"
             "#,
             preset_id,
             req.name,
@@ -611,9 +611,9 @@ impl DeviceStore {
             r#"
             INSERT INTO ptz_tours (tour_id, device_id, name, description, state, loop_enabled, created_at, updated_at)
             VALUES ($1, $2, $3, $4, 'stopped', $5, $6, $6)
-            RETURNING tour_id, device_id, name, description,
-                      state as "state: TourState",
-                      loop_enabled, created_at, updated_at
+            RETURNING tour_id as "tour_id!", device_id as "device_id!", name as "name!", description,
+                      state as "state!: TourState",
+                      loop_enabled as "loop_enabled!", created_at as "created_at!", updated_at as "updated_at!"
             "#,
             tour_id,
             device_id,
@@ -634,9 +634,9 @@ impl DeviceStore {
         let tour = sqlx::query_as!(
             PtzTour,
             r#"
-            SELECT tour_id, device_id, name, description,
-                   state as "state: TourState",
-                   loop_enabled, created_at, updated_at
+            SELECT tour_id as "tour_id!", device_id as "device_id!", name as "name!", description,
+                   state as "state!: TourState",
+                   loop_enabled as "loop_enabled!", created_at as "created_at!", updated_at as "updated_at!"
             FROM ptz_tours
             WHERE tour_id = $1
             "#,
@@ -654,9 +654,9 @@ impl DeviceStore {
         let tours = sqlx::query_as!(
             PtzTour,
             r#"
-            SELECT tour_id, device_id, name, description,
-                   state as "state: TourState",
-                   loop_enabled, created_at, updated_at
+            SELECT tour_id as "tour_id!", device_id as "device_id!", name as "name!", description,
+                   state as "state!: TourState",
+                   loop_enabled as "loop_enabled!", created_at as "created_at!", updated_at as "updated_at!"
             FROM ptz_tours
             WHERE device_id = $1
             ORDER BY name ASC
@@ -686,9 +686,9 @@ impl DeviceStore {
                 loop_enabled = COALESCE($4, loop_enabled),
                 updated_at = NOW()
             WHERE tour_id = $1
-            RETURNING tour_id, device_id, name, description,
-                      state as "state: TourState",
-                      loop_enabled, created_at, updated_at
+            RETURNING tour_id as "tour_id!", device_id as "device_id!", name as "name!", description,
+                      state as "state!: TourState",
+                      loop_enabled as "loop_enabled!", created_at as "created_at!", updated_at as "updated_at!"
             "#,
             tour_id,
             req.name,
@@ -752,16 +752,16 @@ impl DeviceStore {
             r#"
             INSERT INTO ptz_tour_steps (step_id, tour_id, sequence_order, preset_id, position, dwell_time_ms, speed)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING step_id, tour_id, sequence_order, preset_id,
-                      position as "position: Option<PtzPosition>",
-                      dwell_time_ms, speed
+            RETURNING step_id as "step_id!", tour_id as "tour_id!", sequence_order as "sequence_order!", preset_id,
+                      position as "position: PtzPosition",
+                      dwell_time_ms as "dwell_time_ms!", speed as "speed!"
             "#,
             step_id,
             tour_id,
             next_order,
             req.preset_id,
             req.position.as_ref().map(|p| serde_json::to_value(p).unwrap()),
-            req.dwell_time_ms as i64,
+            req.dwell_time_ms,
             req.speed,
         )
         .fetch_one(&self.pool)
@@ -776,9 +776,9 @@ impl DeviceStore {
         let steps = sqlx::query_as!(
             PtzTourStep,
             r#"
-            SELECT step_id, tour_id, sequence_order, preset_id,
-                   position as "position: Option<PtzPosition>",
-                   dwell_time_ms, speed
+            SELECT step_id as "step_id!", tour_id as "tour_id!", sequence_order as "sequence_order!", preset_id,
+                   position as "position: PtzPosition",
+                   dwell_time_ms as "dwell_time_ms!", speed as "speed!"
             FROM ptz_tour_steps
             WHERE tour_id = $1
             ORDER BY sequence_order ASC

@@ -93,11 +93,11 @@ impl HealthMonitor {
     ) -> anyhow::Result<()> {
         let device_id = &device.device_id;
         let username = device.username.as_deref();
-        let password = device
+        let password_decrypted = device
             .password_encrypted
             .as_ref()
-            .and_then(|enc| store.decrypt_password(enc).ok())
-            .as_deref();
+            .and_then(|enc| store.decrypt_password(enc).ok());
+        let password = password_decrypted.as_deref();
 
         // Perform health check
         let (is_healthy, response_time_ms, error_message) = prober

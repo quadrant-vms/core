@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
     .route("/start", post(api::start_recording))
     .route("/stop", post(api::stop_recording));
 
-  let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8081));
+  let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8085));
   let listener = TcpListener::bind(addr).await?;
   info!(%addr, "recorder-node started");
   axum::serve(listener, app).await?;
