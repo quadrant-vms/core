@@ -6,5 +6,6 @@ pub mod recordings;
 pub mod state_store;
 pub mod state_store_client;
 pub mod streams;
+pub mod thumbnail;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

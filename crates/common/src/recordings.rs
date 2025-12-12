@@ -137,3 +137,32 @@ pub struct RecordingStopResponse {
 pub struct RecordingListResponse {
   pub recordings: Vec<RecordingInfo>,
 }
+
+// Thumbnail-related types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThumbnailRequest {
+  pub recording_id: String,
+  pub timestamp_secs: Option<f64>,
+  pub width: Option<u32>,
+  pub height: Option<u32>,
+  pub quality: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThumbnailGridRequest {
+  pub recording_id: String,
+  pub count: u32,
+  pub width: Option<u32>,
+  pub height: Option<u32>,
+  pub quality: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThumbnailInfo {
+  pub recording_id: String,
+  pub timestamp_secs: f64,
+  pub width: u32,
+  pub height: u32,
+  /// Base64-encoded JPEG image data
+  pub image_data: String,
+}

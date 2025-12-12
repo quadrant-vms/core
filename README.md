@@ -385,10 +385,24 @@ This project is **under active development**.
     - `ALERT_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8085)
     - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` - Email channel configuration (optional)
 
+- **Thumbnail Generation for Recordings** (recorder-node):
+  - **FFmpeg-based thumbnail extraction**: Generate preview images from recorded videos
+  - **Single thumbnail generation**: Extract frame at specific timestamp or video midpoint
+  - **Thumbnail grid generation**: Create multiple evenly-spaced thumbnails for timeline preview
+  - **Configurable output**: Custom resolution, JPEG quality, and aspect ratio handling
+  - **Base64 encoding**: Thumbnails encoded for easy JSON transport and display
+  - **REST API endpoints**:
+    - `GET /thumbnail?recording_id=<id>&timestamp_secs=<ts>&width=<w>&height=<h>&quality=<q>` - Single thumbnail
+    - `GET /thumbnail/grid?recording_id=<id>&count=<n>&width=<w>&height=<h>&quality=<q>` - Thumbnail grid
+  - **Automatic video probing**: Duration detection for timestamp validation
+  - **Multi-format support**: Works with MP4, MKV, and HLS recordings
+  - **Default settings**: 320x180 resolution, quality 5 (high quality JPEG)
+  - **Environment variable**: `RECORDING_STORAGE_ROOT` - Recording file storage location (default: ./data/recordings)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
+- **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node

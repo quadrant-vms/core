@@ -54,7 +54,9 @@ async fn main() -> anyhow::Result<()> {
     }))
     .route("/recordings", get(api::list_recordings))
     .route("/start", post(api::start_recording))
-    .route("/stop", post(api::stop_recording));
+    .route("/stop", post(api::stop_recording))
+    .route("/thumbnail", get(api::get_thumbnail))
+    .route("/thumbnail/grid", get(api::get_thumbnail_grid));
 
   let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8085));
   let listener = TcpListener::bind(addr).await?;
