@@ -9,6 +9,7 @@ members = [
   "crates/ai-service",
   "crates/auth-service",
   "crates/device-manager",
+  "crates/alert-service",
 ]
 resolver = "2"
 
@@ -24,6 +25,7 @@ recorder-node = { path = "crates/recorder-node" }
 ai-service = { path = "crates/ai-service" }
 auth-service = { path = "crates/auth-service" }
 device-manager = { path = "crates/device-manager" }
+alert-service = { path = "crates/alert-service" }
 common = { path = "crates/common" }
 
 [dev-dependencies]

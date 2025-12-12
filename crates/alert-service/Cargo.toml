@@ -1,0 +1,73 @@
+[package]
+name = "alert-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "migrate", "chrono", "uuid", "macros"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# Async trait
+async-trait = "0.1"
+
+# Logging and telemetry
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+prometheus = "0.13"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# HTTP client for webhooks
+reqwest = { version = "0.12", features = ["json"] }
+
+# Email sending
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname"] }
+
+# MQTT client
+rumqttc = "0.24"
+
+# Regex for pattern matching
+regex = "1"
+
+# Cron expression parsing
+cron = "0.12"
+
+# URL parsing
+url = "2"
+
+# Common types
+common = { path = "../common" }
+telemetry = { path = "../telemetry" }
+
+[dev-dependencies]
+axum-test = "16"
+tempfile = "3"
+
+[lib]
+name = "alert_service"
+path = "src/lib.rs"
+
+[[bin]]
+name = "alert-service"
+path = "src/main.rs"

@@ -357,16 +357,44 @@ This project is **under active development**.
   - **Environment variables**:
     - `FIRMWARE_STORAGE_ROOT` - Firmware file storage location (default: ./data/firmware)
 
+- **Alert & Automation System** (`alert-service`):
+  - **Rule engine**: Flexible condition-based alert triggering system
+    - Support for multiple trigger types: device offline/online, motion detected, AI detections, recording/stream failures, health check failures, custom events
+    - JSON-based condition matching with operator support (>, >=, <, <=, ==, !=)
+    - Wildcard pattern matching for string fields
+    - Multi-tenant alert rule isolation
+  - **Alert suppression and rate limiting**:
+    - Configurable cooldown periods (suppress_duration_secs)
+    - Rate limiting (max_alerts_per_hour)
+    - Automatic suppression state management
+    - Suppression reason tracking
+  - **Scheduling**: Cron-based time windows for when rules are active
+  - **Multi-channel notifications**:
+    - **Email**: SMTP-based email notifications with template support
+    - **Webhook**: HTTP/HTTPS webhook delivery with custom headers and templates
+    - **MQTT**: MQTT broker integration with QoS support and topic templates
+  - **Alert history and auditing**:
+    - Complete event history with context data
+    - Notification delivery tracking (sent/failed counts)
+    - Retry mechanisms with failure tracking
+  - **PostgreSQL-backed storage**: Alert rules, actions, events, notifications, suppression state
+  - **REST API** (`/v1/rules`, `/v1/actions`, `/v1/events`, `/v1/trigger`)
+  - **Integration with auth-service**: Permission-based access control (alert:read, alert:create, alert:update, alert:delete)
+  - **Environment variables**:
+    - `DATABASE_URL` - PostgreSQL connection string
+    - `ALERT_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8085)
+    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` - Email channel configuration (optional)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, thumbnails/time-axis preview, DVR time-shift & seek, edge caching
 - **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
-- **Alerts & automation**: rule engine, multi-channel notifications (Email/SMS/Webhook/MQTT), suppression/severity, scheduling
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
-- **Operator UI**: dashboards for devices/streams/recordings/AI tasks, incident workflows
+- **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
 - **Additional AI model integrations**: pose estimation, facial recognition
+- **Additional alert integrations**: SMS notifications, Slack/Discord webhooks, PagerDuty integration
 
 ---
 
