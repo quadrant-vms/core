@@ -1,4 +1,4 @@
-use axum::{routing::get, routing::post, Router};
+use axum::{routing::get, routing::post, routing::delete, routing::put, Router};
 use common::state_store::StateStore;
 use common::state_store_client::StateStoreClient;
 use std::sync::Arc;
@@ -9,10 +9,13 @@ use tracing::{info, warn};
 mod api;
 mod coordinator;
 mod recording;
+mod retention;
 mod storage;
 
 use coordinator::HttpCoordinatorClient;
 use recording::manager::RECORDING_MANAGER;
+use retention::{PostgresRetentionStore, RetentionExecutor};
+use retention::api::RetentionApiState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
     info!("COORDINATOR_URL not set, running without lease management");
   }
 
-  let app = Router::new()
+  let mut app = Router::new()
     .route("/healthz", get(api::healthz))
     .route("/metrics", get(|| async {
       telemetry::metrics::encode_metrics().unwrap_or_else(|e| format!("Error: {}", e))
@@ -57,6 +60,59 @@ async fn main() -> anyhow::Result<()> {
     .route("/stop", post(api::stop_recording))
     .route("/thumbnail", get(api::get_thumbnail))
     .route("/thumbnail/grid", get(api::get_thumbnail_grid));
+
+  // Initialize retention system if DATABASE_URL is set
+  if let Ok(database_url) = std::env::var("DATABASE_URL") {
+    info!("initializing retention system with PostgreSQL backend");
+
+    let recording_storage_root = std::env::var("RECORDING_STORAGE_ROOT")
+      .unwrap_or_else(|_| "./data/recordings".to_string());
+
+    // Connect to database
+    let pool = sqlx::postgres::PgPoolOptions::new()
+      .max_connections(5)
+      .connect(&database_url)
+      .await?;
+
+    // Run migrations
+    info!("running retention database migrations");
+    sqlx::migrate!("./migrations")
+      .run(&pool)
+      .await?;
+
+    // Initialize retention store and executor
+    let retention_store = Arc::new(PostgresRetentionStore::new(pool));
+    let retention_executor = Arc::new(RetentionExecutor::new(
+      Arc::clone(&retention_store) as Arc<dyn retention::store::RetentionStore>,
+      recording_storage_root,
+    ));
+
+    let retention_state = Arc::new(RetentionApiState {
+      store: Arc::clone(&retention_store) as Arc<dyn retention::store::RetentionStore>,
+      executor: retention_executor,
+    });
+
+    // Add retention routes
+    let retention_routes = Router::new()
+      .route("/v1/retention/policies", post(retention::api::create_policy))
+      .route("/v1/retention/policies", get(retention::api::list_policies))
+      .route("/v1/retention/policies/:policy_id", get(retention::api::get_policy))
+      .route("/v1/retention/policies/:policy_id", put(retention::api::update_policy))
+      .route("/v1/retention/policies/:policy_id", delete(retention::api::delete_policy))
+      .route("/v1/retention/policies/:policy_id/execute", post(retention::api::execute_policy))
+      .route("/v1/retention/execute", post(retention::api::execute_all_policies))
+      .route("/v1/retention/executions", get(retention::api::list_all_executions))
+      .route("/v1/retention/executions/:execution_id", get(retention::api::get_execution))
+      .route("/v1/retention/policies/:policy_id/executions", get(retention::api::list_executions))
+      .route("/v1/retention/executions/:execution_id/actions", get(retention::api::list_actions))
+      .route("/v1/retention/storage/stats", get(retention::api::get_storage_stats))
+      .with_state(retention_state);
+
+    app = app.merge(retention_routes);
+    info!("retention system initialized successfully");
+  } else {
+    info!("DATABASE_URL not set, retention system disabled");
+  }
 
   let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8085));
   let listener = TcpListener::bind(addr).await?;

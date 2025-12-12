@@ -22,3 +22,6 @@ aws-credential-types = "1.2.8"
 aws-config = "1"
 aws-sdk-s3 = "1"
 prometheus = "0.13"
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = "0.4"
