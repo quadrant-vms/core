@@ -15,12 +15,13 @@
 - This is the FIRST and MOST IMPORTANT rule
 - If you complete work without committing and pushing, you have failed
 
-### 2. Always Update README.md After Feature Completion
-- **CRITICAL**: After completing ANY feature or milestone, update `README.md`
-- Move completed items from "🔜 In Progress" to "✅ Implemented"
-- Add specific details about what was implemented
-- Add new sub-items if the feature introduced new components
-- Keep README.md as the single source of truth for project status
+### 2. Always Update Documentation After Feature Completion
+- **CRITICAL**: After completing ANY feature or milestone, update documentation:
+  - Update `README.md` - Keep high-level status current
+  - Update `SERVICES.md` - Add detailed service features and configuration
+  - Move completed items from "🔜 Upcoming Features" to appropriate sections
+  - Add specific details about what was implemented
+- README.md is the high-level overview, SERVICES.md has detailed service documentation
 
 ### 3. Update This File (CLAUDE.md) When Needed
 - **Keep this guide current**: If project structure changes, update this file
@@ -128,11 +129,15 @@ This is a **Cargo workspace** with multiple crates:
 
 - `Cargo.toml` - Workspace manifest
 - `Makefile` - Docker Compose and cargo shortcuts
+- `README.md` - High-level project overview and quick start guide
+- `SERVICES.md` - Detailed documentation for each service (features, API, configuration)
+- `CLAUDE.md` - Development guide for Claude Code (this file)
 - `tests/gateway_coordinator.rs` - End-to-end integration tests
 - `tests/ai_service.rs` - AI service integration tests
 - `.env` / `example.env` - Configuration (not in git)
 - `profiles/` - Deployment profiles (compose/desktop/k8s)
 - `data/hls/` - HLS output directory (runtime generated)
+- `docs/` - Additional documentation (AUTHENTICATION.md, HA_DEPLOYMENT.md, GPU_ACCELERATION.md)
 
 ## Development Workflow
 
@@ -141,7 +146,8 @@ This is a **Cargo workspace** with multiple crates:
 When implementing a new feature, follow this sequence:
 
 1. **Plan & Explore**
-   - Read README.md to understand current progress
+   - Read README.md for high-level project status
+   - Read SERVICES.md for detailed service documentation
    - Explore relevant crates and existing patterns
    - Use Task tool with Explore agent for codebase discovery
 
@@ -158,7 +164,8 @@ When implementing a new feature, follow this sequence:
 
 4. **Document & Commit** ⚠️ NEVER SKIP THIS STEP
    - **MANDATORY**: Always commit and push after completing work
-   - Update README.md with completed feature (if applicable)
+   - Update README.md with high-level status (if applicable)
+   - Update SERVICES.md with detailed feature documentation (if applicable)
    - Update CLAUDE.md if structure changed
    - Run: `git add <files>`
    - Run: `git commit -m "descriptive message"`
@@ -242,7 +249,8 @@ See `.claudeignore` for files to skip during context gathering to save tokens.
 ## Quick Start for New Claude Sessions
 
 1. **Read this file first** - Contains all context and rules
-2. **Check README.md** - See current implementation status
-3. **Run `cargo test`** - Verify current state
-4. **Continue from "Current Development Priority"** section above
-5. **Remember**: Always update README.md when completing features
+2. **Check README.md** - See high-level project status and features
+3. **Check SERVICES.md** - See detailed service documentation
+4. **Run `cargo test`** - Verify current state
+5. **Continue from "Current Development Priority"** section above
+6. **Remember**: Always update documentation (README.md and SERVICES.md) when completing features

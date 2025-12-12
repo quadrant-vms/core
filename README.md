@@ -1,6 +1,6 @@
 # Quadrant VMS (Rust)
 
-> ⚙️ A Video Management System (VMS) built in **Rust**.  
+> ⚙️ A Video Management System (VMS) built in **Rust**.
 > The project aims to be **modular**, **cluster-ready**, and **AI-model friendly**.
 
 ---
@@ -8,489 +8,299 @@
 ## 🚧 Development Status
 This project is **under active development**.
 
-### ✅ Implemented
-- `stream-node`: RTSP ingest → HLS (TS/fMP4) with S3 upload fallback.
-- `coordinator`: lease-based scheduler with REST API
-  - **Persistent lease store** with PostgreSQL backend
-  - In-memory backend option for development/testing
-  - Configurable via `LEASE_STORE_TYPE` environment variable (`memory` or `postgres`)
-  - Automatic database migrations with sqlx
-  - Atomic lease operations with PostgreSQL transactions
-  - Efficient lease expiration and cleanup
-- `admin-gateway`: REST facade that acquires leases, launches `stream-node`, and stops streams via worker HTTP calls.
-- `recorder-node`: Complete recording pipeline implementation with:
-  - FFmpeg-based recording from RTSP and HLS sources
-  - Multi-format output support (MP4, HLS, MKV)
-  - Automatic metadata extraction (duration, resolution, codecs, bitrate, fps)
-  - Recording job lifecycle management with REST API
-  - Storage path tracking and S3 integration
-  - **Coordinator lease integration** for distributed recording management
-  - Automatic lease acquisition, renewal (50% TTL interval), and release
-  - Lease failure detection with error state transitions
-  - Configurable via `COORDINATOR_URL` and `NODE_ID` environment variables
-- `admin-gateway`: Recorder worker management integration
-  - REST API for recorder operations (`/v1/recordings`)
-  - Lease-based recorder resource management via coordinator
-  - Automatic lease acquisition and renewal for recordings
-  - Recording lifecycle orchestration (start/stop/list)
-  - Worker health monitoring and error handling
-- **Failover hardening and resilience features**:
-  - Worker health verification: admin-gateway checks worker liveness during lease renewal
-  - Automatic retry with exponential backoff: lease renewals retry up to 3 times before marking stream as failed
-  - Enhanced health endpoints: `/readyz` endpoint verifies lease store connectivity
-  - Graceful degradation: temporary coordinator unavailability doesn't immediately kill active streams
-  - Comprehensive error handling with detailed error messages and logging
-- **Multi-coordinator clustering with leader election**:
-  - Leader election using Raft-inspired consensus algorithm
-  - Automatic failover and re-election on leader failure
-  - Heartbeat-based health monitoring between coordinator nodes
-  - Randomized election timeouts to prevent split votes
-  - Cluster status API endpoint (`/cluster/status`)
-  - Configurable via environment variables (`CLUSTER_ENABLED`, `NODE_ID`, `CLUSTER_PEERS`)
-  - Support for single-node and multi-node cluster deployments
-  - Integration tests validating leader election in 1-node and 3-node clusters
-    - **Request forwarding from followers to leader**: Follower coordinators automatically forward write operations (acquire/renew/release) to the elected leader, enabling clients to connect to any coordinator node without tracking leader status
-- **Advanced Metrics and Observability**:
-  - Prometheus metrics integration across all services
-  - Comprehensive metric collection for coordinators, stream-nodes, recorder-nodes, admin-gateway, and ai-service
-  - `/metrics` endpoint on all services for Prometheus scraping
-  - Coordinator metrics: active leases, lease operations, cluster nodes, leader elections, forwarded requests
-  - Stream-node metrics: active streams, HLS segments, S3 uploads, bytes processed
-  - Recorder-node metrics: active recordings, recording operations, bytes recorded, completion status
-  - Admin-gateway metrics: HTTP requests, request duration, active workers, worker operations
-  - AI-service metrics: active tasks, frames processed, detections made, detection latency, plugin health
-  - Centralized metrics registry in telemetry crate
-- **AI Model Plugin Architecture**:
-  - `ai-service`: Modular AI plugin system with extensible architecture
-  - Plugin trait interface for custom AI model integrations
-  - Plugin registry with dynamic plugin registration and management
-  - Built-in mock object detection plugin for testing and demonstration
-  - **YOLOv8 object detection plugin**:
-    - Real-time object detection using YOLOv8 ONNX models
-    - Support for all YOLOv8 model variants (nano, small, medium, large, extra-large)
-    - CPU and GPU inference support via ONNX Runtime
-    - Non-Maximum Suppression (NMS) for overlapping box filtering
-    - Configurable confidence and IoU thresholds
-    - 80 COCO classes detection (person, car, dog, etc.)
-    - Automatic scaling to original image dimensions
-    - Environment variable configuration (`YOLOV8_MODEL_PATH`, `YOLOV8_CONFIDENCE`)
-  - **Pose estimation plugin**:
-    - Human pose estimation with keypoint detection
-    - COCO 17 keypoint format (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles)
-    - Support for MoveNet, MediaPipe Pose, or similar ONNX models
-    - CPU and GPU inference support via ONNX Runtime
-    - Multiple pose detection per frame (configurable max poses)
-    - Configurable confidence thresholds for poses and individual keypoints
-    - Automatic bounding box calculation from detected keypoints
-    - Detailed keypoint metadata (name, coordinates, confidence, index)
-    - Person ID tracking for multi-pose scenarios
-    - Environment variable configuration (`POSE_MODEL_PATH`, `POSE_CONFIDENCE`, `POSE_KEYPOINT_CONFIDENCE`)
-  - **Frame capture pipeline**:
-    - FFmpeg-based frame extraction utilities in common crate
-    - REST API endpoint for frame submission (`POST /v1/tasks/:id/frames`)
-    - Real-time frame processing with AI plugins
-    - Base64-encoded JPEG frame transport for JSON compatibility
-    - Automatic frame dimension probing with ffprobe
-    - Configurable JPEG quality and scaling
-    - Frame sequence tracking and timestamp management
-    - **Stream-node integration** with periodic frame capture for live AI processing
-    - Configurable capture intervals, resolution, and quality settings
-    - Automatic frame submission to AI service with task management
-    - CancellationToken-based lifecycle management for clean shutdown
-  - REST API for AI task lifecycle management (`/v1/tasks`)
-  - Coordinator lease integration for distributed AI task management
-  - Automatic lease acquisition, renewal, and release for AI tasks
-  - Support for multiple output formats (webhook, MQTT, RabbitMQ, local file)
-  - Frame-based processing with configurable sampling rates
-  - Comprehensive metrics for AI operations (tasks, frames, detections, latency)
-  - Health check endpoints for plugin monitoring
-  - Configurable via `AI_SERVICE_ADDR`, `COORDINATOR_URL`, and `NODE_ID` environment variables
-  - Standalone or coordinator-integrated deployment modes
-- **Recorder-node AI integration**:
-  - Frame capture from active recordings for AI processing
-  - Optional AI configuration per recording (RecordingAiConfig)
-  - Automatic frame extraction and submission to AI service
-  - Configurable capture interval, resolution, and quality
-  - Integration with ai-service via REST API
-  - Backward compatible (AI processing is optional)
-  - Clean lifecycle management with cancellation tokens
-- **Comprehensive Test Suite** (`cargo test`):
-  - Unit tests for lease store logic, router contracts, recording lifecycle, pipeline configuration
-  - Integration tests for recorder-coordinator integration, cluster leader election, metrics collection
-  - AI plugin system tests, frame capture pipeline tests, recorder AI integration tests
-  - **Full end-to-end integration tests** (`tests/full_pipeline_e2e.rs`):
-    - Complete pipeline: stream → recording → AI processing with coordinator orchestration
-    - Multi-service interaction: admin-gateway ↔ coordinator ↔ stream-node ↔ recorder-node ↔ ai-service
-    - Lease management across all service types (stream, recorder, AI tasks)
-    - Health check verification across all services
-    - Multi-component error handling and recovery scenarios
-  - 38 total tests validating the entire VMS stack
+---
 
-- **GPU Acceleration Optimization**:
-  - CUDA and TensorRT execution provider support for YOLOv8
-  - Automatic fallback from TensorRT → CUDA → CPU
-  - Multi-GPU support with device selection
-  - Configurable thread pools (intra/inter-operation parallelism)
-  - GPU memory limit configuration
-  - Performance monitoring with execution provider tracking
-  - Comprehensive metrics for GPU vs CPU inference comparison
-  - Environment variable and JSON configuration support
-  - Detailed GPU setup documentation in `docs/GPU_ACCELERATION.md`
-  - Inference time tracking separate from pre/post-processing
+## 🏗️ Architecture Overview
 
-- **Stateless Architecture & High Availability** (`ENABLE_STATE_STORE=true`):
-  - **StateStore HTTP API** in coordinator for persisting stream/recording/AI task state
-  - **PostgreSQL-backed** persistent state storage via StateStore trait
-  - **HTTP client** (StateStoreClient) in common crate for remote state access
-  - **Admin-gateway integration**: automatic state persistence on all state changes
-  - **Worker nodes integration**: recorder-node and ai-service persist state during lifecycle
-  - **Bootstrap logic**: restore state from StateStore on startup for all services
-  - **Automated orphan cleanup**: detect and automatically remove orphaned resources
-    - Cleanup runs on startup and periodically (configurable via `ORPHAN_CLEANUP_INTERVAL_SECS`)
-    - Default interval: 300 seconds (5 minutes)
-    - Removes orphaned streams/recordings (non-active state with stale leases)
-    - In-memory and persistent state cleanup
-  - **Multi-instance coordination** for active-active HA deployments:
-    - StateStore shared across multiple coordinator instances via PostgreSQL
-    - Worker nodes connect to any coordinator for state operations
-    - Automatic state synchronization across cluster
-    - Supports distributed worker nodes across multiple admin-gateway instances
-    - Complete HA deployment guide in `docs/HA_DEPLOYMENT.md`
-  - **State migration tools** (`state-migrate` binary):
-    - `check` - Verify database schema and migrations
-    - `list-orphans` - List orphaned resources with filtering
-    - `cleanup-orphans` - Clean up orphans (with dry-run mode)
-    - `export` - Export all state to JSON for backup/migration
-    - `import` - Import state from JSON (with skip-existing option)
-    - `vacuum` - Database maintenance (VACUUM ANALYZE)
-    - `stats` - Show comprehensive state store statistics
-  - **Comprehensive integration tests** (`tests/stateless_integration.rs`):
-    - StateStore save/retrieve/update operations
-    - List by node_id filtering
-    - Orphan detection logic validation
-    - HTTP API endpoint testing
-    - State persistence across restarts
-    - Bootstrap recovery scenarios
-  - **State persistence** across lease renewals, errors, and health check failures
-  - **Backward compatible**: works with or without StateStore enabled
-  - **Environment variables**:
-    - `ENABLE_STATE_STORE=true` to enable state persistence
-    - `ORPHAN_CLEANUP_INTERVAL_SECS=300` for cleanup interval (default: 5 minutes)
+Quadrant VMS is built as a **Cargo workspace** with multiple specialized services:
 
-- **Authentication & Authorization System**:
-  - `auth-service`: Centralized authentication service
-    - **User management**: Create, read, update, delete users
-    - **JWT-based authentication**: Secure token-based API access
-    - **API tokens**: Long-lived tokens for service-to-service authentication
-    - **Role-Based Access Control (RBAC)**: Fine-grained permission system
-    - **Multi-tenancy support**: Isolated tenant environments with resource quotas
-    - **Audit logging**: Complete security audit trail for compliance
-    - **PostgreSQL-backed storage**: Users, roles, permissions, tenants, tokens, audit logs
-    - **OIDC/OAuth2 SSO Integration**: Single Sign-On with external identity providers
-      - Google Workspace / Google Identity support
-      - Microsoft Azure AD / Entra ID support
-      - Keycloak support
-      - Generic custom OIDC provider support
-      - Automatic user provisioning on first SSO login
-      - OIDC identity linking and management
-      - CSRF-protected authorization flow
-  - **auth_middleware** (common crate): Shared authentication middleware
-    - JWT token verification and validation
-    - Permission checking utilities
-    - Request context injection
-    - Support for both JWT and API token authentication
-  - **Comprehensive permission system**:
-    - Resource-based permissions (stream, recording, ai_task, device, user, role, tenant, audit)
-    - Action-based controls (read, create, update, delete)
-    - Built-in roles: System Administrator, Operator, Viewer
-    - Custom role creation and management
-    - Permission inheritance through roles
-    - System admin bypass for all permission checks
-  - **Tenant isolation**:
-    - Separate users and roles per tenant
-    - Resource quotas (max_users, max_streams, max_recordings, max_ai_tasks)
-    - Tenant-scoped audit logs
-    - Cross-tenant access only for system admins
-  - **Security features**:
-    - Argon2 password hashing
-    - Secure API token generation (cryptographically random)
-    - Token expiration and revocation
-    - Configurable JWT expiration (default: 1 hour)
-    - Last login tracking
-    - Audit log with IP address and user agent tracking
-  - **Default system setup**:
-    - System tenant pre-configured
-    - Default admin user (username: admin, password: admin123 - CHANGE IN PRODUCTION!)
-    - Built-in roles: system-admin, operator, viewer
-    - 29 default permissions covering all resources (including device management)
-  - **Integration tests** (`tests/auth_integration.rs`):
-    - JWT generation and verification
-    - Password hashing and validation
-    - API token lifecycle
-    - Permission checking logic
-    - System admin privilege escalation
-  - **Complete documentation** in `docs/AUTHENTICATION.md`
-  - **REST API** for all auth operations
-  - **Environment variables**:
-    - `DATABASE_URL` - PostgreSQL connection string
-    - `JWT_SECRET` - Secret key for JWT signing (CHANGE IN PRODUCTION!)
-    - `JWT_EXPIRATION_SECS` - Token expiration time (default: 3600)
-    - `AUTH_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8083)
+### Core Services
+- **`coordinator`** - Lease-based distributed job scheduler with multi-node clustering and leader election
+- **`admin-gateway`** - REST API facade for orchestrating all VMS operations
+- **`stream-node`** - RTSP to HLS transcoding with S3 storage and AI frame capture
+- **`recorder-node`** - FFmpeg-based recording pipeline with retention management and search indexing
+- **`playback-service`** - Multi-protocol playback delivery (HLS/RTSP) for live streams and recordings
 
-- **Device & Topology Management**:
-  - `device-manager`: Comprehensive camera and device management system
-    - **Device onboarding and registration**: Add cameras, NVRs, encoders to the system
-    - **RTSP device probing**: Automatic capability detection using ffprobe
-      - Video codec detection (H.264, H.265, MJPEG, etc.)
-      - Audio codec detection
-      - Resolution discovery
-      - Metadata extraction (manufacturer, model)
-    - **Multi-protocol support**: RTSP, ONVIF, HTTP, RTMP, WebRTC
-    - **Device categorization**: Types (camera, NVR, encoder, other), zones, tags
-    - **Health monitoring system**:
-      - Automated periodic health checks
-      - Configurable check intervals per device
-      - Status tracking (online, offline, error, maintenance, provisioning)
-      - Health history with timestamps and response times
-      - Consecutive failure tracking
-      - Automatic status transitions based on health check results
-    - **Batch operations**: Update multiple devices simultaneously
-    - **PostgreSQL-backed storage**: Persistent device state, health history, events
-    - **Device event audit trail**: Tracks all device state changes and operations
-    - **Secure credential management**: Encrypted storage of device passwords
-    - **Rich device metadata**:
-      - Manufacturer, model, firmware version
-      - Location and zone assignment
-      - Custom tags for organization
-      - Device capabilities (PTZ, audio, motion detection)
-      - Supported codecs and resolutions
-      - Auto-start, recording, and AI enablement flags
-    - **REST API** for all device operations:
-      - CRUD operations for devices
-      - Device health status and history endpoints
-      - On-demand device probing
-      - Batch update endpoint
-    - **Integration with auth-service**:
-      - Tenant-isolated device management
-      - Permission-based access control (device:read, device:create, device:update, device:delete)
-      - Operator role includes device management permissions
-    - **Integration tests** (`tests/device_manager_integration.rs`):
-      - Device CRUD operations
-      - Health tracking and history
-      - Store operations validation
-    - **Environment variables**:
-      - `DATABASE_URL` - PostgreSQL connection string
-      - `DEVICE_MANAGER_ADDR` - Bind address (default: 127.0.0.1:8084)
-      - `PROBE_TIMEOUT_SECS` - Device probe timeout (default: 10)
-      - `HEALTH_CHECK_INTERVAL_SECS` - Global health check interval (default: 30)
-      - `MAX_CONSECUTIVE_FAILURES` - Failures before marking as error (default: 3)
+### Intelligence & Automation
+- **`ai-service`** - Modular AI plugin system with YOLOv8 object detection, pose estimation, and GPU acceleration
+- **`alert-service`** - Event-driven alert and automation system with multi-channel notifications
 
-- **PTZ Control System** (device-manager):
-  - **PTZ movement commands**: Pan, tilt, zoom, absolute/relative positioning, home position
-  - **PTZ client architecture**: Extensible client interface with ONVIF implementation
-  - **Preset management**: Create, update, delete, and navigate to PTZ presets
-  - **Tour system**: Define and execute patrol tours with multiple waypoints
-  - **Database schema**: PostgreSQL tables for presets, tours, and tour steps
-  - **REST API endpoints**: Complete API for PTZ control, presets, and tours
-  - **ONVIF integration**: SOAP-based communication with ONVIF-compliant cameras
-  - **Mock client**: Testing and development support for non-PTZ devices
-  - **Store operations**: Full CRUD operations for presets and tours
-  - **Tour execution engine**: Background worker for automated tour execution
-    - Multi-tour support (concurrent tours on different devices)
-    - State management (running, paused, stopped)
-    - Loop support for continuous patrol
-    - Graceful cancellation with CancellationToken
-    - Automatic state synchronization with database
-    - Configurable dwell times and speeds per waypoint
-    - Preset and absolute position support
-  - **Tour control REST API**:
-    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/start` - Start tour execution
-    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/stop` - Stop running tour
-    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/pause` - Pause running tour
-    - `POST /v1/devices/:device_id/ptz/tours/:tour_id/resume` - Resume paused tour
-  - **Environment variables**:
-    - `PTZ_TIMEOUT_SECS` - PTZ command timeout (default: 10)
+### Security & Management
+- **`auth-service`** - Authentication, authorization (RBAC), multi-tenancy, and OIDC/OAuth2 SSO integration
+- **`device-manager`** - Camera/device management with ONVIF discovery, PTZ control, health monitoring, and firmware updates
 
-- **ONVIF Device Discovery** (device-manager):
-  - **WS-Discovery protocol**: Automatic network scanning for ONVIF-compliant devices
-  - **UDP multicast probe**: Discovers cameras, NVRs, and encoders on local network
-  - **Device metadata extraction**: Manufacturer, model, hardware ID, location from ONVIF scopes
-  - **Asynchronous scanning**: Background discovery with non-blocking API
-  - **Scan management**: Start, cancel, and track multiple discovery scans
-  - **PostgreSQL-backed storage**: Persistent storage of discovery scans and found devices
-  - **Device import workflow**: Discovered devices can be imported into device registry
-  - **REST API endpoints**:
-    - `POST /v1/discovery/scan` - Start new discovery scan
-    - `GET /v1/discovery/scans` - List all discovery scans
-    - `GET /v1/discovery/scans/:scan_id` - Get scan status and details
-    - `GET /v1/discovery/scans/:scan_id/devices` - List discovered devices for a scan
-    - `POST /v1/discovery/scans/:scan_id/cancel` - Cancel running scan
-  - **GetDeviceInformation support**: Fetch detailed device info via ONVIF
-  - **Automatic cleanup**: Configurable retention for old discovery data
-  - **Environment variables**:
-    - `DISCOVERY_TIMEOUT_SECS` - Discovery scan timeout (default: 5)
+### Shared Libraries
+- **`common`** - Shared utilities, types, auth middleware, and state management clients
+- **`telemetry`** - Centralized logging and Prometheus metrics infrastructure
 
-- **Camera Configuration Push** (device-manager):
-  - **ONVIF imaging service integration**: Remote camera configuration management
-  - **Video encoder configuration**: Codec (H.264/H.265/MJPEG), resolution, framerate, bitrate, GOP size, quality
-  - **Image settings**: Brightness, contrast, saturation, sharpness, hue adjustments
-  - **Advanced features**: IR mode (auto/on/off), Wide Dynamic Range (WDR) control
-  - **Audio configuration**: Enable/disable audio, codec selection, bitrate settings
-  - **Network settings**: Multicast configuration, RTSP port customization
-  - **Configuration history tracking**: PostgreSQL-backed storage of all configuration changes
-  - **Partial success handling**: Graceful handling of partially applied configurations
-  - **Audit trail**: Event logging for all configuration attempts
-  - **Multi-protocol support**: ONVIF primary, mock client for testing
-  - **REST API endpoints**:
-    - `POST /v1/devices/:device_id/configuration` - Apply camera configuration
-    - `GET /v1/devices/:device_id/configuration` - Get current device configuration
-    - `GET /v1/devices/:device_id/configuration/history` - List configuration history
-    - `GET /v1/devices/:device_id/configuration/:config_id` - Get specific configuration by ID
-  - **Database schema**: `device_configurations` table with status tracking, applied settings, and error handling
-  - **Status tracking**: pending, applied, failed, partiallyapplied states
-  - **Automatic triggers**: Database triggers for status updates and event logging
+**For detailed service documentation, see [SERVICES.md](SERVICES.md)**
 
-- **Firmware Update Management** (device-manager):
-  - **Firmware file catalog**: Centralized firmware storage with versioning
-  - **Upload and validation**: SHA-256 checksum validation, file storage, metadata tracking
-  - **ONVIF firmware upgrades**: Automated firmware upload and installation for ONVIF devices
-  - **Update progress tracking**: Real-time status monitoring (pending, uploading, installing, rebooting, verifying, completed)
-  - **History and audit trail**: Complete firmware update history with timestamps and error tracking
-  - **Retry mechanism**: Configurable automatic retry logic with exponential backoff
-  - **Rollback support**: Preserve previous firmware version data for potential rollback
-  - **REST API endpoints**:
-    - Firmware file management (`/v1/firmware/files`)
-    - Firmware update operations (`/v1/firmware/updates`)
-    - Device-specific firmware updates (`/v1/devices/:device_id/firmware/update`)
-  - **Database schema**: `firmware_files`, `firmware_updates`, `firmware_update_history` tables
-  - **Background execution**: Async firmware update executor with cancellation support
-  - **Multi-protocol support**: ONVIF primary, mock client for testing
-  - **Environment variables**:
-    - `FIRMWARE_STORAGE_ROOT` - Firmware file storage location (default: ./data/firmware)
+---
 
-- **Alert & Automation System** (`alert-service`):
-  - **Rule engine**: Flexible condition-based alert triggering system
-    - Support for multiple trigger types: device offline/online, motion detected, AI detections, recording/stream failures, health check failures, custom events
-    - JSON-based condition matching with operator support (>, >=, <, <=, ==, !=)
-    - Wildcard pattern matching for string fields
-    - Multi-tenant alert rule isolation
-  - **Alert suppression and rate limiting**:
-    - Configurable cooldown periods (suppress_duration_secs)
-    - Rate limiting (max_alerts_per_hour)
-    - Automatic suppression state management
-    - Suppression reason tracking
-  - **Scheduling**: Cron-based time windows for when rules are active
-  - **Multi-channel notifications**:
-    - **Email**: SMTP-based email notifications with template support
-    - **Webhook**: HTTP/HTTPS webhook delivery with custom headers and templates
-    - **MQTT**: MQTT broker integration with QoS support and topic templates
-  - **Alert history and auditing**:
-    - Complete event history with context data
-    - Notification delivery tracking (sent/failed counts)
-    - Retry mechanisms with failure tracking
-  - **PostgreSQL-backed storage**: Alert rules, actions, events, notifications, suppression state
-  - **REST API** (`/v1/rules`, `/v1/actions`, `/v1/events`, `/v1/trigger`)
-  - **Integration with auth-service**: Permission-based access control (alert:read, alert:create, alert:update, alert:delete)
-  - **Environment variables**:
-    - `DATABASE_URL` - PostgreSQL connection string
-    - `ALERT_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8085)
-    - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` - Email channel configuration (optional)
+## ✅ Key Features Implemented
 
-- **Thumbnail Generation for Recordings** (recorder-node):
-  - **FFmpeg-based thumbnail extraction**: Generate preview images from recorded videos
-  - **Single thumbnail generation**: Extract frame at specific timestamp or video midpoint
-  - **Thumbnail grid generation**: Create multiple evenly-spaced thumbnails for timeline preview
-  - **Configurable output**: Custom resolution, JPEG quality, and aspect ratio handling
-  - **Base64 encoding**: Thumbnails encoded for easy JSON transport and display
-  - **REST API endpoints**:
-    - `GET /thumbnail?recording_id=<id>&timestamp_secs=<ts>&width=<w>&height=<h>&quality=<q>` - Single thumbnail
-    - `GET /thumbnail/grid?recording_id=<id>&count=<n>&width=<w>&height=<h>&quality=<q>` - Thumbnail grid
-  - **Automatic video probing**: Duration detection for timestamp validation
-  - **Multi-format support**: Works with MP4, MKV, and HLS recordings
-  - **Default settings**: 320x180 resolution, quality 5 (high quality JPEG)
-  - **Environment variable**: `RECORDING_STORAGE_ROOT` - Recording file storage location (default: ./data/recordings)
+### Distributed Architecture
+- **Multi-coordinator clustering** with Raft-inspired leader election and automatic failover
+- **Lease-based resource management** for distributed stream, recording, and AI task coordination
+- **StateStore system** for stateless architecture and high-availability deployments
+- **Automated orphan cleanup** with configurable retention policies
 
-- **Storage & Retention Management** (recorder-node):
-  - **Retention policy engine**: Automated recording lifecycle management
-  - **Multiple policy types**: Time-based retention, storage quota enforcement, conditional policies
-  - **Tiered storage support**: Automatically move old recordings to cold storage with configurable thresholds
-  - **PostgreSQL-backed storage**: Persistent policy definitions, execution history, action tracking
-  - **Dry-run mode**: Test policies without actually deleting files
-  - **Complete audit trail**: Track all policy executions, actions, and storage statistics
-  - **REST API**: Full CRUD operations for policies, execution management, and storage stats
-  - **Database schema**: retention_policies, retention_executions, retention_actions, storage_statistics tables
-  - **Environment variables**: `DATABASE_URL` (required), `RECORDING_STORAGE_ROOT`
+### Video Management
+- **Live streaming**: RTSP → HLS (TS/fMP4) with S3 storage and fallback
+- **Recording pipeline**: Multi-format support (MP4/HLS/MKV) with metadata extraction
+- **Playback delivery**: HLS and RTSP delivery with seek, pause, resume controls
+- **Thumbnail generation**: Single frame and grid thumbnails for timeline preview
+- **Retention management**: Time-based policies, storage quotas, tiered storage
+- **Search & indexing**: Full-text search for recordings and AI events
 
-- **Search & Indexing System** (recorder-node):
-  - **Recording index**: Fast searchable index of all recordings with metadata
-  - **Event index**: Searchable catalog of AI detections, motion events, and alerts
-  - **Full-text search**: PostgreSQL tsvector-based search with weighted ranking
-  - **Advanced filtering**: Device, zone, time-range, duration, tags, labels, object type
-  - **Object-based search**: Find all recordings containing specific detected objects (person, car, etc.)
-  - **Time-range queries**: Efficient temporal queries with composite indexes
-  - **Automatic indexing**: Records indexed on creation/update with triggers
-  - **Search statistics**: Track index size, query performance, and usage patterns
-  - **REST API endpoints**:
-    - `POST /v1/search/recordings` - Search recordings with filters
-    - `POST /v1/search/events` - Search events (AI detections, alerts)
-    - `POST /v1/search/objects` - Search by detected object type
-    - `POST /v1/search/reindex` - Reindex all recordings
-    - `GET /v1/search/stats` - Get search statistics
-  - **Database schema**: recording_index, event_index, search_query_log tables with GIN indexes
-  - **Environment variables**: `DATABASE_URL` (required)
+### AI & Intelligence
+- **YOLOv8 object detection**: Real-time detection with 80 COCO classes
+- **Pose estimation**: Human pose detection with COCO 17 keypoint format
+- **GPU acceleration**: CUDA and TensorRT support with automatic fallback
+- **Frame capture pipeline**: Automatic frame extraction from live streams and recordings
+- **Modular plugin architecture**: Extensible system for custom AI models
 
-- **Playback & Delivery System** (`playback-service`):
-  - **Multi-protocol playback**: HLS and RTSP delivery for live streams and recordings
-  - **Session management**: Playback session lifecycle with state tracking
-  - **HLS delivery**:
-    - Live stream HLS playback from stream-node outputs
-    - Recording HLS playback with on-demand transcoding
-    - Static file serving for HLS segments and playlists
-  - **RTSP proxy**: RTSP proxy server for live streams and recording playback
-  - **Time-based navigation**: Seek support for recordings with timestamp control
-  - **Playback controls**: Pause, resume, stop, and speed control
-  - **PostgreSQL-backed storage**: Persistent playback session state
-  - **Multi-source support**: Playback from both live streams and recordings
-  - **REST API endpoints**:
-    - `POST /v1/playback/start` - Start playback session
-    - `POST /v1/playback/stop` - Stop playback session
-    - `POST /v1/playback/seek` - Seek to timestamp (recordings only)
-    - `POST /v1/playback/control` - Pause/resume/stop controls
-    - `GET /v1/playback/sessions` - List active playback sessions
-  - **HLS file serving**:
-    - `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists
-    - `/hls/recordings/{recording_id}/index.m3u8` - Recording playlists
-  - **Database schema**: playback_sessions table with session state tracking
-  - **Environment variables**:
-    - `DATABASE_URL` - PostgreSQL connection string (optional)
-    - `PLAYBACK_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8087)
-    - `HLS_BASE_URL` - Base URL for HLS delivery (default: http://localhost:8087/hls)
-    - `RTSP_BASE_URL` - Base URL for RTSP delivery (default: rtsp://localhost:8554)
-    - `HLS_ROOT` - HLS files directory (default: ./data/hls)
-    - `RECORDING_STORAGE_ROOT` - Recording files directory (default: ./data/recordings)
-    - `NODE_ID` - Playback node identifier (auto-generated if not set)
-  - **Integration tests** (`tests/playback_integration.rs`):
-    - Playback session lifecycle tests
-    - HLS delivery validation
-    - Seek and control operations
-    - Multi-session management
+### Device Management
+- **ONVIF device discovery**: Automatic network scanning with WS-Discovery protocol
+- **Health monitoring**: Automated periodic checks with status tracking
+- **PTZ control**: Pan/tilt/zoom with presets and automated tour system
+- **Camera configuration push**: Remote video encoder, image settings, and network configuration
+- **Firmware update management**: Automated ONVIF firmware upgrades with rollback support
 
-### 🔜 In Progress
+### Security & Access Control
+- **JWT authentication** with API token support
+- **Role-Based Access Control (RBAC)**: Fine-grained permissions across 29 resources
+- **Multi-tenancy**: Isolated tenant environments with resource quotas
+- **OIDC/OAuth2 SSO**: Integration with Google, Azure AD, Keycloak, and custom providers
+- **Audit logging**: Complete security audit trail for compliance
 
-#### Upcoming Features
-- **Advanced playback features**: LL-HLS/WebRTC support, time-axis preview, DVR time-shift, edge caching
-- **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
-- **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
-- **Additional AI model integrations**: facial recognition, action recognition, license plate recognition
-- **Additional alert integrations**: SMS notifications, Slack/Discord webhooks, PagerDuty integration
+### Alerts & Automation
+- **Rule engine**: Flexible condition-based triggering with JSON matching
+- **Multi-channel notifications**: Email (SMTP), Webhook, MQTT
+- **Alert suppression**: Cooldown periods and rate limiting
+- **Scheduling**: Cron-based time windows for active rules
+
+### Resilience & Observability
+- **Worker health verification** with liveness checks during lease renewal
+- **Automatic retry** with exponential backoff (up to 3 retries)
+- **Graceful degradation** during temporary coordinator unavailability
+- **Prometheus metrics** across all services with 38+ comprehensive tests
+- **Health check endpoints** (`/readyz`) with dependency verification
+
+---
+
+## 📊 System Status
+
+### ✅ Production-Ready Features
+- Core video pipeline (streaming, recording, playback)
+- Distributed coordination with clustering
+- AI processing with GPU acceleration
+- Device management with ONVIF support
+- Authentication & authorization
+- Alert system with multi-channel notifications
+- Retention & search capabilities
+- Stateless architecture with HA support
+
+### 🔜 Upcoming Features
+- **Advanced playback**: LL-HLS/WebRTC support, time-axis preview, DVR time-shift, edge caching
+- **Enhanced observability**: Centralized structured logs, distributed tracing, SLO dashboards by tenant/node
+- **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
+- **Additional AI models**: Facial recognition, action recognition, license plate recognition
+- **Extended integrations**: SMS notifications, Slack/Discord webhooks, PagerDuty
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Rust 1.70+ (`cargo --version`)
+- FFmpeg 4.0+ (`ffmpeg -version`)
+- PostgreSQL 13+ (for persistent storage)
+- Docker & Docker Compose (optional, for containerized deployment)
+
+### Build & Test
+```bash
+# Build all crates
+cargo build --release
+
+# Run tests
+cargo test
+# or
+make test
+```
+
+### Launch Individual Services
+```bash
+# Stream node (RTSP → HLS)
+HLS_ROOT=./data/hls cargo run -p stream-node
+
+# Coordinator (lease scheduler)
+cargo run -p coordinator
+
+# Admin gateway (REST API)
+COORDINATOR_URL="http://localhost:8082" cargo run -p admin-gateway
+
+# Recorder node (recording pipeline)
+COORDINATOR_URL="http://localhost:8082" cargo run -p recorder-node
+
+# AI service (AI processing)
+COORDINATOR_URL="http://localhost:8082" cargo run -p ai-service
+
+# Auth service (authentication)
+cargo run -p auth-service
+
+# Device manager (device management)
+cargo run -p device-manager
+
+# Alert service (alerts & automation)
+cargo run -p alert-service
+
+# Playback service (playback delivery)
+cargo run -p playback-service
+```
+
+### Docker Compose Stack
+```bash
+# Initialize and start all services
+make init-dc
+
+# Check service status
+make status-dc
+```
+
+---
+
+## 📁 Project Structure
+
+```
+quadrant-vms/core/
+├── crates/
+│   ├── admin-gateway/      # REST API facade
+│   ├── ai-service/          # AI plugin system
+│   ├── alert-service/       # Alert & automation
+│   ├── auth-service/        # Authentication & RBAC
+│   ├── common/              # Shared utilities
+│   ├── coordinator/         # Lease scheduler
+│   ├── device-manager/      # Device management
+│   ├── playback-service/    # Playback delivery
+│   ├── recorder-node/       # Recording pipeline
+│   ├── stream-node/         # RTSP → HLS transcoding
+│   └── telemetry/           # Observability
+├── tests/                   # Integration tests
+├── profiles/                # Deployment profiles
+├── docs/                    # Documentation
+├── Cargo.toml               # Workspace manifest
+├── Makefile                 # Build & deployment shortcuts
+├── README.md                # This file
+├── SERVICES.md              # Detailed service documentation
+└── CLAUDE.md                # Development guide for Claude Code
+```
+
+---
+
+## 📖 Documentation
+
+- **[SERVICES.md](SERVICES.md)** - Detailed documentation for each service
+- **[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)** - Authentication & authorization setup
+- **[docs/HA_DEPLOYMENT.md](docs/HA_DEPLOYMENT.md)** - High-availability deployment guide
+- **[docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md)** - GPU acceleration setup for AI workloads
+- **[CLAUDE.md](CLAUDE.md)** - Development guide for Claude Code (AI assistant)
+
+---
+
+## 🧪 Testing
+
+The project includes comprehensive test coverage:
+- **Unit tests**: Co-located with source files for core logic
+- **Integration tests**: Service interaction and API contracts (`tests/` directory)
+- **End-to-end tests**: Complete pipeline validation (`tests/full_pipeline_e2e.rs`)
+
+**Total**: 38+ tests covering lease management, recording lifecycle, AI processing, clustering, metrics, and multi-service orchestration.
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test
+cargo test test_name
+```
+
+---
+
+## 🛠️ Configuration
+
+Services are configured via environment variables. Key variables:
+
+- `DATABASE_URL` - PostgreSQL connection string (used by most services)
+- `COORDINATOR_URL` - Coordinator service URL for worker nodes
+- `JWT_SECRET` - Secret key for JWT signing (auth-service)
+- `HLS_ROOT` - HLS output directory (stream-node)
+- `RECORDING_STORAGE_ROOT` - Recording storage location (recorder-node)
+- `ENABLE_STATE_STORE` - Enable state persistence for HA (default: false)
+- `CLUSTER_ENABLED` - Enable multi-node clustering (coordinator)
+
+**For complete configuration options, see [SERVICES.md](SERVICES.md)**
+
+Example `.env` file:
+```bash
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/quadrant_vms
+COORDINATOR_URL=http://localhost:8082
+JWT_SECRET=your-secret-key-change-in-production
+ENABLE_STATE_STORE=true
+CLUSTER_ENABLED=true
+```
+
+---
+
+## 🔧 Development
+
+### Makefile Commands
+```bash
+make test          # Run tests
+make launch        # Launch stream-node locally
+make init-dc       # Initialize Docker Compose stack
+make status-dc     # Check Docker Compose status
+```
+
+### Common Development Tasks
+- **Adding a new feature**: See [CLAUDE.md](CLAUDE.md) for development workflow
+- **Debugging inter-service communication**: Check contract definitions in `crates/common/src/`
+- **Modifying lease logic**: Focus on `crates/coordinator/src/store.rs`
+- **Running integration tests**: `cargo test --test <test_name>`
+
+---
+
+## 📊 Metrics & Monitoring
+
+All services expose Prometheus metrics at `/metrics`:
+- Coordinator: Active leases, cluster status, operations
+- Stream-node: Active streams, segments, S3 uploads, bytes processed
+- Recorder-node: Active recordings, bytes recorded, completion status
+- AI-service: Active tasks, frames processed, detections, latency
+- Device-manager: Device health, operations
+- Alert-service: Rules, events, notifications
+- Playback-service: Sessions, bytes delivered
+
+**For detailed metrics, see [SERVICES.md](SERVICES.md)**
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please ensure:
+1. All tests pass (`cargo test`)
+2. Code follows existing patterns and style
+3. New features include tests
+4. Update documentation (README.md, SERVICES.md, CLAUDE.md) as needed
 
 ---
 
 ## 💡 Follow Progress
-Each milestone (camera compatibility, failover tests, AI plugin, etc.)
+Each milestone (camera compatibility, failover tests, AI plugins, etc.)
 will unlock sequentially as community funding goals are reached.
 
 Stay tuned.
 
 ---
+
 © 2025 Quadrant Intelligence Studio

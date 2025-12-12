@@ -1,0 +1,558 @@
+# Quadrant VMS - Service Details
+
+This document provides detailed information about each service in the Quadrant VMS architecture.
+
+---
+
+## Core Services
+
+### `coordinator` - Lease-Based Job Scheduler
+**Location**: `crates/coordinator/`
+**Entry Point**: `crates/coordinator/src/main.rs`
+
+#### Features
+- Lease-based distributed job scheduling
+- REST API for lease management (acquire/renew/release)
+- Multiple backend options:
+  - **PostgreSQL** (production): Persistent lease storage with atomic operations
+  - **In-memory** (development): Fast, ephemeral storage for testing
+- Automatic database migrations with sqlx
+- Atomic lease operations with PostgreSQL transactions
+- Efficient lease expiration and cleanup
+- **Multi-coordinator clustering** with leader election:
+  - Raft-inspired consensus algorithm
+  - Automatic failover and re-election on leader failure
+  - Heartbeat-based health monitoring between nodes
+  - Randomized election timeouts to prevent split votes
+  - Request forwarding from followers to leader
+  - Cluster status API (`/cluster/status`)
+- **StateStore HTTP API** for persisting stream/recording/AI task state
+
+#### Configuration
+- `LEASE_STORE_TYPE`: `memory` or `postgres`
+- `DATABASE_URL`: PostgreSQL connection string (when using postgres backend)
+- `CLUSTER_ENABLED`: Enable multi-node clustering
+- `NODE_ID`: Unique node identifier for clustering
+- `CLUSTER_PEERS`: Comma-separated list of peer coordinator URLs
+- `ENABLE_STATE_STORE`: Enable state persistence (default: false)
+- `ORPHAN_CLEANUP_INTERVAL_SECS`: Cleanup interval for orphaned resources (default: 300)
+
+#### Metrics
+- Active leases
+- Lease operations (acquire/renew/release)
+- Cluster nodes and leader elections
+- Forwarded requests
+
+---
+
+### `admin-gateway` - REST API Facade
+**Location**: `crates/admin-gateway/`
+**Entry Point**: `crates/admin-gateway/src/main.rs`
+
+#### Features
+- REST API facade for all VMS operations
+- Acquires leases from coordinator for distributed resource management
+- Launches and manages worker lifecycle:
+  - **stream-node**: Video streaming workers
+  - **recorder-node**: Recording workers
+- Worker health monitoring and error handling
+- Automatic retry with exponential backoff (3 retries for lease renewals)
+- Graceful degradation during temporary coordinator unavailability
+- **StateStore integration**: Automatic state persistence on all state changes
+- **Bootstrap logic**: Restore state from StateStore on startup
+- **Automated orphan cleanup**: Detect and remove orphaned resources
+
+#### API Endpoints
+- `/v1/streams` - Stream management
+- `/v1/recordings` - Recording management
+- `/readyz` - Readiness check with lease store connectivity verification
+
+#### Configuration
+- `ADMIN_GATEWAY_ADDR`: Bind address (default: 127.0.0.1:8080)
+- `COORDINATOR_URL`: Coordinator service URL
+- `ENABLE_STATE_STORE`: Enable state persistence
+
+#### Metrics
+- HTTP requests and duration
+- Active workers
+- Worker operations
+
+---
+
+### `stream-node` - RTSP to HLS Transcoding
+**Location**: `crates/stream-node/`
+**Entry Point**: `crates/stream-node/src/main.rs`
+
+#### Features
+- RTSP video stream ingestion
+- HLS transcoding with multiple format support:
+  - **TS** (MPEG-TS): Traditional HLS format
+  - **fMP4** (fragmented MP4): Modern HLS format
+- S3 storage upload with automatic fallback
+- **AI integration**: Periodic frame capture for live AI processing
+  - Configurable capture intervals, resolution, and quality
+  - Automatic frame submission to ai-service
+  - Task management with lease coordination
+  - Clean lifecycle management with cancellation tokens
+
+#### Configuration
+- `HLS_ROOT`: HLS output directory (default: ./data/hls)
+- `S3_ENDPOINT`: S3-compatible storage endpoint (optional)
+- `AI_SERVICE_ADDR`: AI service URL for frame processing (optional)
+
+#### Metrics
+- Active streams
+- HLS segments generated
+- S3 uploads (success/failure)
+- Bytes processed
+
+---
+
+### `recorder-node` - Video Recording Pipeline
+**Location**: `crates/recorder-node/`
+**Entry Point**: `crates/recorder-node/src/main.rs`
+
+#### Features
+- FFmpeg-based recording pipeline
+- Multi-source support:
+  - **RTSP**: Direct camera streams
+  - **HLS**: HTTP Live Streaming sources
+- Multi-format output:
+  - **MP4**: Standard video format
+  - **HLS**: Segmented streaming format
+  - **MKV**: Matroska container
+- Automatic metadata extraction (duration, resolution, codecs, bitrate, fps)
+- Recording job lifecycle management
+- Storage path tracking and S3 integration
+- **Coordinator lease integration**: Distributed recording management with automatic lease renewal
+- **AI integration**: Frame capture from active recordings with configurable intervals
+- **Thumbnail generation**: Extract preview images from recordings
+  - Single thumbnail at specific timestamp
+  - Thumbnail grid for timeline preview
+  - Configurable resolution and JPEG quality
+- **Storage & retention management**: Automated recording lifecycle
+  - Time-based retention policies
+  - Storage quota enforcement
+  - Tiered storage support (hot/cold storage)
+  - Dry-run mode for testing
+  - Complete audit trail
+- **Search & indexing**: Fast searchable index of recordings and events
+  - Full-text search with PostgreSQL tsvector
+  - Advanced filtering (device, zone, time-range, duration, tags)
+  - Object-based search (find recordings with specific detections)
+  - Automatic indexing with triggers
+
+#### REST API
+- `/v1/recordings` - Recording CRUD operations
+- `/thumbnail` - Single thumbnail generation
+- `/thumbnail/grid` - Thumbnail grid generation
+- `/v1/retention/policies` - Retention policy management
+- `/v1/storage/stats` - Storage statistics
+- `/v1/search/recordings` - Search recordings
+- `/v1/search/events` - Search events
+- `/v1/search/objects` - Search by object type
+
+#### Configuration
+- `RECORDER_NODE_ADDR`: Bind address (default: 127.0.0.1:8081)
+- `COORDINATOR_URL`: Coordinator service URL
+- `NODE_ID`: Unique node identifier
+- `AI_SERVICE_ADDR`: AI service URL for frame processing (optional)
+- `RECORDING_STORAGE_ROOT`: Recording file storage (default: ./data/recordings)
+- `DATABASE_URL`: PostgreSQL connection string (for retention/search features)
+
+#### Metrics
+- Active recordings
+- Recording operations (start/stop)
+- Bytes recorded
+- Completion status (success/failure)
+
+---
+
+## AI & Intelligence Services
+
+### `ai-service` - AI Model Plugin System
+**Location**: `crates/ai-service/`
+**Entry Point**: `crates/ai-service/src/main.rs`
+
+#### Features
+- **Modular plugin architecture**: Extensible AI model integration system
+- **Plugin registry**: Dynamic plugin registration and management
+- **Built-in plugins**:
+  - **Mock object detection**: Testing and demonstration
+  - **YOLOv8 object detection**: Real-time object detection
+    - All YOLOv8 variants (nano/small/medium/large/extra-large)
+    - 80 COCO classes (person, car, dog, etc.)
+    - CPU and GPU inference (ONNX Runtime)
+    - Non-Maximum Suppression (NMS)
+    - Configurable confidence/IoU thresholds
+  - **Pose estimation**: Human pose detection
+    - COCO 17 keypoint format
+    - Multiple pose detection per frame
+    - Support for MoveNet, MediaPipe Pose, or similar ONNX models
+    - Keypoint confidence tracking
+    - Person ID tracking
+- **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
+- **GPU acceleration optimization**:
+  - CUDA and TensorRT execution providers
+  - Automatic fallback (TensorRT → CUDA → CPU)
+  - Multi-GPU support with device selection
+  - Configurable thread pools and memory limits
+  - Performance monitoring
+- **Coordinator lease integration**: Distributed AI task management
+- **Multi-output support**: Webhook, MQTT, RabbitMQ, local file
+- **Comprehensive metrics**: Tasks, frames, detections, latency, plugin health
+
+#### REST API
+- `/v1/tasks` - AI task lifecycle management
+- `/v1/tasks/:id/frames` - Frame submission for processing
+- `/health` - Health check with plugin status
+
+#### Configuration
+- `AI_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8088)
+- `COORDINATOR_URL`: Coordinator service URL
+- `NODE_ID`: Unique node identifier
+- `YOLOV8_MODEL_PATH`: YOLOv8 ONNX model file path
+- `YOLOV8_CONFIDENCE`: Detection confidence threshold (default: 0.5)
+- `POSE_MODEL_PATH`: Pose estimation ONNX model file path
+- `POSE_CONFIDENCE`: Pose confidence threshold (default: 0.5)
+- `POSE_KEYPOINT_CONFIDENCE`: Keypoint confidence threshold (default: 0.3)
+
+#### Metrics
+- Active AI tasks
+- Frames processed
+- Detections made
+- Detection latency
+- Plugin health status
+
+---
+
+## Security & Access Control
+
+### `auth-service` - Authentication & Authorization
+**Location**: `crates/auth-service/`
+**Entry Point**: `crates/auth-service/src/main.rs`
+
+#### Features
+- **User management**: CRUD operations for users
+- **JWT-based authentication**: Secure token-based API access
+- **API tokens**: Long-lived tokens for service-to-service authentication
+- **Role-Based Access Control (RBAC)**: Fine-grained permission system
+  - Resource-based permissions (stream, recording, ai_task, device, user, role, tenant, audit)
+  - Action-based controls (read, create, update, delete)
+  - Built-in roles: System Administrator, Operator, Viewer
+  - Custom role creation and management
+  - Permission inheritance through roles
+- **Multi-tenancy support**: Isolated tenant environments
+  - Separate users and roles per tenant
+  - Resource quotas (max_users, max_streams, max_recordings, max_ai_tasks)
+  - Tenant-scoped audit logs
+- **OIDC/OAuth2 SSO Integration**: Single Sign-On with external identity providers
+  - Google Workspace / Google Identity
+  - Microsoft Azure AD / Entra ID
+  - Keycloak
+  - Generic custom OIDC providers
+  - Automatic user provisioning on first SSO login
+  - OIDC identity linking and management
+  - CSRF-protected authorization flow
+- **Security features**:
+  - Argon2 password hashing
+  - Secure API token generation
+  - Token expiration and revocation
+  - Last login tracking
+  - Audit log with IP address and user agent tracking
+- **Audit logging**: Complete security audit trail for compliance
+
+#### REST API
+- `/v1/users` - User management
+- `/v1/roles` - Role management
+- `/v1/permissions` - Permission management
+- `/v1/tenants` - Tenant management
+- `/v1/auth/login` - JWT authentication
+- `/v1/auth/tokens` - API token management
+- `/v1/audit` - Audit log access
+- `/v1/auth/oidc` - OIDC SSO endpoints
+
+#### Default Setup
+- **System tenant**: Pre-configured default tenant
+- **Default admin user**: username: `admin`, password: `admin123` (CHANGE IN PRODUCTION!)
+- **Built-in roles**: system-admin, operator, viewer
+- **29 default permissions**: Covering all resources including device management
+
+#### Configuration
+- `DATABASE_URL`: PostgreSQL connection string
+- `JWT_SECRET`: Secret key for JWT signing (CHANGE IN PRODUCTION!)
+- `JWT_EXPIRATION_SECS`: Token expiration time (default: 3600)
+- `AUTH_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8083)
+
+**Documentation**: See [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) for complete guide
+
+---
+
+## Device Management
+
+### `device-manager` - Camera & Device Management
+**Location**: `crates/device-manager/`
+**Entry Point**: `crates/device-manager/src/main.rs`
+
+#### Features
+- **Device onboarding and registration**: Add cameras, NVRs, encoders
+- **RTSP device probing**: Automatic capability detection
+  - Video/audio codec detection
+  - Resolution discovery
+  - Metadata extraction (manufacturer, model)
+- **Multi-protocol support**: RTSP, ONVIF, HTTP, RTMP, WebRTC
+- **Device categorization**: Types, zones, tags
+- **Health monitoring system**:
+  - Automated periodic health checks
+  - Configurable check intervals per device
+  - Status tracking (online, offline, error, maintenance, provisioning)
+  - Health history with timestamps and response times
+  - Consecutive failure tracking
+  - Automatic status transitions
+- **PTZ control system**:
+  - Pan, tilt, zoom, absolute/relative positioning
+  - Home position support
+  - Preset management (create/update/delete/navigate)
+  - Tour system for automated patrol
+  - Tour execution engine with background worker
+  - ONVIF integration with SOAP-based communication
+  - Mock client for testing
+- **ONVIF device discovery**:
+  - WS-Discovery protocol for network scanning
+  - UDP multicast probe for automatic device detection
+  - Device metadata extraction from ONVIF scopes
+  - Asynchronous scanning with non-blocking API
+  - Device import workflow
+- **Camera configuration push**:
+  - ONVIF imaging service integration
+  - Video encoder configuration (codec, resolution, framerate, bitrate)
+  - Image settings (brightness, contrast, saturation, sharpness)
+  - Advanced features (IR mode, WDR control)
+  - Audio and network configuration
+  - Configuration history tracking
+- **Firmware update management**:
+  - Firmware file catalog with versioning
+  - Upload and SHA-256 checksum validation
+  - ONVIF firmware upgrades
+  - Update progress tracking
+  - History and audit trail
+  - Retry mechanism with exponential backoff
+  - Rollback support
+- **Batch operations**: Update multiple devices simultaneously
+- **PostgreSQL-backed storage**: Persistent device state, health history, events
+- **Device event audit trail**: Tracks all device state changes
+- **Secure credential management**: Encrypted storage of device passwords
+
+#### REST API
+- `/v1/devices` - Device CRUD operations
+- `/v1/devices/:id/health` - Device health status and history
+- `/v1/devices/:id/probe` - On-demand device probing
+- `/v1/devices/:id/ptz` - PTZ control endpoints
+- `/v1/devices/:id/ptz/presets` - PTZ preset management
+- `/v1/devices/:id/ptz/tours` - PTZ tour management
+- `/v1/devices/:id/ptz/tours/:id/start` - Start tour execution
+- `/v1/discovery/scan` - ONVIF device discovery
+- `/v1/devices/:id/configuration` - Camera configuration push
+- `/v1/firmware` - Firmware management endpoints
+
+#### Configuration
+- `DATABASE_URL`: PostgreSQL connection string
+- `DEVICE_MANAGER_ADDR`: Bind address (default: 127.0.0.1:8084)
+- `PROBE_TIMEOUT_SECS`: Device probe timeout (default: 10)
+- `HEALTH_CHECK_INTERVAL_SECS`: Global health check interval (default: 30)
+- `MAX_CONSECUTIVE_FAILURES`: Failures before marking as error (default: 3)
+- `PTZ_TIMEOUT_SECS`: PTZ command timeout (default: 10)
+- `DISCOVERY_TIMEOUT_SECS`: Discovery scan timeout (default: 5)
+- `FIRMWARE_STORAGE_ROOT`: Firmware file storage (default: ./data/firmware)
+
+---
+
+## Event & Notification System
+
+### `alert-service` - Alert & Automation
+**Location**: `crates/alert-service/`
+**Entry Point**: `crates/alert-service/src/main.rs`
+
+#### Features
+- **Rule engine**: Flexible condition-based alert triggering
+  - Multiple trigger types: device offline/online, motion detected, AI detections, recording/stream failures, health check failures, custom events
+  - JSON-based condition matching with operator support (>, >=, <, <=, ==, !=)
+  - Wildcard pattern matching for string fields
+  - Multi-tenant alert rule isolation
+- **Alert suppression and rate limiting**:
+  - Configurable cooldown periods (suppress_duration_secs)
+  - Rate limiting (max_alerts_per_hour)
+  - Automatic suppression state management
+  - Suppression reason tracking
+- **Scheduling**: Cron-based time windows for when rules are active
+- **Multi-channel notifications**:
+  - **Email**: SMTP-based email with template support
+  - **Webhook**: HTTP/HTTPS delivery with custom headers and templates
+  - **MQTT**: MQTT broker integration with QoS support
+- **Alert history and auditing**:
+  - Complete event history with context data
+  - Notification delivery tracking (sent/failed counts)
+  - Retry mechanisms with failure tracking
+
+#### REST API
+- `/v1/rules` - Alert rule management
+- `/v1/actions` - Notification action management
+- `/v1/events` - Alert event history
+- `/v1/trigger` - Manual event triggering
+
+#### Configuration
+- `DATABASE_URL`: PostgreSQL connection string
+- `ALERT_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8085)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`: Email channel configuration (optional)
+
+---
+
+## Playback & Delivery
+
+### `playback-service` - Multi-Protocol Playback
+**Location**: `crates/playback-service/`
+**Entry Point**: `crates/playback-service/src/main.rs`
+
+#### Features
+- **Multi-protocol playback**: HLS and RTSP delivery
+- **Session management**: Playback session lifecycle with state tracking
+- **HLS delivery**:
+  - Live stream HLS playback from stream-node outputs
+  - Recording HLS playback with on-demand transcoding
+  - Static file serving for HLS segments and playlists
+- **RTSP proxy**: RTSP proxy server for live streams and recording playback
+- **Time-based navigation**: Seek support for recordings with timestamp control
+- **Playback controls**: Pause, resume, stop, and speed control
+- **PostgreSQL-backed storage**: Persistent playback session state
+- **Multi-source support**: Playback from both live streams and recordings
+
+#### REST API
+- `/v1/playback/start` - Start playback session
+- `/v1/playback/stop` - Stop playback session
+- `/v1/playback/seek` - Seek to timestamp (recordings only)
+- `/v1/playback/control` - Pause/resume/stop controls
+- `/v1/playback/sessions` - List active playback sessions
+
+#### HLS File Serving
+- `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists
+- `/hls/recordings/{recording_id}/index.m3u8` - Recording playlists
+
+#### Configuration
+- `DATABASE_URL`: PostgreSQL connection string (optional)
+- `PLAYBACK_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8087)
+- `HLS_BASE_URL`: Base URL for HLS delivery (default: http://localhost:8087/hls)
+- `RTSP_BASE_URL`: Base URL for RTSP delivery (default: rtsp://localhost:8554)
+- `HLS_ROOT`: HLS files directory (default: ./data/hls)
+- `RECORDING_STORAGE_ROOT`: Recording files directory (default: ./data/recordings)
+- `NODE_ID`: Playback node identifier (auto-generated if not set)
+
+---
+
+## Shared Libraries
+
+### `common` - Shared Utilities
+**Location**: `crates/common/`
+
+#### Features
+- Shared types and utilities across all services
+- Contract definitions for inter-service communication
+- Lease types and state management
+- Stream, recording, and AI task types
+- **auth_middleware**: Shared authentication middleware
+  - JWT token verification and validation
+  - Permission checking utilities
+  - Request context injection
+  - Support for both JWT and API token authentication
+- **Frame capture utilities**: FFmpeg-based frame extraction
+  - Base64-encoded JPEG frame transport
+  - Automatic frame dimension probing
+  - Configurable quality and scaling
+- **StateStore client**: HTTP client for remote state access
+  - State save/retrieve/update operations
+  - List by node_id filtering
+  - Connection pooling and retry logic
+
+---
+
+### `telemetry` - Observability Infrastructure
+**Location**: `crates/telemetry/`
+
+#### Features
+- Centralized logging infrastructure
+- Prometheus metrics registry
+- Metric collection utilities
+- Structured logging with tracing
+- Health check utilities
+
+---
+
+## State Management
+
+### StateStore System
+The StateStore system provides persistent state management for stateless architectures and high availability deployments.
+
+#### Features
+- **PostgreSQL-backed storage**: Persistent state across restarts
+- **HTTP API**: RESTful interface for state operations
+- **StateStore client**: HTTP client in common crate
+- **Multi-instance coordination**: Shared state across coordinator instances
+- **Automated orphan cleanup**: Detect and remove orphaned resources
+- **Bootstrap logic**: Restore state on startup for all services
+- **Backward compatible**: Works with or without StateStore enabled
+
+#### State Migration Tools
+The `state-migrate` binary provides command-line tools for state management:
+- `check` - Verify database schema and migrations
+- `list-orphans` - List orphaned resources with filtering
+- `cleanup-orphans` - Clean up orphans (with dry-run mode)
+- `export` - Export all state to JSON for backup/migration
+- `import` - Import state from JSON (with skip-existing option)
+- `vacuum` - Database maintenance (VACUUM ANALYZE)
+- `stats` - Show comprehensive state store statistics
+
+#### Configuration
+- `ENABLE_STATE_STORE`: Enable state persistence (default: false)
+- `ORPHAN_CLEANUP_INTERVAL_SECS`: Cleanup interval (default: 300)
+- `DATABASE_URL`: PostgreSQL connection string
+
+**Documentation**: See [docs/HA_DEPLOYMENT.md](docs/HA_DEPLOYMENT.md) for complete guide
+
+---
+
+## Metrics & Observability
+
+All services expose a `/metrics` endpoint for Prometheus scraping with comprehensive metrics:
+
+- **Coordinator**: Active leases, operations, cluster nodes, leader elections, forwarded requests
+- **Stream-node**: Active streams, HLS segments, S3 uploads, bytes processed
+- **Recorder-node**: Active recordings, operations, bytes recorded, completion status
+- **Admin-gateway**: HTTP requests, duration, active workers, worker operations
+- **AI-service**: Active tasks, frames processed, detections, latency, plugin health
+- **Device-manager**: Device health status, health check operations
+- **Alert-service**: Alert rules, triggered events, notification delivery
+- **Playback-service**: Active sessions, playback operations, bytes delivered
+
+**Documentation**: See [docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md) for GPU metrics and optimization
+
+---
+
+## Integration Testing
+
+The project includes comprehensive integration tests covering:
+- Unit tests for lease store logic, router contracts, recording lifecycle
+- Integration tests for coordinator clustering, recorder integration, metrics collection
+- AI plugin system tests, frame capture pipeline tests
+- Full end-to-end tests (`tests/full_pipeline_e2e.rs`):
+  - Complete pipeline: stream → recording → AI processing
+  - Multi-service interaction with coordinator orchestration
+  - Lease management across all service types
+  - Health check verification
+  - Multi-component error handling
+
+**Run tests**: `cargo test` or `make test`
+
+---
+
+For deployment instructions, see [docs/HA_DEPLOYMENT.md](docs/HA_DEPLOYMENT.md)
+For authentication setup, see [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)
+For GPU acceleration, see [docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md)
