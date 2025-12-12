@@ -439,10 +439,46 @@ This project is **under active development**.
   - **Database schema**: recording_index, event_index, search_query_log tables with GIN indexes
   - **Environment variables**: `DATABASE_URL` (required)
 
+- **Playback & Delivery System** (`playback-service`):
+  - **Multi-protocol playback**: HLS and RTSP delivery for live streams and recordings
+  - **Session management**: Playback session lifecycle with state tracking
+  - **HLS delivery**:
+    - Live stream HLS playback from stream-node outputs
+    - Recording HLS playback with on-demand transcoding
+    - Static file serving for HLS segments and playlists
+  - **RTSP proxy**: RTSP proxy server for live streams and recording playback
+  - **Time-based navigation**: Seek support for recordings with timestamp control
+  - **Playback controls**: Pause, resume, stop, and speed control
+  - **PostgreSQL-backed storage**: Persistent playback session state
+  - **Multi-source support**: Playback from both live streams and recordings
+  - **REST API endpoints**:
+    - `POST /v1/playback/start` - Start playback session
+    - `POST /v1/playback/stop` - Stop playback session
+    - `POST /v1/playback/seek` - Seek to timestamp (recordings only)
+    - `POST /v1/playback/control` - Pause/resume/stop controls
+    - `GET /v1/playback/sessions` - List active playback sessions
+  - **HLS file serving**:
+    - `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists
+    - `/hls/recordings/{recording_id}/index.m3u8` - Recording playlists
+  - **Database schema**: playback_sessions table with session state tracking
+  - **Environment variables**:
+    - `DATABASE_URL` - PostgreSQL connection string (optional)
+    - `PLAYBACK_SERVICE_ADDR` - Bind address (default: 127.0.0.1:8087)
+    - `HLS_BASE_URL` - Base URL for HLS delivery (default: http://localhost:8087/hls)
+    - `RTSP_BASE_URL` - Base URL for RTSP delivery (default: rtsp://localhost:8554)
+    - `HLS_ROOT` - HLS files directory (default: ./data/hls)
+    - `RECORDING_STORAGE_ROOT` - Recording files directory (default: ./data/recordings)
+    - `NODE_ID` - Playback node identifier (auto-generated if not set)
+  - **Integration tests** (`tests/playback_integration.rs`):
+    - Playback session lifecycle tests
+    - HLS delivery validation
+    - Seek and control operations
+    - Multi-session management
+
 ### 🔜 In Progress
 
 #### Upcoming Features
-- **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, time-axis preview, DVR time-shift & seek, edge caching
+- **Advanced playback features**: LL-HLS/WebRTC support, time-axis preview, DVR time-shift, edge caching
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
 - **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
 - **Additional AI model integrations**: facial recognition, action recognition, license plate recognition

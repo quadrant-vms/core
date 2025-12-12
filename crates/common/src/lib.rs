@@ -2,6 +2,7 @@ pub mod ai_tasks;
 pub mod auth_middleware;
 pub mod frame_extractor;
 pub mod leases;
+pub mod playback;
 pub mod recordings;
 pub mod retention;
 pub mod search;

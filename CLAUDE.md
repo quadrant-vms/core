@@ -104,6 +104,26 @@ This is a **Cargo workspace** with multiple crates:
    - Entry point: `crates/device-manager/src/main.rs`
    - **Status**: Core device management complete
 
+10. **alert-service** (`crates/alert-service/`)
+   - Event-driven alert and automation system
+   - Rule engine with condition-based triggering
+   - Multi-channel notifications (email, webhook, MQTT)
+   - Alert suppression and rate limiting
+   - PostgreSQL-backed alert storage
+   - Entry point: `crates/alert-service/src/main.rs`
+   - **Status**: Complete
+
+11. **playback-service** (`crates/playback-service/`)
+   - Multi-protocol playback delivery (HLS, RTSP)
+   - Playback session management with state tracking
+   - Live stream and recording playback
+   - Time-based navigation with seek support
+   - HLS file serving and RTSP proxy
+   - PostgreSQL-backed session storage (optional)
+   - REST API for playback operations
+   - Entry point: `crates/playback-service/src/main.rs`
+   - **Status**: Complete
+
 ### Key Files
 
 - `Cargo.toml` - Workspace manifest
@@ -161,27 +181,26 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: Device & Topology Management
-- ✅ device-manager crate with comprehensive camera management
-- ✅ Device onboarding and registration (cameras, NVRs, encoders)
-- ✅ RTSP device probing with ffprobe (codec/resolution detection)
-- ✅ Multi-protocol support (RTSP, ONVIF, HTTP, RTMP, WebRTC)
-- ✅ Automated health monitoring with configurable intervals
-- ✅ Health history tracking and status transitions
-- ✅ Device categorization (types, zones, tags, metadata)
-- ✅ Batch device update operations
-- ✅ PostgreSQL-backed storage with event audit trail
-- ✅ Secure credential management (encrypted passwords)
-- ✅ Integration with auth-service (permissions, tenant isolation)
-- ✅ REST API for all device operations
-- ✅ Integration tests for device management
+**Recently Completed**: Playback & Delivery System
+- ✅ playback-service crate with multi-protocol playback support
+- ✅ HLS delivery for live streams and recordings
+- ✅ RTSP proxy server architecture (ready for implementation)
+- ✅ Playback session management with state tracking
+- ✅ Time-based navigation with seek support for recordings
+- ✅ Playback controls (pause, resume, stop)
+- ✅ PostgreSQL-backed session storage
+- ✅ Static file serving for HLS segments
+- ✅ REST API for playback operations
+- ✅ Integration tests for playback service
 
-**Next Feature**: PTZ & Advanced Device Control
-- 🔜 PTZ command support (pan, tilt, zoom)
-- 🔜 Camera configuration push
-- 🔜 Firmware update management
-- 🔜 ONVIF device discovery
-- 🔜 Device capability negotiation
+**Next Feature**: Advanced Playback Features & Observability
+- 🔜 LL-HLS support for low-latency streaming
+- 🔜 WebRTC playback support
+- 🔜 Time-axis preview and DVR features
+- 🔜 Edge caching for improved performance
+- 🔜 Centralized structured logging
+- 🔜 Distributed tracing across services
+- 🔜 SLO dashboards and alerts
 
 ### Common Tasks
 

@@ -10,6 +10,7 @@ members = [
   "crates/auth-service",
   "crates/device-manager",
   "crates/alert-service",
+  "crates/playback-service",
 ]
 resolver = "2"
 
@@ -26,6 +27,7 @@ ai-service = { path = "crates/ai-service" }
 auth-service = { path = "crates/auth-service" }
 device-manager = { path = "crates/device-manager" }
 alert-service = { path = "crates/alert-service" }
+playback-service = { path = "crates/playback-service" }
 common = { path = "crates/common" }
 
 [dev-dependencies]
@@ -40,4 +42,5 @@ reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1"
 async-trait = "0.1"
 tracing-subscriber = "0.3"
+uuid = { version = "1", features = ["v4"] }
 device-manager = { path = "crates/device-manager" }
