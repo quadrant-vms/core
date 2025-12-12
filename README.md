@@ -421,11 +421,28 @@ This project is **under active development**.
   - **Database schema**: retention_policies, retention_executions, retention_actions, storage_statistics tables
   - **Environment variables**: `DATABASE_URL` (required), `RECORDING_STORAGE_ROOT`
 
+- **Search & Indexing System** (recorder-node):
+  - **Recording index**: Fast searchable index of all recordings with metadata
+  - **Event index**: Searchable catalog of AI detections, motion events, and alerts
+  - **Full-text search**: PostgreSQL tsvector-based search with weighted ranking
+  - **Advanced filtering**: Device, zone, time-range, duration, tags, labels, object type
+  - **Object-based search**: Find all recordings containing specific detected objects (person, car, etc.)
+  - **Time-range queries**: Efficient temporal queries with composite indexes
+  - **Automatic indexing**: Records indexed on creation/update with triggers
+  - **Search statistics**: Track index size, query performance, and usage patterns
+  - **REST API endpoints**:
+    - `POST /v1/search/recordings` - Search recordings with filters
+    - `POST /v1/search/events` - Search events (AI detections, alerts)
+    - `POST /v1/search/objects` - Search by detected object type
+    - `POST /v1/search/reindex` - Reindex all recordings
+    - `GET /v1/search/stats` - Get search statistics
+  - **Database schema**: recording_index, event_index, search_query_log tables with GIN indexes
+  - **Environment variables**: `DATABASE_URL` (required)
+
 ### 🔜 In Progress
 
 #### Upcoming Features
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, time-axis preview, DVR time-shift & seek, edge caching
-- **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
 - **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
 - **Additional AI model integrations**: facial recognition, action recognition, license plate recognition
