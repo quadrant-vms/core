@@ -74,6 +74,17 @@ This project is **under active development**.
     - 80 COCO classes detection (person, car, dog, etc.)
     - Automatic scaling to original image dimensions
     - Environment variable configuration (`YOLOV8_MODEL_PATH`, `YOLOV8_CONFIDENCE`)
+  - **Pose estimation plugin**:
+    - Human pose estimation with keypoint detection
+    - COCO 17 keypoint format (nose, eyes, ears, shoulders, elbows, wrists, hips, knees, ankles)
+    - Support for MoveNet, MediaPipe Pose, or similar ONNX models
+    - CPU and GPU inference support via ONNX Runtime
+    - Multiple pose detection per frame (configurable max poses)
+    - Configurable confidence thresholds for poses and individual keypoints
+    - Automatic bounding box calculation from detected keypoints
+    - Detailed keypoint metadata (name, coordinates, confidence, index)
+    - Person ID tracking for multi-pose scenarios
+    - Environment variable configuration (`POSE_MODEL_PATH`, `POSE_CONFIDENCE`, `POSE_KEYPOINT_CONFIDENCE`)
   - **Frame capture pipeline**:
     - FFmpeg-based frame extraction utilities in common crate
     - REST API endpoint for frame submission (`POST /v1/tasks/:id/frames`)
@@ -407,7 +418,7 @@ This project is **under active development**.
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
 - **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
-- **Additional AI model integrations**: pose estimation, facial recognition
+- **Additional AI model integrations**: facial recognition, action recognition, license plate recognition
 - **Additional alert integrations**: SMS notifications, Slack/Discord webhooks, PagerDuty integration
 
 ---

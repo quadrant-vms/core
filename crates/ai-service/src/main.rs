@@ -1,7 +1,8 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
-    plugin::mock_detector::MockDetectorPlugin, plugin::registry::PluginRegistry,
-    plugin::yolov8_detector::YoloV8DetectorPlugin, plugin::AiPlugin, AiServiceState,
+    plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
+    plugin::registry::PluginRegistry, plugin::yolov8_detector::YoloV8DetectorPlugin,
+    plugin::AiPlugin, AiServiceState,
 };
 use anyhow::Result;
 use common::state_store::StateStore;
@@ -59,6 +60,37 @@ async fn main() -> Result<()> {
             "YOLOv8 model not found at '{}', skipping yolov8_detector plugin registration. \
             Set YOLOV8_MODEL_PATH environment variable to enable.",
             yolov8_model_path
+        );
+    }
+
+    // Register Pose Estimation plugin if model file exists
+    let pose_model_path = std::env::var("POSE_MODEL_PATH")
+        .unwrap_or_else(|_| "models/movenet.onnx".to_string());
+
+    if std::path::Path::new(&pose_model_path).exists() {
+        let mut pose_plugin = PoseEstimationPlugin::new();
+        let pose_config = serde_json::json!({
+            "model_path": pose_model_path,
+            "pose_confidence_threshold": std::env::var("POSE_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.5),
+            "keypoint_confidence_threshold": std::env::var("POSE_KEYPOINT_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.3)
+        });
+        if let Err(e) = pose_plugin.init(pose_config).await {
+            tracing::warn!("Failed to initialize Pose Estimation plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(pose_plugin))).await?;
+            info!("Registered pose_estimation plugin with model: {}", pose_model_path);
+        }
+    } else {
+        info!(
+            "Pose estimation model not found at '{}', skipping pose_estimation plugin registration. \
+            Set POSE_MODEL_PATH environment variable to enable.",
+            pose_model_path
         );
     }
 

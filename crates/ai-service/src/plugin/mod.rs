@@ -1,4 +1,5 @@
 pub mod mock_detector;
+pub mod pose_estimation;
 pub mod registry;
 pub mod yolov8_detector;
 
