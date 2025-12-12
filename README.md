@@ -410,11 +410,21 @@ This project is **under active development**.
   - **Default settings**: 320x180 resolution, quality 5 (high quality JPEG)
   - **Environment variable**: `RECORDING_STORAGE_ROOT` - Recording file storage location (default: ./data/recordings)
 
+- **Storage & Retention Management** (recorder-node):
+  - **Retention policy engine**: Automated recording lifecycle management
+  - **Multiple policy types**: Time-based retention, storage quota enforcement, conditional policies
+  - **Tiered storage support**: Automatically move old recordings to cold storage with configurable thresholds
+  - **PostgreSQL-backed storage**: Persistent policy definitions, execution history, action tracking
+  - **Dry-run mode**: Test policies without actually deleting files
+  - **Complete audit trail**: Track all policy executions, actions, and storage statistics
+  - **REST API**: Full CRUD operations for policies, execution management, and storage stats
+  - **Database schema**: retention_policies, retention_executions, retention_actions, storage_statistics tables
+  - **Environment variables**: `DATABASE_URL` (required), `RECORDING_STORAGE_ROOT`
+
 ### 🔜 In Progress
 
 #### Upcoming Features
 - **Playback & delivery**: LL-HLS/WebRTC/RTSP proxy, time-axis preview, DVR time-shift & seek, edge caching
-- **Storage & retention**: lifecycle/retention policies, tiered/cold storage, integrity checks, resumable/retry uploads with catalog/index
 - **Search & evidencing**: recording/event index, object/time-range search, signed snapshots/exports, chain-of-custody metadata
 - **Observability**: centralized structured logs, tracing across services, SLO dashboards and alerts by tenant/node
 - **Operator UI**: dashboards for devices/streams/recordings/AI tasks/alerts, incident workflows
