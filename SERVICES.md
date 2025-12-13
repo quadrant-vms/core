@@ -420,6 +420,14 @@ This document provides detailed information about each service in the Quadrant V
   - Live stream HLS playback from stream-node outputs
   - Recording HLS playback with on-demand transcoding
   - Static file serving for HLS segments and playlists
+- **Edge caching**:
+  - In-memory LRU cache for HLS segments and playlists
+  - Configurable TTL per content type (playlists: 2s, segments: 60s)
+  - Size limits (max items and total bytes)
+  - HTTP cache headers (ETag, Cache-Control) for client-side caching
+  - Cache hit/miss tracking with Prometheus metrics
+  - Automatic eviction based on LRU policy
+  - Cache statistics endpoint at `/metrics/cache`
 - **LL-HLS (Low-Latency HLS)**:
   - Partial segment support for sub-second latency (~1-2 seconds)
   - Blocking playlist reload (CAN-BLOCK-RELOAD) for reduced request overhead
@@ -484,6 +492,13 @@ This document provides detailed information about each service in the Quadrant V
 - `NODE_ID`: Playback node identifier (auto-generated if not set)
 - `LL_HLS_ENABLED`: Enable LL-HLS support (default: false)
 - `PLAYBACK_SERVICE_URL`: Base URL for WebRTC WHEP endpoints (default: http://localhost:8087)
+
+#### Edge Cache Configuration
+- `EDGE_CACHE_ENABLED`: Enable edge caching (default: true)
+- `EDGE_CACHE_MAX_ITEMS`: Maximum number of cached items (default: 10000)
+- `EDGE_CACHE_MAX_SIZE_MB`: Maximum cache size in megabytes (default: 1024)
+- `EDGE_CACHE_PLAYLIST_TTL_SECS`: TTL for .m3u8 playlists in seconds (default: 2)
+- `EDGE_CACHE_SEGMENT_TTL_SECS`: TTL for .ts/.m4s segments in seconds (default: 60)
 
 #### DVR Configuration
 
@@ -614,7 +629,7 @@ All services expose a `/metrics` endpoint for Prometheus scraping with comprehen
 - **AI-service**: Active tasks, frames processed, detections, latency, plugin health
 - **Device-manager**: Device health status, health check operations
 - **Alert-service**: Alert rules, triggered events, notification delivery
-- **Playback-service**: Active sessions, playback operations, bytes delivered
+- **Playback-service**: Active sessions, playback operations, bytes delivered, cache hit/miss rates, cache size, evictions
 
 **Documentation**: See [docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md) for GPU metrics and optimization
 

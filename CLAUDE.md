@@ -187,17 +187,25 @@ make status-dc
 ```
 
 
-**Recently Completed**: WebRTC Playback Support
-- ✅ WHEP (WebRTC-HTTP Egress Protocol) implementation
-- ✅ WebRTC peer connection management
-- ✅ SDP offer/answer exchange via HTTP
-- ✅ H.264 video and Opus audio codec support
-- ✅ STUN server integration for NAT traversal
-- ✅ Session lifecycle management (create/delete)
-- ✅ Integration with existing playback-service
-- ✅ REST API endpoints for WHEP operations
+**Recently Completed**: Edge Caching for Playback Service
+- ✅ In-memory LRU cache for HLS segments and playlists
+- ✅ Configurable TTL and size limits (10K items, 1GB default)
+- ✅ HTTP cache headers (ETag, Cache-Control) for validation
+- ✅ Prometheus metrics endpoint (/metrics/cache)
+- ✅ Automatic eviction based on LRU policy
+- ✅ Cache hit/miss tracking and statistics
+- ✅ Environment-based configuration
+- ✅ Comprehensive unit and integration tests
 
-**Previous Milestone**: LL-HLS (Low-Latency HLS) Support
+**Previous Milestones**:
+- **WebRTC Playback Support**:
+  - ✅ WHEP (WebRTC-HTTP Egress Protocol) implementation
+  - ✅ WebRTC peer connection management
+  - ✅ SDP offer/answer exchange via HTTP
+  - ✅ H.264 video and Opus audio codec support
+  - ✅ STUN server integration for NAT traversal
+
+- **LL-HLS (Low-Latency HLS) Support**:
 - ✅ LL-HLS playlist generation with partial segments
 - ✅ Blocking playlist reload support (CAN-BLOCK-RELOAD)
 - ✅ Preload hints for upcoming segments
@@ -207,9 +215,8 @@ make status-dc
 - ✅ Integration tests for LL-HLS playback
 - ✅ Updated documentation (README.md and SERVICES.md)
 
-**Next Feature**: Advanced Playback Features & Observability
-- 🔜 Time-axis preview and DVR features
-- 🔜 Edge caching for improved performance
+**Next Feature**: Enhanced Observability
+- 🔜 Time-axis preview thumbnails for playback
 - 🔜 Centralized structured logging
 - 🔜 Distributed tracing across services
 - 🔜 SLO dashboards and alerts

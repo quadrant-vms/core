@@ -3,6 +3,10 @@ name = "playback-service"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "playback_service"
+path = "src/lib.rs"
+
 [[bin]]
 name = "playback-service"
 path = "src/main.rs"

@@ -7,11 +7,12 @@ use axum::{
 };
 use std::sync::Arc;
 
+use crate::cache::EdgeCache;
 use crate::playback::PlaybackManager;
 use crate::webrtc::{WebRtcPeerManager, WhepHandler};
 use routes::*;
 
-pub fn create_router(manager: Arc<PlaybackManager>) -> Router {
+pub fn create_router(manager: Arc<PlaybackManager>, cache: Arc<EdgeCache>) -> Router {
     // Create WebRTC peer manager and WHEP handler
     let peer_manager = Arc::new(WebRtcPeerManager::new());
     let whep_handler = Arc::new(WhepHandler::new(peer_manager.clone()));
@@ -40,4 +41,7 @@ pub fn create_router(manager: Arc<PlaybackManager>) -> Router {
                 .route("/session/:session_id", delete(webrtc_routes::whep_delete_session))
                 .with_state(webrtc_state)
         )
+        // Cache metrics endpoint
+        .route("/metrics/cache", get(crate::cache::cache_metrics))
+        .with_state(cache)
 }
