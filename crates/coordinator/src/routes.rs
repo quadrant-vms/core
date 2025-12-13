@@ -2,6 +2,7 @@ use crate::{cluster::ClusterStatus, error::ApiError, state::CoordinatorState, st
 use axum::{
   Json, Router,
   extract::{Query, State},
+  middleware,
   routing::{get, post},
 };
 use common::leases::{
@@ -9,7 +10,7 @@ use common::leases::{
   LeaseReleaseResponse, LeaseRenewRequest, LeaseRenewResponse,
 };
 use serde::{Deserialize, Serialize};
-use telemetry::CorrelationIdLayer;
+use telemetry::{trace_http_request, CorrelationIdLayer};
 use tower::ServiceBuilder;
 use tracing::debug;
 
@@ -28,6 +29,7 @@ pub fn router(state: CoordinatorState) -> Router {
     .merge(state_routes::state_router())
     .layer(
       ServiceBuilder::new()
+        .layer(middleware::from_fn(trace_http_request))
         .layer(CorrelationIdLayer::new())
     )
     .with_state(state)

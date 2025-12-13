@@ -1,9 +1,10 @@
-use axum::{routing::get, routing::post, routing::delete, routing::put, Router};
+use axum::{middleware, routing::get, routing::post, routing::delete, routing::put, Router};
 use common::state_store::StateStore;
 use common::state_store_client::StateStoreClient;
 use std::sync::Arc;
-use telemetry::init as telemetry_init;
+use telemetry::{trace_http_request, TracingConfig};
 use tokio::net::TcpListener;
+use tower::ServiceBuilder;
 use tracing::{info, warn};
 
 mod api;
@@ -19,7 +20,17 @@ use retention::api::RetentionApiState;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-  telemetry_init();
+  // Initialize distributed tracing (falls back to regular logging if disabled)
+  let tracing_config = TracingConfig::new("recorder-node")
+      .with_version(env!("CARGO_PKG_VERSION"));
+
+  if let Err(e) = telemetry::init_distributed_tracing(tracing_config) {
+      // Fallback to structured logging if distributed tracing fails
+      tracing::warn!("Failed to initialize distributed tracing: {}, falling back to structured logging", e);
+      let log_config = telemetry::LogConfig::new("recorder-node")
+          .with_version(env!("CARGO_PKG_VERSION"));
+      telemetry::init_structured_logging(log_config);
+  }
 
   // Initialize coordinator client if configured
   if let Ok(coordinator_url) = std::env::var("COORDINATOR_URL") {
@@ -114,9 +125,19 @@ async fn main() -> anyhow::Result<()> {
     info!("DATABASE_URL not set, retention system disabled");
   }
 
+  // Add HTTP tracing middleware
+  let app = app.layer(
+    ServiceBuilder::new()
+      .layer(middleware::from_fn(trace_http_request))
+  );
+
   let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8085));
   let listener = TcpListener::bind(addr).await?;
   info!(%addr, "recorder-node started");
   axum::serve(listener, app).await?;
+
+  // Shutdown tracing provider
+  telemetry::shutdown_tracing();
+
   Ok(())
 }

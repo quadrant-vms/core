@@ -2,6 +2,7 @@ use crate::{error::ApiError, state::AppState};
 use axum::{
   Json, Router,
   extract::{Path, State},
+  middleware,
   routing::{delete, get},
 };
 use common::{
@@ -9,6 +10,8 @@ use common::{
   recordings::{RecordingInfo, RecordingStartRequest, RecordingStartResponse, RecordingState, RecordingStopRequest, RecordingStopResponse},
   streams::{StreamInfo, StreamStartRequest, StreamStartResponse, StreamState, StreamStopResponse},
 };
+use telemetry::trace_http_request;
+use tower::ServiceBuilder;
 use tracing::info;
 
 pub fn router(state: AppState) -> Router {
@@ -19,6 +22,10 @@ pub fn router(state: AppState) -> Router {
     .route("/v1/streams/:id", delete(stop_stream))
     .route("/v1/recordings", get(list_recordings).post(start_recording))
     .route("/v1/recordings/:id", delete(stop_recording))
+    .layer(
+      ServiceBuilder::new()
+        .layer(middleware::from_fn(trace_http_request))
+    )
     .with_state(state)
 }
 

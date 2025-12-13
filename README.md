@@ -92,6 +92,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Prometheus metrics** across all services with 38+ comprehensive tests
 - **Health check endpoints** (`/readyz`) with dependency verification
 - **Centralized structured logging** with JSON/pretty/compact formats, correlation IDs for request tracing, and configurable log aggregation
+- **Distributed tracing** with OpenTelemetry OTLP support (compatible with Jaeger, Zipkin, and other OTLP collectors), automatic span propagation across services, and configurable sampling rates
 
 ---
 
@@ -108,10 +109,9 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Stateless architecture with HA support
 
 ### 🔜 Upcoming Features
-- **Enhanced observability**: Distributed tracing, SLO dashboards by tenant/node
+- **Enhanced observability**: SLO dashboards by tenant/node, custom metrics aggregation
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
 - **Additional AI models**: Facial recognition, action recognition, license plate recognition
-- **Extended integrations**: PagerDuty integration, Microsoft Teams webhooks
 
 ---
 
@@ -243,6 +243,9 @@ Services are configured via environment variables. Key variables:
 - `RECORDING_STORAGE_ROOT` - Recording storage location (recorder-node)
 - `ENABLE_STATE_STORE` - Enable state persistence for HA (default: false)
 - `CLUSTER_ENABLED` - Enable multi-node clustering (coordinator)
+- `TRACING_BACKEND` - Distributed tracing backend: `otlp` or unset for disabled (default: none)
+- `OTLP_ENDPOINT` - OTLP collector endpoint for Jaeger/OTLP collectors (default: http://localhost:4317)
+- `TRACE_SAMPLE_RATE` - Trace sampling rate 0.0-1.0 (default: 1.0)
 
 **For complete configuration options, see [SERVICES.md](SERVICES.md)**
 

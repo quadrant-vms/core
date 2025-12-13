@@ -661,6 +661,12 @@ These values optimize for low latency while maintaining reliability. For ultra-l
   - **JSON**: Machine-readable format for log aggregation systems (ELK, Loki, Datadog)
   - **Pretty**: Human-readable format with colors for local development
   - **Compact**: Condensed text format for resource-constrained environments
+- **Distributed tracing** with OpenTelemetry support:
+  - **OTLP backend**: OpenTelemetry Protocol for collector integration (supports Jaeger, Zipkin, and other OTLP collectors)
+  - **Automatic span propagation**: Trace context flows across all HTTP requests
+  - **Configurable sampling**: Control trace sampling rate (0.0-1.0)
+  - **Service metadata**: Automatic service name, version, environment tagging
+- **HTTP tracing middleware**: Request/response logging with latency tracking
 - **Correlation ID middleware**: Automatic request tracing with `x-correlation-id` header propagation
 - **Contextual logging**: Service name, version, environment, and node ID in every log entry
 - **Log rotation**: File-based logging with daily rotation (optional)
@@ -668,6 +674,8 @@ These values optimize for low latency while maintaining reliability. For ultra-l
 - **Configurable log filtering**: Environment-based log level control per module
 
 #### Configuration (Environment Variables)
+
+**Logging:**
 - `LOG_FORMAT`: Output format (`json`, `pretty`, `compact`) - default: `pretty`
 - `SERVICE_VERSION`: Service version for log context
 - `NODE_ID`: Node identifier for distributed systems
@@ -677,40 +685,87 @@ These values optimize for low latency while maintaining reliability. For ultra-l
 - `LOG_DIR`: Log file directory when file logging is enabled
 - `RUST_LOG`: Standard tracing filter (e.g., `info`, `debug`, `module=debug`)
 
+**Distributed Tracing:**
+- `TRACING_BACKEND`: Backend type (`otlp` or unset to disable) - default: none
+- `OTLP_ENDPOINT`: OTLP collector endpoint (compatible with Jaeger/Zipkin) - default: `http://localhost:4317`
+- `TRACE_SAMPLE_RATE`: Sampling rate (0.0 = none, 1.0 = all) - default: `1.0`
+
 #### Usage Example
+
+**With Distributed Tracing:**
 ```rust
-use telemetry::{LogConfig, LogFormat, CorrelationIdLayer};
+use telemetry::{TracingConfig, TracingBackend, trace_http_request};
+use axum::{Router, middleware};
 use tower::ServiceBuilder;
 
-// Initialize structured logging
+// Initialize distributed tracing
+let tracing_config = TracingConfig::new("my-service")
+    .with_version(env!("CARGO_PKG_VERSION"))
+    .with_backend(TracingBackend::Otlp {
+        endpoint: "http://localhost:4317".to_string(),
+    })
+    .with_sample_rate(0.5)
+    .with_environment("production");
+
+telemetry::init_distributed_tracing(tracing_config)?;
+
+// Add HTTP tracing middleware
+let app = Router::new()
+    .route("/health", get(health_check))
+    .layer(
+        ServiceBuilder::new()
+            .layer(middleware::from_fn(trace_http_request))
+    );
+
+// Log with structured fields (automatically includes trace context)
+tracing::info!(
+    user_id = %user.id,
+    action = "login",
+    "User logged in successfully"
+);
+
+// Shutdown on exit
+telemetry::shutdown_tracing();
+```
+
+**With Structured Logging Only:**
+```rust
+use telemetry::{LogConfig, LogFormat};
+
+// Initialize structured logging (no distributed tracing)
 let log_config = LogConfig::new("my-service")
     .with_version(env!("CARGO_PKG_VERSION"))
     .with_format(LogFormat::Json)
     .with_environment("production")
     .with_node_id("node-1");
 telemetry::init_structured_logging(log_config);
-
-// Add correlation ID middleware to HTTP router
-let app = Router::new()
-    .route("/health", get(health_check))
-    .layer(ServiceBuilder::new().layer(CorrelationIdLayer::new()));
-
-// Log with structured fields
-tracing::info!(
-    user_id = %user.id,
-    action = "login",
-    "User logged in successfully"
-);
 ```
 
-#### Correlation ID Tracing
+#### Distributed Tracing
+
+**Correlation ID Tracing:**
 Every HTTP request is automatically assigned a correlation ID that propagates through:
 - Incoming requests via `x-correlation-id` or `x-request-id` headers
 - Automatic generation if not present
 - Tracing spans for all downstream operations
 - Response headers for client-side tracing
 
-This enables **distributed request tracing** across all microservices in the VMS cluster.
+**OpenTelemetry Spans:**
+When distributed tracing is enabled, all HTTP requests and service operations create OpenTelemetry spans that:
+- Automatically propagate trace context across service boundaries
+- Include service metadata (name, version, environment, node ID)
+- Track request latency, status codes, and errors
+- Support both Jaeger and OTLP backends for trace collection
+- Allow configurable sampling rates for production environments
+
+**Example Trace Flow:**
+```
+admin-gateway → coordinator (acquire lease) → stream-node (start stream)
+   └─ span_id: abc123       └─ span_id: def456      └─ span_id: ghi789
+      trace_id: xyz (propagated across all services)
+```
+
+This enables **end-to-end distributed request tracing** across all microservices in the VMS cluster.
 
 ---
 
