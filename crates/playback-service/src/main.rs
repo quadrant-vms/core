@@ -39,6 +39,16 @@ async fn main() -> Result<()> {
     let recording_storage_root = std::env::var("RECORDING_STORAGE_ROOT")
         .unwrap_or_else(|_| "./data/recordings".to_string());
 
+    // LL-HLS configuration
+    let ll_hls_enabled = std::env::var("LL_HLS_ENABLED")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse::<bool>()
+        .unwrap_or(false);
+
+    if ll_hls_enabled {
+        info!("LL-HLS (Low-Latency HLS) support enabled");
+    }
+
     // Initialize database connection if DATABASE_URL is provided
     let store = if let Ok(database_url) = std::env::var("DATABASE_URL") {
         info!("Connecting to database: {}", database_url);

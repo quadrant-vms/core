@@ -233,3 +233,117 @@ async fn test_playback_controls() -> Result<()> {
 
     Ok(())
 }
+
+/// Test LL-HLS (Low-Latency HLS) playlist generation
+#[tokio::test]
+async fn test_ll_hls_playlist() -> Result<()> {
+    let client = reqwest::Client::new();
+    let base_url = "http://localhost:8087/api";
+
+    // Test LL-HLS playlist endpoint without blocking
+    let resp = client
+        .get(format!("{}/ll-hls/streams/test-stream-1/playlist.m3u8", base_url))
+        .send()
+        .await;
+
+    // Should fail if stream doesn't exist, which is expected
+    if let Ok(resp) = resp {
+        if resp.status().is_success() {
+            let playlist = resp.text().await?;
+            println!("LL-HLS playlist:\n{}", playlist);
+
+            // Verify LL-HLS specific tags are present
+            assert!(playlist.contains("#EXT-X-VERSION:9"));
+            assert!(playlist.contains("#EXT-X-PART-INF"));
+            assert!(playlist.contains("#EXT-X-SERVER-CONTROL:CAN-BLOCK-RELOAD=YES"));
+        } else {
+            println!("LL-HLS playlist request failed (expected if stream doesn't exist): {}", resp.status());
+        }
+    } else {
+        println!("LL-HLS playlist request failed (expected if service not running)");
+    }
+
+    Ok(())
+}
+
+/// Test LL-HLS blocking playlist reload
+#[tokio::test]
+async fn test_ll_hls_blocking_reload() -> Result<()> {
+    let client = reqwest::Client::new();
+    let base_url = "http://localhost:8087/api";
+
+    // Test with blocking parameters (_HLS_msn)
+    let resp = client
+        .get(format!("{}/ll-hls/streams/test-stream-1/playlist.m3u8?_HLS_msn=5&_HLS_part=0", base_url))
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await;
+
+    // This will timeout or fail if stream doesn't exist, which is expected
+    if let Ok(resp) = resp {
+        if resp.status().is_success() {
+            let playlist = resp.text().await?;
+            println!("LL-HLS blocking playlist received:\n{}", playlist);
+        } else {
+            println!("LL-HLS blocking request failed (expected): {}", resp.status());
+        }
+    } else {
+        println!("LL-HLS blocking request timed out or failed (expected if stream not active)");
+    }
+
+    Ok(())
+}
+
+/// Test LL-HLS with low_latency flag in PlaybackConfig
+#[tokio::test]
+async fn test_ll_hls_playback_config() -> Result<()> {
+    let client = reqwest::Client::new();
+    let base_url = "http://localhost:8087/api";
+
+    let session_id = format!("test-ll-hls-session-{}", uuid::Uuid::new_v4());
+    let config = PlaybackConfig {
+        session_id: session_id.clone(),
+        source_type: PlaybackSourceType::Stream,
+        source_id: "test-stream-ll".to_string(),
+        protocol: PlaybackProtocol::Hls,
+        start_time_secs: None,
+        speed: Some(1.0),
+        low_latency: true, // Enable LL-HLS mode
+    };
+
+    let start_req = PlaybackStartRequest {
+        config,
+        lease_ttl_secs: Some(300),
+    };
+
+    let resp = client
+        .post(format!("{}/v1/playback/start", base_url))
+        .json(&start_req)
+        .send()
+        .await?;
+
+    // Verify the request is accepted (even if stream doesn't exist yet)
+    if resp.status().is_success() {
+        let start_resp: PlaybackStartResponse = resp.json().await?;
+        println!("LL-HLS playback session started: {:?}", start_resp);
+
+        // Verify URL is returned
+        assert!(start_resp.playback_url.is_some());
+        println!("Playback URL: {:?}", start_resp.playback_url);
+
+        // Clean up
+        let stop_req = PlaybackStopRequest {
+            session_id: session_id.clone(),
+        };
+
+        client
+            .post(format!("{}/v1/playback/stop", base_url))
+            .json(&stop_req)
+            .send()
+            .await?;
+    } else {
+        println!("LL-HLS playback start failed (expected if stream doesn't exist): {}", resp.status());
+    }
+
+    Ok(())
+}

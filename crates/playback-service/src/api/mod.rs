@@ -17,5 +17,6 @@ pub fn create_router(manager: Arc<PlaybackManager>) -> Router {
         .route("/v1/playback/seek", post(seek_playback))
         .route("/v1/playback/control", post(control_playback))
         .route("/v1/playback/sessions", get(list_playback_sessions))
+        .route("/ll-hls/streams/:stream_id/playlist.m3u8", get(serve_ll_hls_playlist))
         .with_state(manager)
 }

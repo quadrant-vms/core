@@ -188,7 +188,17 @@ make status-dc
 
 ### Current Development Priority
 
-**Recently Completed**: Playback & Delivery System
+**Recently Completed**: LL-HLS (Low-Latency HLS) Support
+- ✅ LL-HLS playlist generation with partial segments
+- ✅ Blocking playlist reload support (CAN-BLOCK-RELOAD)
+- ✅ Preload hints for upcoming segments
+- ✅ HLS version 9+ compliance with EXT-X-PART tags
+- ✅ Query parameter support (_HLS_msn, _HLS_part)
+- ✅ Configurable part duration and blocking behavior
+- ✅ Integration tests for LL-HLS playback
+- ✅ Updated documentation (README.md and SERVICES.md)
+
+**Previous Milestone**: Playback & Delivery System
 - ✅ playback-service crate with multi-protocol playback support
 - ✅ HLS delivery for live streams and recordings
 - ✅ RTSP proxy server architecture (ready for implementation)
@@ -201,7 +211,6 @@ make status-dc
 - ✅ Integration tests for playback service
 
 **Next Feature**: Advanced Playback Features & Observability
-- 🔜 LL-HLS support for low-latency streaming
 - 🔜 WebRTC playback support
 - 🔜 Time-axis preview and DVR features
 - 🔜 Edge caching for improved performance

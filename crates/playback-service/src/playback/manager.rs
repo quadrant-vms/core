@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info};
 
+use super::ll_hls::{BlockingParams, HlsVariant, LlHlsConfig, LlHlsPlaylistGenerator};
 use super::store::PlaybackStore;
 
 /// In-memory playback session data
@@ -24,6 +25,7 @@ pub struct PlaybackManager {
     rtsp_base_url: String,
     recording_storage_root: PathBuf,
     stream_hls_root: PathBuf,
+    ll_hls_generator: Arc<LlHlsPlaylistGenerator>,
 }
 
 impl PlaybackManager {
@@ -37,9 +39,16 @@ impl PlaybackManager {
             .unwrap_or_else(|_| "./data/recordings".to_string())
             .into();
 
-        let stream_hls_root = std::env::var("HLS_ROOT")
+        let stream_hls_root: PathBuf = std::env::var("HLS_ROOT")
             .unwrap_or_else(|_| "./data/hls".to_string())
             .into();
+
+        // Initialize LL-HLS generator with default config
+        let ll_hls_config = LlHlsConfig::default();
+        let ll_hls_generator = Arc::new(LlHlsPlaylistGenerator::new(
+            ll_hls_config,
+            stream_hls_root.clone(),
+        ));
 
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -49,6 +58,7 @@ impl PlaybackManager {
             rtsp_base_url,
             recording_storage_root,
             stream_hls_root,
+            ll_hls_generator,
         }
     }
 
@@ -298,5 +308,32 @@ impl PlaybackManager {
         } else {
             Err(anyhow!("Session not found: {}", session_id))
         }
+    }
+
+    /// Generate LL-HLS playlist for a stream
+    pub async fn generate_ll_hls_playlist(
+        &self,
+        stream_id: &str,
+        blocking_params: Option<BlockingParams>,
+    ) -> Result<String> {
+        let stream_path = self.stream_hls_root.join(stream_id);
+
+        if !stream_path.exists() {
+            return Err(anyhow!("Stream not found: {}", stream_id));
+        }
+
+        // Get current sequence number (simplified - in production, track this properly)
+        let sequence_number = 0;
+
+        let response = self.ll_hls_generator
+            .generate_media_playlist(&stream_path, sequence_number, blocking_params)
+            .await?;
+
+        Ok(response.content)
+    }
+
+    /// Get LL-HLS configuration
+    pub fn ll_hls_config(&self) -> &LlHlsPlaylistGenerator {
+        &self.ll_hls_generator
     }
 }

@@ -201,6 +201,7 @@ fn row_to_playback_info(row: sqlx::postgres::PgRow) -> Result<PlaybackInfo> {
             protocol,
             start_time_secs,
             speed,
+            low_latency: false, // Default to false for database rows
         },
         state,
         lease_id: row.try_get("lease_id").ok(),

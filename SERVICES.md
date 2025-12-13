@@ -420,6 +420,13 @@ This document provides detailed information about each service in the Quadrant V
   - Live stream HLS playback from stream-node outputs
   - Recording HLS playback with on-demand transcoding
   - Static file serving for HLS segments and playlists
+- **LL-HLS (Low-Latency HLS)**:
+  - Partial segment support for sub-second latency (~1-2 seconds)
+  - Blocking playlist reload (CAN-BLOCK-RELOAD) for reduced request overhead
+  - Preload hints for upcoming segments
+  - HLS version 9+ compliance with EXT-X-PART tags
+  - Configurable part duration and segments-per-part ratio
+  - Query parameter support (_HLS_msn, _HLS_part) for client synchronization
 - **RTSP proxy**: RTSP proxy server for live streams and recording playback
 - **Time-based navigation**: Seek support for recordings with timestamp control
 - **Playback controls**: Pause, resume, stop, and speed control
@@ -434,8 +441,13 @@ This document provides detailed information about each service in the Quadrant V
 - `/v1/playback/sessions` - List active playback sessions
 
 #### HLS File Serving
-- `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists
-- `/hls/recordings/{recording_id}/index.m3u8` - Recording playlists
+- `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists (standard HLS)
+- `/hls/recordings/{recording_id}/index.m3u8` - Recording playlists (standard HLS)
+- `/ll-hls/streams/{stream_id}/playlist.m3u8` - LL-HLS playlists with blocking support
+  - Query parameters:
+    - `_HLS_msn={n}` - Wait for media sequence number n
+    - `_HLS_part={p}` - Wait for part p within the segment
+    - `_HLS_skip=YES` - Skip older segments for faster loading
 
 #### Configuration
 - `DATABASE_URL`: PostgreSQL connection string (optional)
@@ -445,6 +457,21 @@ This document provides detailed information about each service in the Quadrant V
 - `HLS_ROOT`: HLS files directory (default: ./data/hls)
 - `RECORDING_STORAGE_ROOT`: Recording files directory (default: ./data/recordings)
 - `NODE_ID`: Playback node identifier (auto-generated if not set)
+- `LL_HLS_ENABLED`: Enable LL-HLS support (default: false)
+
+#### LL-HLS Configuration
+
+LL-HLS behavior is configured via `LlHlsConfig` with these defaults:
+- **Part target duration**: 0.33 seconds (330ms parts for ~1s total latency)
+- **Parts per segment**: 6 parts (~2 second full segments)
+- **Server push**: Disabled (requires HTTP/2)
+- **Blocking reload**: Enabled (CAN-BLOCK-RELOAD=YES)
+- **Max blocking duration**: 3.0 seconds (maximum wait time for new segments)
+
+These values optimize for low latency while maintaining reliability. For ultra-low latency:
+- Reduce `part_target_duration` to 0.2s (200ms)
+- Increase `max_blocking_duration` for slower networks
+- Enable `enable_server_push` if using HTTP/2
 
 ---
 

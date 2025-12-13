@@ -15,6 +15,9 @@ pub struct PlaybackConfig {
     pub start_time_secs: Option<f64>,
     /// Optional playback speed (1.0 = normal)
     pub speed: Option<f64>,
+    /// Enable Low-Latency HLS mode (only for HLS protocol)
+    #[serde(default)]
+    pub low_latency: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
