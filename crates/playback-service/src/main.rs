@@ -1,5 +1,6 @@
 mod api;
 mod playback;
+mod webrtc;
 
 use anyhow::Result;
 use playback::{PlaybackManager, PlaybackStore};

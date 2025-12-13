@@ -112,7 +112,7 @@ This is a **Cargo workspace** with multiple crates:
    - Alert suppression and rate limiting
    - PostgreSQL-backed alert storage
    - Entry point: `crates/alert-service/src/main.rs`
-   - **Status**: Complete
+   - **Status**: Complete (with WebRTC support)
 
 11. **playback-service** (`crates/playback-service/`)
    - Multi-protocol playback delivery (HLS, RTSP)
@@ -123,7 +123,7 @@ This is a **Cargo workspace** with multiple crates:
    - PostgreSQL-backed session storage (optional)
    - REST API for playback operations
    - Entry point: `crates/playback-service/src/main.rs`
-   - **Status**: Complete
+   - **Status**: Complete (with WebRTC support)
 
 ### Key Files
 
@@ -186,9 +186,18 @@ make init-dc
 make status-dc
 ```
 
-### Current Development Priority
 
-**Recently Completed**: LL-HLS (Low-Latency HLS) Support
+**Recently Completed**: WebRTC Playback Support
+- ✅ WHEP (WebRTC-HTTP Egress Protocol) implementation
+- ✅ WebRTC peer connection management
+- ✅ SDP offer/answer exchange via HTTP
+- ✅ H.264 video and Opus audio codec support
+- ✅ STUN server integration for NAT traversal
+- ✅ Session lifecycle management (create/delete)
+- ✅ Integration with existing playback-service
+- ✅ REST API endpoints for WHEP operations
+
+**Previous Milestone**: LL-HLS (Low-Latency HLS) Support
 - ✅ LL-HLS playlist generation with partial segments
 - ✅ Blocking playlist reload support (CAN-BLOCK-RELOAD)
 - ✅ Preload hints for upcoming segments
@@ -198,26 +207,14 @@ make status-dc
 - ✅ Integration tests for LL-HLS playback
 - ✅ Updated documentation (README.md and SERVICES.md)
 
-**Previous Milestone**: Playback & Delivery System
-- ✅ playback-service crate with multi-protocol playback support
-- ✅ HLS delivery for live streams and recordings
-- ✅ RTSP proxy server architecture (ready for implementation)
-- ✅ Playback session management with state tracking
-- ✅ Time-based navigation with seek support for recordings
-- ✅ Playback controls (pause, resume, stop)
-- ✅ PostgreSQL-backed session storage
-- ✅ Static file serving for HLS segments
-- ✅ REST API for playback operations
-- ✅ Integration tests for playback service
-
 **Next Feature**: Advanced Playback Features & Observability
-- 🔜 WebRTC playback support
 - 🔜 Time-axis preview and DVR features
 - 🔜 Edge caching for improved performance
 - 🔜 Centralized structured logging
 - 🔜 Distributed tracing across services
 - 🔜 SLO dashboards and alerts
 
+### Common Tasks
 ### Common Tasks
 
 **Adding a new feature to a crate:**

@@ -252,8 +252,18 @@ impl PlaybackManager {
                 }
             }
             PlaybackProtocol::WebRtc => {
-                // WebRTC not yet implemented
-                Err(anyhow!("WebRTC protocol not yet implemented"))
+                // WebRTC uses WHEP protocol - client will POST to /whep endpoint
+                // Return the WHEP endpoint URL
+                let base_url = std::env::var("PLAYBACK_SERVICE_URL")
+                    .unwrap_or_else(|_| "http://localhost:8087".to_string());
+                match config.source_type {
+                    PlaybackSourceType::Stream => {
+                        Ok(format!("{}/api/whep/stream/{}", base_url, config.source_id))
+                    }
+                    PlaybackSourceType::Recording => {
+                        Ok(format!("{}/api/whep/recording/{}", base_url, config.source_id))
+                    }
+                }
             }
         }
     }

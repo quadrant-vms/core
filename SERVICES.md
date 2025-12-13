@@ -428,6 +428,13 @@ This document provides detailed information about each service in the Quadrant V
   - Configurable part duration and segments-per-part ratio
   - Query parameter support (_HLS_msn, _HLS_part) for client synchronization
 - **RTSP proxy**: RTSP proxy server for live streams and recording playback
+- **WebRTC playback**:
+  - WHEP (WebRTC-HTTP Egress Protocol) support for ultra-low-latency streaming
+  - SDP offer/answer exchange via HTTP POST
+  - WebRTC peer connection management with automatic cleanup
+  - H.264 video and Opus audio codec support
+  - STUN server integration for NAT traversal
+  - Session-based connection lifecycle (create, maintain, delete)
 - **Time-based navigation**: Seek support for recordings with timestamp control
 - **Playback controls**: Pause, resume, stop, and speed control
 - **PostgreSQL-backed storage**: Persistent playback session state
@@ -439,6 +446,10 @@ This document provides detailed information about each service in the Quadrant V
 - `/v1/playback/seek` - Seek to timestamp (recordings only)
 - `/v1/playback/control` - Pause/resume/stop controls
 - `/v1/playback/sessions` - List active playback sessions
+\n#### WebRTC (WHEP) API
+- `/whep/stream/{stream_id}` - WHEP endpoint for live stream playback (POST SDP offer)
+- `/whep/recording/{recording_id}` - WHEP endpoint for recording playback (POST SDP offer)
+- `/whep/session/{session_id}` - Delete WHEP session (DELETE)
 
 #### HLS File Serving
 - `/hls/streams/{stream_id}/index.m3u8` - Live stream playlists (standard HLS)
@@ -458,6 +469,7 @@ This document provides detailed information about each service in the Quadrant V
 - `RECORDING_STORAGE_ROOT`: Recording files directory (default: ./data/recordings)
 - `NODE_ID`: Playback node identifier (auto-generated if not set)
 - `LL_HLS_ENABLED`: Enable LL-HLS support (default: false)
+- `PLAYBACK_SERVICE_URL`: Base URL for WebRTC WHEP endpoints (default: http://localhost:8087)
 
 #### LL-HLS Configuration
 

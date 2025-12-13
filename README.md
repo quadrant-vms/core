@@ -49,6 +49,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Live streaming**: RTSP → HLS (TS/fMP4) with S3 storage and fallback
 - **Recording pipeline**: Multi-format support (MP4/HLS/MKV) with metadata extraction
 - **Playback delivery**: HLS and RTSP delivery with seek, pause, resume controls
+- **WebRTC playback**: WHEP protocol support for ultra-low-latency WebRTC streaming
 - **LL-HLS support**: Low-latency HLS with partial segments and blocking playlist reload for sub-second latency
 - **Thumbnail generation**: Single frame and grid thumbnails for timeline preview
 - **Retention management**: Time-based policies, storage quotas, tiered storage
@@ -103,7 +104,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Stateless architecture with HA support
 
 ### 🔜 Upcoming Features
-- **Advanced playback**: WebRTC support, time-axis preview, DVR time-shift, edge caching
+- **Advanced playback**: Time-axis preview, DVR time-shift, edge caching
 - **Enhanced observability**: Centralized structured logs, distributed tracing, SLO dashboards by tenant/node
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
 - **Additional AI models**: Facial recognition, action recognition, license plate recognition
