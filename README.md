@@ -91,6 +91,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Graceful degradation** during temporary coordinator unavailability
 - **Prometheus metrics** across all services with 38+ comprehensive tests
 - **Health check endpoints** (`/readyz`) with dependency verification
+- **Centralized structured logging** with JSON/pretty/compact formats, correlation IDs for request tracing, and configurable log aggregation
 
 ---
 
@@ -107,7 +108,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Stateless architecture with HA support
 
 ### 🔜 Upcoming Features
-- **Enhanced observability**: Centralized structured logs, distributed tracing, SLO dashboards by tenant/node
+- **Enhanced observability**: Distributed tracing, SLO dashboards by tenant/node
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
 - **Additional AI models**: Facial recognition, action recognition, license plate recognition
 - **Extended integrations**: PagerDuty integration, Microsoft Teams webhooks

@@ -9,6 +9,8 @@ use common::leases::{
   LeaseReleaseResponse, LeaseRenewRequest, LeaseRenewResponse,
 };
 use serde::{Deserialize, Serialize};
+use telemetry::CorrelationIdLayer;
+use tower::ServiceBuilder;
 use tracing::debug;
 
 pub fn router(state: CoordinatorState) -> Router {
@@ -24,6 +26,10 @@ pub fn router(state: CoordinatorState) -> Router {
     .route("/cluster/vote", post(cluster_vote))
     .route("/cluster/heartbeat", post(cluster_heartbeat))
     .merge(state_routes::state_router())
+    .layer(
+      ServiceBuilder::new()
+        .layer(CorrelationIdLayer::new())
+    )
     .with_state(state)
 }
 

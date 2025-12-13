@@ -657,11 +657,60 @@ These values optimize for low latency while maintaining reliability. For ultra-l
 **Location**: `crates/telemetry/`
 
 #### Features
-- Centralized logging infrastructure
-- Prometheus metrics registry
-- Metric collection utilities
-- Structured logging with tracing
-- Health check utilities
+- **Centralized structured logging** with multiple output formats:
+  - **JSON**: Machine-readable format for log aggregation systems (ELK, Loki, Datadog)
+  - **Pretty**: Human-readable format with colors for local development
+  - **Compact**: Condensed text format for resource-constrained environments
+- **Correlation ID middleware**: Automatic request tracing with `x-correlation-id` header propagation
+- **Contextual logging**: Service name, version, environment, and node ID in every log entry
+- **Log rotation**: File-based logging with daily rotation (optional)
+- **Prometheus metrics registry**: Centralized metric collection across all services
+- **Configurable log filtering**: Environment-based log level control per module
+
+#### Configuration (Environment Variables)
+- `LOG_FORMAT`: Output format (`json`, `pretty`, `compact`) - default: `pretty`
+- `SERVICE_VERSION`: Service version for log context
+- `NODE_ID`: Node identifier for distributed systems
+- `ENVIRONMENT`: Deployment environment (`development`, `staging`, `production`)
+- `LOG_SPAN_EVENTS`: Enable span enter/exit events - default: `false`
+- `LOG_TO_FILE`: Enable file logging - default: `false`
+- `LOG_DIR`: Log file directory when file logging is enabled
+- `RUST_LOG`: Standard tracing filter (e.g., `info`, `debug`, `module=debug`)
+
+#### Usage Example
+```rust
+use telemetry::{LogConfig, LogFormat, CorrelationIdLayer};
+use tower::ServiceBuilder;
+
+// Initialize structured logging
+let log_config = LogConfig::new("my-service")
+    .with_version(env!("CARGO_PKG_VERSION"))
+    .with_format(LogFormat::Json)
+    .with_environment("production")
+    .with_node_id("node-1");
+telemetry::init_structured_logging(log_config);
+
+// Add correlation ID middleware to HTTP router
+let app = Router::new()
+    .route("/health", get(health_check))
+    .layer(ServiceBuilder::new().layer(CorrelationIdLayer::new()));
+
+// Log with structured fields
+tracing::info!(
+    user_id = %user.id,
+    action = "login",
+    "User logged in successfully"
+);
+```
+
+#### Correlation ID Tracing
+Every HTTP request is automatically assigned a correlation ID that propagates through:
+- Incoming requests via `x-correlation-id` or `x-request-id` headers
+- Automatic generation if not present
+- Tracing spans for all downstream operations
+- Response headers for client-side tracing
+
+This enables **distributed request tracing** across all microservices in the VMS cluster.
 
 ---
 

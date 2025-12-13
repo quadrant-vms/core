@@ -14,7 +14,10 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  telemetry::init();
+  // Initialize structured logging
+  let log_config = telemetry::LogConfig::new("coordinator")
+      .with_version(env!("CARGO_PKG_VERSION"));
+  telemetry::init_structured_logging(log_config);
 
   let config = CoordinatorConfig::from_env()?;
   let bind_addr = config.bind_addr;
