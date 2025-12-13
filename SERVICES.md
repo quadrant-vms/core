@@ -389,6 +389,9 @@ This document provides detailed information about each service in the Quadrant V
   - **Email**: SMTP-based email with template support
   - **Webhook**: HTTP/HTTPS delivery with custom headers and templates
   - **MQTT**: MQTT broker integration with QoS support
+  - **Slack**: Rich-formatted Slack messages via webhooks with severity color coding
+  - **Discord**: Discord webhook integration with embed support and color coding
+  - **SMS**: Twilio-based SMS notifications with template support
 - **Alert history and auditing**:
   - Complete event history with context data
   - Notification delivery tracking (sent/failed counts)
@@ -404,6 +407,45 @@ This document provides detailed information about each service in the Quadrant V
 - `DATABASE_URL`: PostgreSQL connection string
 - `ALERT_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8085)
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`: Email channel configuration (optional)
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`: SMS/Twilio configuration (optional)
+
+#### Notification Channel Details
+
+**Email (SMTP)**
+- Requires: `SMTP_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`, optional `SMTP_PORT` (default: 587)
+- Config: `{"to": ["email@example.com"], "subject": "Alert", "template": "..."}`
+- Template variables: `{severity}`, `{message}`, `{trigger_type}`, `{event_id}`, `{fired_at}`
+
+**Webhook (HTTP/HTTPS)**
+- Always available (no global configuration required)
+- Config: `{"url": "https://...", "method": "POST", "headers": {...}, "template": "..."}`
+- Default: JSON payload with full event details
+- Template variables supported for custom payloads
+
+**MQTT**
+- Always available (no global configuration required)
+- Config: `{"broker": "mqtt://...", "topic": "alerts/{severity}", "qos": 1, "username": "...", "password": "..."}`
+- QoS levels: 0 (at most once), 1 (at least once), 2 (exactly once)
+- Topic template variables: `{severity}`, `{trigger_type}`, `{tenant_id}`
+
+**Slack**
+- Always available (no global configuration required, uses webhook URLs)
+- Config: `{"webhook_url": "https://hooks.slack.com/...", "channel": "#alerts", "username": "Quadrant VMS", "icon_emoji": ":camera:"}`
+- Features: Color-coded attachments based on severity, rich field formatting
+- Template variables: `{severity}`, `{message}`, `{trigger_type}`, `{event_id}`, `{fired_at}`
+
+**Discord**
+- Always available (no global configuration required, uses webhook URLs)
+- Config: `{"webhook_url": "https://discord.com/api/webhooks/...", "username": "Quadrant Bot", "avatar_url": "..."}`
+- Features: Rich embeds with severity-based color coding, timestamp formatting
+- Template variables: `{severity}`, `{message}`, `{trigger_type}`, `{event_id}`, `{fired_at}`
+
+**SMS (Twilio)**
+- Requires: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+- Config: `{"to": ["+15551234567"], "template": "[{severity}] {message}"}`
+- Phone numbers must be in E.164 format (e.g., +15551234567)
+- Template variables: `{severity}`, `{message}`, `{trigger_type}`, `{event_id}`, `{fired_at}`
+- Default format: `[SEVERITY] trigger_type: message`
 
 ---
 

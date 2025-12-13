@@ -105,6 +105,9 @@ pub enum ActionType {
     Email,
     Webhook,
     Mqtt,
+    Slack,
+    Discord,
+    Sms,
 }
 
 impl std::fmt::Display for ActionType {
@@ -113,6 +116,9 @@ impl std::fmt::Display for ActionType {
             ActionType::Email => write!(f, "email"),
             ActionType::Webhook => write!(f, "webhook"),
             ActionType::Mqtt => write!(f, "mqtt"),
+            ActionType::Slack => write!(f, "slack"),
+            ActionType::Discord => write!(f, "discord"),
+            ActionType::Sms => write!(f, "sms"),
         }
     }
 }
@@ -125,6 +131,9 @@ impl std::str::FromStr for ActionType {
             "email" => Ok(ActionType::Email),
             "webhook" => Ok(ActionType::Webhook),
             "mqtt" => Ok(ActionType::Mqtt),
+            "slack" => Ok(ActionType::Slack),
+            "discord" => Ok(ActionType::Discord),
+            "sms" => Ok(ActionType::Sms),
             _ => Err(format!("Invalid action type: {}", s)),
         }
     }
@@ -272,6 +281,29 @@ pub struct MqttActionConfig {
     pub qos: Option<u8>, // 0, 1, or 2
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlackActionConfig {
+    pub webhook_url: String,
+    pub channel: Option<String>,
+    pub username: Option<String>,
+    pub icon_emoji: Option<String>,
+    pub template: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscordActionConfig {
+    pub webhook_url: String,
+    pub username: Option<String>,
+    pub avatar_url: Option<String>,
+    pub template: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SmsActionConfig {
+    pub to: Vec<String>, // Phone numbers in E.164 format
+    pub template: Option<String>,
 }
 
 // Alert context helpers

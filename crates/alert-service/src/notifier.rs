@@ -327,6 +327,340 @@ impl NotificationChannel for MqttChannel {
     }
 }
 
+pub struct SlackChannel {
+    client: reqwest::Client,
+}
+
+impl SlackChannel {
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
+        }
+    }
+
+    fn render_template(&self, template: &str, event: &AlertEvent) -> String {
+        template
+            .replace("{severity}", &event.severity.to_string())
+            .replace("{message}", &event.message)
+            .replace("{trigger_type}", &event.trigger_type.to_string())
+            .replace("{event_id}", &event.id.to_string())
+            .replace("{fired_at}", &event.fired_at.to_string())
+    }
+
+    fn severity_color(&self, severity: &Severity) -> &'static str {
+        match severity {
+            Severity::Info => "#36a64f",      // green
+            Severity::Warning => "#ff9800",   // orange
+            Severity::Error => "#f44336",     // red
+            Severity::Critical => "#9c27b0",  // purple
+        }
+    }
+}
+
+impl Default for SlackChannel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl NotificationChannel for SlackChannel {
+    async fn send(&self, event: &AlertEvent, action: &AlertAction) -> Result<()> {
+        let config: SlackActionConfig = serde_json::from_value(action.config_json.clone())
+            .context("Invalid Slack action config")?;
+
+        let text = if let Some(template) = config.template {
+            self.render_template(&template, event)
+        } else {
+            format!("*{}* alert triggered", event.severity.to_string().to_uppercase())
+        };
+
+        let mut payload = serde_json::json!({
+            "text": text,
+            "attachments": [{
+                "color": self.severity_color(&event.severity),
+                "fields": [
+                    {
+                        "title": "Message",
+                        "value": event.message,
+                        "short": false
+                    },
+                    {
+                        "title": "Trigger Type",
+                        "value": event.trigger_type.to_string(),
+                        "short": true
+                    },
+                    {
+                        "title": "Severity",
+                        "value": event.severity.to_string(),
+                        "short": true
+                    },
+                    {
+                        "title": "Event ID",
+                        "value": event.id.to_string(),
+                        "short": true
+                    },
+                    {
+                        "title": "Fired At",
+                        "value": event.fired_at.to_rfc3339(),
+                        "short": true
+                    }
+                ]
+            }]
+        });
+
+        if let Some(channel) = config.channel {
+            payload["channel"] = serde_json::Value::String(channel);
+        }
+
+        if let Some(username) = config.username {
+            payload["username"] = serde_json::Value::String(username);
+        }
+
+        if let Some(icon_emoji) = config.icon_emoji {
+            payload["icon_emoji"] = serde_json::Value::String(icon_emoji);
+        }
+
+        let response = self
+            .client
+            .post(&config.webhook_url)
+            .json(&payload)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Slack webhook request failed with status: {}",
+                response.status()
+            );
+        }
+
+        info!(
+            event_id = %event.id,
+            "Slack notification sent"
+        );
+
+        Ok(())
+    }
+
+    fn channel_type(&self) -> ActionType {
+        ActionType::Slack
+    }
+}
+
+pub struct DiscordChannel {
+    client: reqwest::Client,
+}
+
+impl DiscordChannel {
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
+        }
+    }
+
+    fn render_template(&self, template: &str, event: &AlertEvent) -> String {
+        template
+            .replace("{severity}", &event.severity.to_string())
+            .replace("{message}", &event.message)
+            .replace("{trigger_type}", &event.trigger_type.to_string())
+            .replace("{event_id}", &event.id.to_string())
+            .replace("{fired_at}", &event.fired_at.to_string())
+    }
+
+    fn severity_color(&self, severity: &Severity) -> u32 {
+        match severity {
+            Severity::Info => 0x36a64f,      // green
+            Severity::Warning => 0xff9800,   // orange
+            Severity::Error => 0xf44336,     // red
+            Severity::Critical => 0x9c27b0,  // purple
+        }
+    }
+}
+
+impl Default for DiscordChannel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl NotificationChannel for DiscordChannel {
+    async fn send(&self, event: &AlertEvent, action: &AlertAction) -> Result<()> {
+        let config: DiscordActionConfig = serde_json::from_value(action.config_json.clone())
+            .context("Invalid Discord action config")?;
+
+        let description = if let Some(template) = config.template {
+            self.render_template(&template, event)
+        } else {
+            event.message.clone()
+        };
+
+        let mut payload = serde_json::json!({
+            "embeds": [{
+                "title": format!("{} Alert", event.severity.to_string().to_uppercase()),
+                "description": description,
+                "color": self.severity_color(&event.severity),
+                "fields": [
+                    {
+                        "name": "Trigger Type",
+                        "value": event.trigger_type.to_string(),
+                        "inline": true
+                    },
+                    {
+                        "name": "Severity",
+                        "value": event.severity.to_string(),
+                        "inline": true
+                    },
+                    {
+                        "name": "Event ID",
+                        "value": event.id.to_string(),
+                        "inline": false
+                    }
+                ],
+                "timestamp": event.fired_at.to_rfc3339()
+            }]
+        });
+
+        if let Some(username) = config.username {
+            payload["username"] = serde_json::Value::String(username);
+        }
+
+        if let Some(avatar_url) = config.avatar_url {
+            payload["avatar_url"] = serde_json::Value::String(avatar_url);
+        }
+
+        let response = self
+            .client
+            .post(&config.webhook_url)
+            .json(&payload)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            anyhow::bail!(
+                "Discord webhook request failed with status: {}",
+                response.status()
+            );
+        }
+
+        info!(
+            event_id = %event.id,
+            "Discord notification sent"
+        );
+
+        Ok(())
+    }
+
+    fn channel_type(&self) -> ActionType {
+        ActionType::Discord
+    }
+}
+
+pub struct SmsChannel {
+    client: reqwest::Client,
+    twilio_account_sid: String,
+    twilio_auth_token: String,
+    twilio_from_number: String,
+}
+
+impl SmsChannel {
+    pub fn new(
+        twilio_account_sid: String,
+        twilio_auth_token: String,
+        twilio_from_number: String,
+    ) -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap(),
+            twilio_account_sid,
+            twilio_auth_token,
+            twilio_from_number,
+        }
+    }
+
+    fn render_template(&self, template: &str, event: &AlertEvent) -> String {
+        template
+            .replace("{severity}", &event.severity.to_string())
+            .replace("{message}", &event.message)
+            .replace("{trigger_type}", &event.trigger_type.to_string())
+            .replace("{event_id}", &event.id.to_string())
+            .replace("{fired_at}", &event.fired_at.to_string())
+    }
+}
+
+#[async_trait]
+impl NotificationChannel for SmsChannel {
+    async fn send(&self, event: &AlertEvent, action: &AlertAction) -> Result<()> {
+        let config: SmsActionConfig = serde_json::from_value(action.config_json.clone())
+            .context("Invalid SMS action config")?;
+
+        let body = if let Some(template) = config.template {
+            self.render_template(&template, event)
+        } else {
+            format!(
+                "[{}] {}: {}",
+                event.severity.to_string().to_uppercase(),
+                event.trigger_type.to_string(),
+                event.message
+            )
+        };
+
+        // Twilio API URL
+        let url = format!(
+            "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+            self.twilio_account_sid
+        );
+
+        // Send SMS to each recipient
+        for to in &config.to {
+            let params = [
+                ("From", self.twilio_from_number.as_str()),
+                ("To", to.as_str()),
+                ("Body", body.as_str()),
+            ];
+
+            let response = self
+                .client
+                .post(&url)
+                .basic_auth(&self.twilio_account_sid, Some(&self.twilio_auth_token))
+                .form(&params)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await?;
+                anyhow::bail!(
+                    "Twilio SMS request failed with status {}: {}",
+                    status,
+                    error_text
+                );
+            }
+
+            info!(
+                event_id = %event.id,
+                to = %to,
+                "SMS notification sent"
+            );
+        }
+
+        Ok(())
+    }
+
+    fn channel_type(&self) -> ActionType {
+        ActionType::Sms
+    }
+}
+
 pub struct Notifier {
     store: AlertStore,
     channels: HashMap<ActionType, Arc<dyn NotificationChannel>>,
@@ -341,6 +675,12 @@ impl Notifier {
 
         // Add MQTT channel (always available)
         channels.insert(ActionType::Mqtt, Arc::new(MqttChannel::new()));
+
+        // Add Slack channel (always available - uses webhook URLs)
+        channels.insert(ActionType::Slack, Arc::new(SlackChannel::new()));
+
+        // Add Discord channel (always available - uses webhook URLs)
+        channels.insert(ActionType::Discord, Arc::new(DiscordChannel::new()));
 
         Self { store, channels }
     }
@@ -362,6 +702,20 @@ impl Notifier {
         );
         self.channels
             .insert(ActionType::Email, Arc::new(channel));
+    }
+
+    pub fn add_sms_channel(
+        &mut self,
+        twilio_account_sid: String,
+        twilio_auth_token: String,
+        twilio_from_number: String,
+    ) {
+        let channel = SmsChannel::new(
+            twilio_account_sid,
+            twilio_auth_token,
+            twilio_from_number,
+        );
+        self.channels.insert(ActionType::Sms, Arc::new(channel));
     }
 
     pub async fn notify(&self, event: &AlertEvent) -> Result<()> {

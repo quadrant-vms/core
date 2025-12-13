@@ -75,6 +75,25 @@ async fn main() -> Result<()> {
         info!("Email channel not configured (SMTP settings missing)");
     }
 
+    // Configure SMS channel if Twilio settings are provided
+    if let (Ok(account_sid), Ok(auth_token), Ok(from_number)) = (
+        env::var("TWILIO_ACCOUNT_SID"),
+        env::var("TWILIO_AUTH_TOKEN"),
+        env::var("TWILIO_FROM_NUMBER"),
+    ) {
+        notifier.add_sms_channel(
+            account_sid,
+            auth_token,
+            from_number.clone(),
+        );
+
+        info!("SMS channel configured (Twilio from: {})", from_number);
+    } else {
+        info!("SMS channel not configured (Twilio settings missing)");
+    }
+
+    info!("Slack and Discord channels configured (webhook-based)");
+
     let notifier = Arc::new(notifier);
 
     // Create app state

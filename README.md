@@ -81,7 +81,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 
 ### Alerts & Automation
 - **Rule engine**: Flexible condition-based triggering with JSON matching
-- **Multi-channel notifications**: Email (SMTP), Webhook, MQTT
+- **Multi-channel notifications**: Email (SMTP), Webhook, MQTT, Slack, Discord, SMS (Twilio)
 - **Alert suppression**: Cooldown periods and rate limiting
 - **Scheduling**: Cron-based time windows for active rules
 
@@ -110,7 +110,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Enhanced observability**: Centralized structured logs, distributed tracing, SLO dashboards by tenant/node
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
 - **Additional AI models**: Facial recognition, action recognition, license plate recognition
-- **Extended integrations**: SMS notifications, Slack/Discord webhooks, PagerDuty
+- **Extended integrations**: PagerDuty integration, Microsoft Teams webhooks
 
 ---
 

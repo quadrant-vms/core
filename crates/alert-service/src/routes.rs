@@ -17,7 +17,7 @@ use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 /// Helper to safely parse UUIDs from auth context, returning 400 Bad Request on error
-fn parse_auth_uuids(auth_ctx: &common::auth_middleware::AuthContext) -> Result<(Uuid, Uuid), impl IntoResponse> {
+fn parse_auth_uuids(auth_ctx: &common::auth_middleware::AuthContext) -> Result<(Uuid, Uuid), (StatusCode, Json<serde_json::Value>)> {
     let tenant_id = validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id")
         .map_err(|e| (
             StatusCode::BAD_REQUEST,

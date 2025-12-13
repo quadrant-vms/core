@@ -351,3 +351,217 @@ async fn test_list_rules_and_events() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_create_slack_action() -> Result<()> {
+    let pool = setup_test_db().await?;
+    let store = AlertStore::new(pool);
+
+    let tenant_id = uuid::Uuid::new_v4();
+
+    // Create a rule
+    let rule_req = alert_service::CreateAlertRuleRequest {
+        name: "Slack Notification Rule".to_string(),
+        description: None,
+        enabled: Some(true),
+        severity: Severity::Warning,
+        trigger_type: TriggerType::AiDetection,
+        condition_json: json!({}),
+        suppress_duration_secs: None,
+        max_alerts_per_hour: None,
+        schedule_cron: None,
+    };
+
+    let rule = store.create_rule(tenant_id, &rule_req, None).await?;
+
+    // Create a Slack action
+    let action_req = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Slack,
+        config_json: json!({
+            "webhook_url": "https://hooks.slack.com/services/TEST/TEST/TEST",
+            "channel": "#alerts",
+            "username": "Quadrant VMS",
+            "icon_emoji": ":camera:"
+        }),
+        enabled: Some(true),
+    };
+
+    let action = store.create_action(rule.id, &action_req).await?;
+
+    assert_eq!(action.rule_id, rule.id);
+    assert_eq!(action.action_type, alert_service::ActionType::Slack);
+    assert!(action.enabled);
+
+    // Verify config JSON
+    let config = action.config_json.as_object().unwrap();
+    assert_eq!(
+        config.get("webhook_url").unwrap().as_str().unwrap(),
+        "https://hooks.slack.com/services/TEST/TEST/TEST"
+    );
+    assert_eq!(config.get("channel").unwrap().as_str().unwrap(), "#alerts");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_create_discord_action() -> Result<()> {
+    let pool = setup_test_db().await?;
+    let store = AlertStore::new(pool);
+
+    let tenant_id = uuid::Uuid::new_v4();
+
+    // Create a rule
+    let rule_req = alert_service::CreateAlertRuleRequest {
+        name: "Discord Notification Rule".to_string(),
+        description: None,
+        enabled: Some(true),
+        severity: Severity::Critical,
+        trigger_type: TriggerType::DeviceOffline,
+        condition_json: json!({}),
+        suppress_duration_secs: None,
+        max_alerts_per_hour: None,
+        schedule_cron: None,
+    };
+
+    let rule = store.create_rule(tenant_id, &rule_req, None).await?;
+
+    // Create a Discord action
+    let action_req = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Discord,
+        config_json: json!({
+            "webhook_url": "https://discord.com/api/webhooks/TEST/TEST",
+            "username": "Quadrant VMS Bot",
+            "avatar_url": "https://example.com/avatar.png"
+        }),
+        enabled: Some(true),
+    };
+
+    let action = store.create_action(rule.id, &action_req).await?;
+
+    assert_eq!(action.rule_id, rule.id);
+    assert_eq!(action.action_type, alert_service::ActionType::Discord);
+    assert!(action.enabled);
+
+    // Verify config JSON
+    let config = action.config_json.as_object().unwrap();
+    assert_eq!(
+        config.get("webhook_url").unwrap().as_str().unwrap(),
+        "https://discord.com/api/webhooks/TEST/TEST"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_create_sms_action() -> Result<()> {
+    let pool = setup_test_db().await?;
+    let store = AlertStore::new(pool);
+
+    let tenant_id = uuid::Uuid::new_v4();
+
+    // Create a rule
+    let rule_req = alert_service::CreateAlertRuleRequest {
+        name: "SMS Notification Rule".to_string(),
+        description: None,
+        enabled: Some(true),
+        severity: Severity::Critical,
+        trigger_type: TriggerType::StreamFailed,
+        condition_json: json!({}),
+        suppress_duration_secs: None,
+        max_alerts_per_hour: None,
+        schedule_cron: None,
+    };
+
+    let rule = store.create_rule(tenant_id, &rule_req, None).await?;
+
+    // Create an SMS action
+    let action_req = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Sms,
+        config_json: json!({
+            "to": ["+15551234567", "+15559876543"],
+            "template": "[{severity}] {trigger_type}: {message}"
+        }),
+        enabled: Some(true),
+    };
+
+    let action = store.create_action(rule.id, &action_req).await?;
+
+    assert_eq!(action.rule_id, rule.id);
+    assert_eq!(action.action_type, alert_service::ActionType::Sms);
+    assert!(action.enabled);
+
+    // Verify config JSON
+    let config = action.config_json.as_object().unwrap();
+    let to_numbers = config.get("to").unwrap().as_array().unwrap();
+    assert_eq!(to_numbers.len(), 2);
+    assert_eq!(to_numbers[0].as_str().unwrap(), "+15551234567");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_multiple_notification_channels() -> Result<()> {
+    let pool = setup_test_db().await?;
+    let store = AlertStore::new(pool);
+
+    let tenant_id = uuid::Uuid::new_v4();
+
+    // Create a rule
+    let rule_req = alert_service::CreateAlertRuleRequest {
+        name: "Multi-Channel Alert".to_string(),
+        description: Some("Alert sent to multiple channels".to_string()),
+        enabled: Some(true),
+        severity: Severity::Error,
+        trigger_type: TriggerType::RecordingFailed,
+        condition_json: json!({}),
+        suppress_duration_secs: None,
+        max_alerts_per_hour: None,
+        schedule_cron: None,
+    };
+
+    let rule = store.create_rule(tenant_id, &rule_req, None).await?;
+
+    // Create Slack action
+    let slack_action = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Slack,
+        config_json: json!({
+            "webhook_url": "https://hooks.slack.com/services/TEST/TEST/TEST",
+            "channel": "#critical-alerts"
+        }),
+        enabled: Some(true),
+    };
+    store.create_action(rule.id, &slack_action).await?;
+
+    // Create Discord action
+    let discord_action = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Discord,
+        config_json: json!({
+            "webhook_url": "https://discord.com/api/webhooks/TEST/TEST"
+        }),
+        enabled: Some(true),
+    };
+    store.create_action(rule.id, &discord_action).await?;
+
+    // Create Webhook action
+    let webhook_action = alert_service::CreateAlertActionRequest {
+        action_type: alert_service::ActionType::Webhook,
+        config_json: json!({
+            "url": "https://example.com/alert-webhook",
+            "method": "POST"
+        }),
+        enabled: Some(true),
+    };
+    store.create_action(rule.id, &webhook_action).await?;
+
+    // List all actions for the rule
+    let actions = store.list_actions(rule.id).await?;
+    assert_eq!(actions.len(), 3);
+
+    // Verify we have one of each type
+    let action_types: Vec<_> = actions.iter().map(|a| a.action_type.clone()).collect();
+    assert!(action_types.contains(&alert_service::ActionType::Slack));
+    assert!(action_types.contains(&alert_service::ActionType::Discord));
+    assert!(action_types.contains(&alert_service::ActionType::Webhook));
+
+    Ok(())
+}
