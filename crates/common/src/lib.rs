@@ -10,5 +10,6 @@ pub mod state_store;
 pub mod state_store_client;
 pub mod streams;
 pub mod thumbnail;
+pub mod validation;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

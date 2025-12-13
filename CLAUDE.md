@@ -36,6 +36,211 @@
 - New Claude sessions should read this file first to understand everything
 - If you find yourself asking the user to repeat something, add it here
 
+### 5. 🔒 MANDATORY Reliability & Safety Rules
+
+**Context**: After a comprehensive reliability audit (see RELIABILITY_AUDIT.md), 120 critical issues were identified that could cause cascading failures similar to Cloudflare-style outages. ALL code must follow these rules to prevent panics, crashes, and service failures.
+
+#### 5.1 NEVER Use `.unwrap()` or `.expect()` in Production Code
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: These will panic and crash the service
+let value = some_option.unwrap();
+let parsed = Uuid::parse_str(&id).unwrap();
+let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+let data = vec[index];  // Index without bounds checking
+```
+
+**✅ REQUIRED**:
+```rust
+// CORRECT: Use pattern matching or return errors
+let value = some_option.ok_or_else(|| anyhow!("value missing"))?;
+let parsed = validation::parse_uuid(&id, "field_name")?;
+let timestamp = validation::safe_unix_timestamp();
+let data = vec.get(index).ok_or_else(|| anyhow!("index out of bounds"))?;
+```
+
+**Exceptions**: `.unwrap()` is ONLY allowed in:
+- Test code (`#[cfg(test)]`)
+- Code with SAFETY comments explaining why panic is impossible
+- Use `.expect("BUG: explain why this is guaranteed to be Some/Ok")` for internal invariants
+
+#### 5.2 ALWAYS Validate External Inputs
+
+**External inputs include**: HTTP request bodies/headers, environment variables, config files, database data, file paths, user-provided regex, URLs, and any data from external sources.
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: No validation, allows attacks
+let id = req.id;  // Could be 10GB string → OOM
+let uri = req.uri;  // Could contain shell metacharacters → command injection
+let path = PathBuf::from(req.path);  // Could be "../../etc/passwd" → path traversal
+```
+
+**✅ REQUIRED**:
+```rust
+use common::validation;
+
+// CORRECT: Validate all inputs
+validation::validate_id(&req.id, "stream_id")?;
+validation::validate_uri(&req.uri, "source_uri")?;
+validation::validate_path_components(&PathBuf::from(req.path), Some(base_dir), "file_path")?;
+validation::validate_regex_pattern(&req.pattern)?;
+```
+
+**Available validation functions** (see `crates/common/src/validation.rs`):
+- `validate_id()` - Resource IDs (max 256 bytes, no path traversal)
+- `validate_name()` - Names (max 512 bytes)
+- `validate_uri()` - URIs (max 4KB, no shell metacharacters)
+- `validate_path()` / `validate_path_components()` - File paths (prevent traversal)
+- `validate_email()` - Email addresses
+- `validate_regex_pattern()` - Regex (prevent ReDoS attacks)
+- `validate_port()` - Port numbers (1-65535)
+- `validate_range()` - Numeric range validation
+- `parse_uuid()` - Safe UUID parsing
+- `safe_unix_timestamp()` - Safe time operations
+
+#### 5.3 ALWAYS Use Safe Time Operations
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: Panics if system clock is before 1970 (happens in containers)
+let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+```
+
+**✅ REQUIRED**:
+```rust
+use common::validation;
+
+// CORRECT: Safe fallback for clock errors
+let now = validation::safe_unix_timestamp();  // Returns 0 and logs warning on error
+```
+
+#### 5.4 ALWAYS Use Bounded Collections
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: Unbounded HashMap → OOM if attacker creates 1M sessions
+pub struct SessionManager {
+    sessions: HashMap<String, Session>,  // No size limit!
+}
+```
+
+**✅ REQUIRED**:
+```rust
+// CORRECT: Enforce limits
+const MAX_CONCURRENT_SESSIONS: usize = 10_000;
+
+pub struct SessionManager {
+    sessions: HashMap<String, Session>,
+    max_sessions: usize,
+}
+
+impl SessionManager {
+    pub fn add_session(&mut self, id: String, session: Session) -> Result<()> {
+        if self.sessions.len() >= self.max_sessions {
+            return Err(anyhow!("Maximum concurrent sessions ({}) exceeded", self.max_sessions));
+        }
+        self.sessions.insert(id, session);
+        Ok(())
+    }
+}
+```
+
+**Required limits**:
+- `MAX_CONCURRENT_RECORDINGS` - Limit active recordings
+- `MAX_CONCURRENT_STREAMS` - Limit active streams
+- `MAX_CONCURRENT_PLAYBACK_SESSIONS` - Limit playback sessions
+- `MAX_MQTT_CLIENTS` - Limit MQTT client cache (use LRU eviction)
+
+#### 5.5 NEVER Use `std::sync::Mutex` in Async Code
+
+**❌ FORBIDDEN**:
+```rust
+use std::sync::Mutex;
+
+// WRONG: Poisoned mutex causes cascading failures
+let clients = self.clients.lock().unwrap();  // Panics if poisoned
+```
+
+**✅ REQUIRED**:
+```rust
+use tokio::sync::RwLock;
+
+// CORRECT: Use async-aware locks
+let clients = self.clients.read().await;  // Never panics from poisoning
+```
+
+**Why**: `std::sync::Mutex` can become "poisoned" if any thread panics while holding the lock. This causes ALL future `.lock().unwrap()` calls to panic, creating cascading failures across the entire service cluster.
+
+#### 5.6 ALWAYS Handle Errors in Spawned Tasks
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: Panic in spawned task is silent, resources leak
+tokio::spawn(async move {
+    pipeline.run().await.unwrap();  // Silent crash
+});
+```
+
+**✅ REQUIRED**:
+```rust
+// CORRECT: Log errors, don't panic
+tokio::spawn(async move {
+    if let Err(e) = pipeline.run().await {
+        tracing::error!(error = %e, "pipeline failed");
+        // Optionally: send error to parent via channel
+    }
+});
+```
+
+#### 5.7 ALWAYS Sanitize Command Arguments
+
+**❌ FORBIDDEN**:
+```rust
+// WRONG: Command injection vulnerability
+let output = Command::new("ffmpeg")
+    .arg("-i")
+    .arg(user_provided_uri)  // Could be: "file.mp4; rm -rf /"
+    .output()?;
+```
+
+**✅ REQUIRED**:
+```rust
+// CORRECT: Validate URI first
+validation::validate_uri(&user_provided_uri, "source_uri")?;  // Blocks shell metacharacters
+let output = Command::new("ffmpeg")
+    .arg("-i")
+    .arg(user_provided_uri)
+    .output()?;
+```
+
+#### 5.8 Test Code CAN Use `.unwrap()`
+
+**✅ ALLOWED in tests**:
+```rust
+#[test]
+fn test_example() {
+    let value = some_function().unwrap();  // OK in tests
+    assert_eq!(value, expected);
+}
+```
+
+#### Quick Checklist for New Code
+
+Before committing ANY code, verify:
+- [ ] No `.unwrap()` or `.expect()` in production paths (only in tests or with SAFETY comments)
+- [ ] All external inputs validated using `common::validation::*`
+- [ ] All collections have size limits or LRU eviction
+- [ ] All time operations use `validation::safe_unix_timestamp()`
+- [ ] No `std::sync::Mutex` in async code (use `tokio::sync::RwLock`)
+- [ ] All spawned tasks handle errors gracefully
+- [ ] All command arguments sanitized against injection
+- [ ] All file paths checked for traversal attacks
+- [ ] All regex patterns validated against ReDoS
+
+**Failure to follow these rules WILL cause production outages.**
+
 ### Architecture
 
 This is a **Cargo workspace** with multiple crates:

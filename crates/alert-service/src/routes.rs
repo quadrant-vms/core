@@ -9,11 +9,29 @@ use axum::{
     Json, Router,
 };
 use common::auth_middleware::RequireAuth;
+use common::validation;
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
+
+/// Helper to safely parse UUIDs from auth context, returning 400 Bad Request on error
+fn parse_auth_uuids(auth_ctx: &common::auth_middleware::AuthContext) -> Result<(Uuid, Uuid), impl IntoResponse> {
+    let tenant_id = validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id")
+        .map_err(|e| (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Invalid tenant_id in auth context: {}", e)})),
+        ))?;
+
+    let user_id = validation::parse_uuid(&auth_ctx.user_id, "user_id")
+        .map_err(|e| (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Invalid user_id in auth context: {}", e)})),
+        ))?;
+
+    Ok((tenant_id, user_id))
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -91,8 +109,10 @@ async fn create_rule(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
-    let user_id = Uuid::parse_str(&auth_ctx.user_id).unwrap();
+    let (tenant_id, user_id) = match parse_auth_uuids(&auth_ctx) {
+        Ok(uuids) => uuids,
+        Err(err_response) => return err_response.into_response(),
+    };
 
     match state.store.create_rule(tenant_id, &req, Some(user_id)).await {
         Ok(rule) => (StatusCode::CREATED, Json(rule)).into_response(),
@@ -118,7 +138,13 @@ async fn get_rule(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") {
+        Ok(id) => id,
+        Err(e) => return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Invalid tenant_id: {}", e)})),
+        ).into_response(),
+    };
 
     match state.store.get_rule(rule_id, tenant_id).await {
         Ok(Some(rule)) => Json(rule).into_response(),
@@ -155,7 +181,7 @@ async fn list_rules(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     match state.store.list_rules(tenant_id, query.enabled_only).await {
         Ok(rules) => Json(rules).into_response(),
@@ -182,7 +208,7 @@ async fn update_rule(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     match state.store.update_rule(rule_id, tenant_id, &req).await {
         Ok(Some(rule)) => Json(rule).into_response(),
@@ -213,7 +239,7 @@ async fn delete_rule(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     match state.store.delete_rule(rule_id, tenant_id).await {
         Ok(true) => StatusCode::NO_CONTENT.into_response(),
@@ -247,7 +273,7 @@ async fn create_action(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     // Verify rule exists and belongs to tenant
     match state.store.get_rule(rule_id, tenant_id).await {
@@ -292,7 +318,7 @@ async fn list_actions(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     // Verify rule exists and belongs to tenant
     match state.store.get_rule(rule_id, tenant_id).await {
@@ -380,7 +406,7 @@ async fn list_events(
             .into_response();
     }
 
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     match state
         .store
@@ -432,7 +458,7 @@ async fn trigger_alert(
     RequireAuth(auth_ctx): RequireAuth,
     Json(req): Json<TriggerAlertRequest>,
 ) -> impl IntoResponse {
-    let tenant_id = Uuid::parse_str(&auth_ctx.tenant_id).unwrap();
+    let tenant_id = match validation::parse_uuid(&auth_ctx.tenant_id, "tenant_id") { Ok(id) => id, Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Invalid tenant_id: {}", e)}))).into_response(), };
 
     // Evaluate and fire alerts
     let events = match state

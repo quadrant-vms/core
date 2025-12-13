@@ -317,7 +317,8 @@ impl RecordingManager {
       Some((info.lease_id.clone(), info.clone()))
     };
 
-    let (lease_id, info) = info_to_persist.unwrap();
+    // SAFETY: info_to_persist is guaranteed to be Some here because we return early above if not is_active
+    let (lease_id, info) = info_to_persist.expect("BUG: info_to_persist should always be Some here");
 
     // Persist state change
     self.persist_recording(&info).await;
