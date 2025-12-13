@@ -3,10 +3,12 @@ use common::playback::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
+use super::dvr::DvrBufferManager;
 use super::ll_hls::{BlockingParams, HlsVariant, LlHlsConfig, LlHlsPlaylistGenerator};
 use super::store::PlaybackStore;
 
@@ -14,6 +16,8 @@ use super::store::PlaybackStore;
 struct SessionData {
     info: PlaybackInfo,
     cancel_token: CancellationToken,
+    /// DVR buffer manager (only for DVR-enabled sessions)
+    dvr_manager: Option<Arc<DvrBufferManager>>,
 }
 
 /// Playback session manager
@@ -86,6 +90,7 @@ impl PlaybackManager {
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_secs()),
             stopped_at: None,
+            dvr_window: None, // Will be set later if DVR is enabled
         };
 
         // For recordings, get duration
@@ -106,6 +111,34 @@ impl PlaybackManager {
             store.save(&info).await?;
         }
 
+        // Create DVR manager if DVR is enabled
+        let dvr_manager = if let Some(ref dvr_cfg) = config.dvr {
+            if dvr_cfg.enabled && config.source_type == PlaybackSourceType::Stream {
+                let hls_path = self.stream_hls_root.join(&config.source_id);
+                let manager = Arc::new(DvrBufferManager::new(
+                    config.source_id.clone(),
+                    hls_path,
+                    dvr_cfg.buffer_window_secs,
+                ));
+
+                // Initial segment scan
+                if let Err(e) = manager.scan_segments().await {
+                    warn!(session_id = %config.session_id, error = %e, "Failed to scan DVR segments");
+                }
+
+                // Update DVR window info
+                if let Ok(window) = manager.get_window(None).await {
+                    info.dvr_window = Some(window);
+                }
+
+                Some(manager)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Store in memory
         let cancel_token = CancellationToken::new();
         let mut sessions = self.sessions.write().await;
@@ -114,6 +147,7 @@ impl PlaybackManager {
             SessionData {
                 info: info.clone(),
                 cancel_token,
+                dvr_manager,
             },
         );
 
@@ -345,5 +379,163 @@ impl PlaybackManager {
     /// Get LL-HLS configuration
     pub fn ll_hls_config(&self) -> &LlHlsPlaylistGenerator {
         &self.ll_hls_generator
+    }
+
+    // === DVR Methods ===
+
+    /// Get DVR window information for a session
+    pub async fn get_dvr_window(&self, session_id: &str) -> Result<DvrWindowInfo> {
+        let sessions = self.sessions.read().await;
+        if let Some(session_data) = sessions.get(session_id) {
+            if let Some(dvr_manager) = &session_data.dvr_manager {
+                // Scan latest segments
+                dvr_manager.scan_segments().await?;
+
+                // Get current position from session
+                let current_pos = session_data
+                    .info
+                    .dvr_window
+                    .as_ref()
+                    .and_then(|w| w.current_position);
+
+                let window = dvr_manager.get_window(current_pos).await?;
+                Ok(window)
+            } else {
+                Err(anyhow!("DVR not enabled for this session"))
+            }
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Seek to a specific timestamp in DVR buffer
+    pub async fn dvr_seek(&self, request: DvrSeekRequest) -> Result<DvrSeekResponse> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session_data) = sessions.get_mut(&request.session_id) {
+            if let Some(dvr_manager) = &session_data.dvr_manager {
+                // Determine target timestamp
+                let target_timestamp = if let Some(ts) = request.timestamp_secs {
+                    ts
+                } else if let Some(offset) = request.relative_offset_secs {
+                    // Calculate timestamp from live edge
+                    if let Some(live_edge) = dvr_manager.get_live_edge().await? {
+                        if offset <= 0.0 {
+                            // Negative offset = go back in time
+                            live_edge.saturating_sub(offset.abs() as u64)
+                        } else {
+                            live_edge // Can't go beyond live
+                        }
+                    } else {
+                        return Err(anyhow!("No live edge available"));
+                    }
+                } else {
+                    return Err(anyhow!("Must provide either timestamp_secs or relative_offset_secs"));
+                };
+
+                // Validate timestamp is within DVR window
+                let window = dvr_manager.get_window(None).await?;
+                if target_timestamp < window.earliest_available
+                    || target_timestamp > window.latest_available
+                {
+                    return Err(anyhow!(
+                        "Timestamp {} out of DVR window range ({} - {})",
+                        target_timestamp,
+                        window.earliest_available,
+                        window.latest_available
+                    ));
+                }
+
+                // Find segment containing this timestamp
+                if let Some(segment) = dvr_manager.find_segment_at_timestamp(target_timestamp).await? {
+                    info!(
+                        session_id = %request.session_id,
+                        timestamp = target_timestamp,
+                        segment = %segment.filename,
+                        "DVR seek successful"
+                    );
+
+                    // Update session position
+                    session_data.info.current_position_secs =
+                        Some((target_timestamp - segment.start_timestamp) as f64);
+
+                    // Update DVR window with new position
+                    let updated_window = dvr_manager.get_window(Some(target_timestamp)).await?;
+                    session_data.info.dvr_window = Some(updated_window.clone());
+
+                    // Save to database
+                    if let Some(store) = &self.store {
+                        store.save(&session_data.info).await?;
+                    }
+
+                    Ok(DvrSeekResponse {
+                        success: true,
+                        timestamp_secs: Some(target_timestamp),
+                        live_offset_secs: updated_window.live_offset_secs,
+                        message: Some(format!("Seeked to segment: {}", segment.filename)),
+                    })
+                } else {
+                    Err(anyhow!("No segment found for timestamp: {}", target_timestamp))
+                }
+            } else {
+                Err(anyhow!("DVR not enabled for this session"))
+            }
+        } else {
+            Err(anyhow!("Session not found: {}", request.session_id))
+        }
+    }
+
+    /// Jump to live edge (exit DVR mode, return to live)
+    pub async fn jump_to_live(&self, session_id: &str) -> Result<DvrSeekResponse> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session_data) = sessions.get_mut(session_id) {
+            if let Some(dvr_manager) = &session_data.dvr_manager {
+                // Get live edge
+                let live_edge = dvr_manager
+                    .get_live_edge()
+                    .await?
+                    .ok_or_else(|| anyhow!("No live edge available"))?;
+
+                // Update session to live position
+                session_data.info.current_position_secs = None; // Live has no fixed position
+
+                // Update DVR window to live
+                let window = dvr_manager.get_window(Some(live_edge)).await?;
+                session_data.info.dvr_window = Some(window.clone());
+
+                // Save to database
+                if let Some(store) = &self.store {
+                    store.save(&session_data.info).await?;
+                }
+
+                info!(session_id = %session_id, "Jumped to live edge");
+
+                Ok(DvrSeekResponse {
+                    success: true,
+                    timestamp_secs: Some(live_edge),
+                    live_offset_secs: Some(0.0), // At live edge
+                    message: Some("Jumped to live edge".to_string()),
+                })
+            } else {
+                Err(anyhow!("DVR not enabled for this session"))
+            }
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
+    }
+
+    /// Update DVR buffer window size
+    pub async fn set_dvr_buffer_limit(&self, session_id: &str, buffer_secs: f64) -> Result<()> {
+        let sessions = self.sessions.read().await;
+        if let Some(session_data) = sessions.get(session_id) {
+            if let Some(dvr_manager) = &session_data.dvr_manager {
+                dvr_manager.set_buffer_limit(buffer_secs).await?;
+                info!(session_id = %session_id, buffer_secs = %buffer_secs, "DVR buffer limit updated");
+                Ok(())
+            } else {
+                Err(anyhow!("DVR not enabled for this session"))
+            }
+        } else {
+            Err(anyhow!("Session not found: {}", session_id))
+        }
     }
 }

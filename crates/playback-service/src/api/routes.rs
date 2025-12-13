@@ -149,3 +149,68 @@ pub async fn serve_ll_hls_playlist(
         }
     }
 }
+
+// === DVR Endpoints ===
+
+/// Get DVR window information for a session
+pub async fn get_dvr_window(
+    State(manager): State<Arc<PlaybackManager>>,
+    Json(req): Json<DvrWindowRequest>,
+) -> Result<Json<DvrWindowInfo>, StatusCode> {
+    info!(session_id = %req.session_id, "get DVR window request");
+
+    match manager.get_dvr_window(&req.session_id).await {
+        Ok(window) => Ok(Json(window)),
+        Err(e) => {
+            error!("failed to get DVR window: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Seek to a specific time in DVR buffer
+pub async fn dvr_seek(
+    State(manager): State<Arc<PlaybackManager>>,
+    Json(req): Json<DvrSeekRequest>,
+) -> Result<Json<DvrSeekResponse>, StatusCode> {
+    info!(
+        session_id = %req.session_id,
+        timestamp = ?req.timestamp_secs,
+        offset = ?req.relative_offset_secs,
+        "DVR seek request"
+    );
+
+    match manager.dvr_seek(req).await {
+        Ok(response) => Ok(Json(response)),
+        Err(e) => {
+            error!("DVR seek failed: {}", e);
+            Ok(Json(DvrSeekResponse {
+                success: false,
+                timestamp_secs: None,
+                live_offset_secs: None,
+                message: Some(format!("DVR seek failed: {}", e)),
+            }))
+        }
+    }
+}
+
+/// Jump to live edge
+pub async fn jump_to_live(
+    State(manager): State<Arc<PlaybackManager>>,
+    Json(req): Json<DvrJumpToLiveRequest>,
+) -> Result<Json<DvrSeekResponse>, StatusCode> {
+    info!(session_id = %req.session_id, "jump to live request");
+
+    match manager.jump_to_live(&req.session_id).await {
+        Ok(response) => Ok(Json(response)),
+        Err(e) => {
+            error!("jump to live failed: {}", e);
+            Ok(Json(DvrSeekResponse {
+                success: false,
+                timestamp_secs: None,
+                live_offset_secs: None,
+                message: Some(format!("Jump to live failed: {}", e)),
+            }))
+        }
+    }
+}

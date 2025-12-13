@@ -27,6 +27,10 @@ pub fn create_router(manager: Arc<PlaybackManager>) -> Router {
         .route("/v1/playback/control", post(control_playback))
         .route("/v1/playback/sessions", get(list_playback_sessions))
         .route("/ll-hls/streams/:stream_id/playlist.m3u8", get(serve_ll_hls_playlist))
+        // DVR endpoints
+        .route("/v1/dvr/window", post(get_dvr_window))
+        .route("/v1/dvr/seek", post(dvr_seek))
+        .route("/v1/dvr/jump_to_live", post(jump_to_live))
         .with_state(manager)
         // WebRTC WHEP endpoints (with separate state)
         .nest("/whep",

@@ -435,6 +435,14 @@ This document provides detailed information about each service in the Quadrant V
   - H.264 video and Opus audio codec support
   - STUN server integration for NAT traversal
   - Session-based connection lifecycle (create, maintain, delete)
+- **DVR time-shift playback**:
+  - Rewind and replay live streams within a configurable buffer window
+  - Segment timeline tracking with automatic buffer management
+  - Seek to absolute timestamps or relative offsets from live edge
+  - Jump to live edge functionality
+  - DVR window information API for available time ranges
+  - Configurable buffer limits (default: 5 minutes, up to 1 hour)
+  - Support for both timestamp-based and time-offset seeking
 - **Time-based navigation**: Seek support for recordings with timestamp control
 - **Playback controls**: Pause, resume, stop, and speed control
 - **PostgreSQL-backed storage**: Persistent playback session state
@@ -446,7 +454,13 @@ This document provides detailed information about each service in the Quadrant V
 - `/v1/playback/seek` - Seek to timestamp (recordings only)
 - `/v1/playback/control` - Pause/resume/stop controls
 - `/v1/playback/sessions` - List active playback sessions
-\n#### WebRTC (WHEP) API
+
+#### DVR API
+- `/v1/dvr/window` - Get DVR window information (available time range)
+- `/v1/dvr/seek` - Seek to timestamp or offset from live edge
+- `/v1/dvr/jump_to_live` - Return to live edge from DVR mode
+
+#### WebRTC (WHEP) API
 - `/whep/stream/{stream_id}` - WHEP endpoint for live stream playback (POST SDP offer)
 - `/whep/recording/{recording_id}` - WHEP endpoint for recording playback (POST SDP offer)
 - `/whep/session/{session_id}` - Delete WHEP session (DELETE)
@@ -470,6 +484,37 @@ This document provides detailed information about each service in the Quadrant V
 - `NODE_ID`: Playback node identifier (auto-generated if not set)
 - `LL_HLS_ENABLED`: Enable LL-HLS support (default: false)
 - `PLAYBACK_SERVICE_URL`: Base URL for WebRTC WHEP endpoints (default: http://localhost:8087)
+
+#### DVR Configuration
+
+DVR time-shift is enabled per playback session via the `dvr` field in `PlaybackConfig`:
+- **enabled**: Enable DVR mode for this session (default: false)
+- **rewind_limit_secs**: Maximum rewind time in seconds (default: 3600 = 1 hour, None = unlimited)
+- **buffer_window_secs**: Rolling buffer window size (default: 300 = 5 minutes)
+
+Example playback start request with DVR:
+```json
+{
+  "config": {
+    "session_id": "session-123",
+    "source_type": "stream",
+    "source_id": "camera-01",
+    "protocol": "hls",
+    "dvr": {
+      "enabled": true,
+      "rewind_limit_secs": 1800,
+      "buffer_window_secs": 600
+    }
+  }
+}
+```
+
+DVR features:
+- **Automatic segment tracking**: Scans HLS segments and builds timeline
+- **Timestamp-based seeking**: Seek to absolute Unix timestamps
+- **Relative seeking**: Seek relative to live edge (e.g., -30 seconds)
+- **Live edge detection**: Automatically tracks latest available content
+- **Buffer management**: Automatic trimming based on buffer_window_secs
 
 #### LL-HLS Configuration
 

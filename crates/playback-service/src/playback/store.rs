@@ -37,14 +37,35 @@ impl PlaybackStore {
             PlaybackProtocol::WebRtc => "webrtc",
         };
 
+        // Extract DVR fields
+        let (dvr_enabled, dvr_rewind_limit, dvr_buffer_window) =
+            if let Some(ref dvr) = session.config.dvr {
+                (dvr.enabled, dvr.rewind_limit_secs, Some(dvr.buffer_window_secs))
+            } else {
+                (false, None, None)
+            };
+
+        let (dvr_earliest, dvr_latest, dvr_current) =
+            if let Some(ref window) = session.dvr_window {
+                (
+                    Some(window.earliest_available as i64),
+                    Some(window.latest_available as i64),
+                    window.current_position.map(|p| p as i64),
+                )
+            } else {
+                (None, None, None)
+            };
+
         sqlx::query(
             r#"
             INSERT INTO playback_sessions (
                 session_id, source_type, source_id, protocol, state,
                 lease_id, node_id, playback_url, current_position_secs,
                 duration_secs, start_time_secs, speed, last_error,
-                started_at, stopped_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                started_at, stopped_at,
+                dvr_enabled, dvr_rewind_limit_secs, dvr_buffer_window_secs,
+                dvr_earliest_timestamp, dvr_latest_timestamp, dvr_current_position
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             ON CONFLICT (session_id) DO UPDATE SET
                 state = EXCLUDED.state,
                 lease_id = EXCLUDED.lease_id,
@@ -56,7 +77,13 @@ impl PlaybackStore {
                 speed = EXCLUDED.speed,
                 last_error = EXCLUDED.last_error,
                 started_at = EXCLUDED.started_at,
-                stopped_at = EXCLUDED.stopped_at
+                stopped_at = EXCLUDED.stopped_at,
+                dvr_enabled = EXCLUDED.dvr_enabled,
+                dvr_rewind_limit_secs = EXCLUDED.dvr_rewind_limit_secs,
+                dvr_buffer_window_secs = EXCLUDED.dvr_buffer_window_secs,
+                dvr_earliest_timestamp = EXCLUDED.dvr_earliest_timestamp,
+                dvr_latest_timestamp = EXCLUDED.dvr_latest_timestamp,
+                dvr_current_position = EXCLUDED.dvr_current_position
             "#,
         )
         .bind(&session.config.session_id)
@@ -74,6 +101,12 @@ impl PlaybackStore {
         .bind(session.last_error.as_deref())
         .bind(session.started_at.map(|t| t as i64))
         .bind(session.stopped_at.map(|t| t as i64))
+        .bind(dvr_enabled)
+        .bind(dvr_rewind_limit)
+        .bind(dvr_buffer_window)
+        .bind(dvr_earliest)
+        .bind(dvr_latest)
+        .bind(dvr_current)
         .execute(&self.pool)
         .await?;
 
@@ -87,7 +120,9 @@ impl PlaybackStore {
             SELECT session_id, source_type, source_id, protocol, state,
                    lease_id, node_id, playback_url, current_position_secs,
                    duration_secs, start_time_secs, speed, last_error,
-                   started_at, stopped_at
+                   started_at, stopped_at,
+                   dvr_enabled, dvr_rewind_limit_secs, dvr_buffer_window_secs,
+                   dvr_earliest_timestamp, dvr_latest_timestamp, dvr_current_position
             FROM playback_sessions
             WHERE session_id = $1
             "#,
@@ -109,7 +144,9 @@ impl PlaybackStore {
             SELECT session_id, source_type, source_id, protocol, state,
                    lease_id, node_id, playback_url, current_position_secs,
                    duration_secs, start_time_secs, speed, last_error,
-                   started_at, stopped_at
+                   started_at, stopped_at,
+                   dvr_enabled, dvr_rewind_limit_secs, dvr_buffer_window_secs,
+                   dvr_earliest_timestamp, dvr_latest_timestamp, dvr_current_position
             FROM playback_sessions
             WHERE state IN ('pending', 'starting', 'playing', 'paused', 'seeking')
             ORDER BY created_at DESC
@@ -132,7 +169,9 @@ impl PlaybackStore {
             SELECT session_id, source_type, source_id, protocol, state,
                    lease_id, node_id, playback_url, current_position_secs,
                    duration_secs, start_time_secs, speed, last_error,
-                   started_at, stopped_at
+                   started_at, stopped_at,
+                   dvr_enabled, dvr_rewind_limit_secs, dvr_buffer_window_secs,
+                   dvr_earliest_timestamp, dvr_latest_timestamp, dvr_current_position
             FROM playback_sessions
             WHERE node_id = $1
             ORDER BY created_at DESC
@@ -160,6 +199,8 @@ impl PlaybackStore {
 }
 
 fn row_to_playback_info(row: sqlx::postgres::PgRow) -> Result<PlaybackInfo> {
+    use common::playback::{DvrConfig, DvrWindowInfo};
+
     let source_type_str: String = row.try_get("source_type")?;
     let source_type = match source_type_str.as_str() {
         "stream" => PlaybackSourceType::Stream,
@@ -193,6 +234,52 @@ fn row_to_playback_info(row: sqlx::postgres::PgRow) -> Result<PlaybackInfo> {
     let start_time_secs: Option<f64> = row.try_get("start_time_secs").ok();
     let speed: Option<f64> = row.try_get("speed").ok();
 
+    // Extract DVR configuration
+    let dvr_enabled: bool = row.try_get("dvr_enabled").unwrap_or(false);
+    let dvr = if dvr_enabled {
+        Some(DvrConfig {
+            enabled: true,
+            rewind_limit_secs: row.try_get("dvr_rewind_limit_secs").ok(),
+            buffer_window_secs: row
+                .try_get("dvr_buffer_window_secs")
+                .unwrap_or(300.0),
+        })
+    } else {
+        None
+    };
+
+    // Extract DVR window information
+    let dvr_window = if dvr_enabled {
+        let earliest: Option<i64> = row.try_get("dvr_earliest_timestamp").ok();
+        let latest: Option<i64> = row.try_get("dvr_latest_timestamp").ok();
+        let current: Option<i64> = row.try_get("dvr_current_position").ok();
+
+        if let (Some(earliest), Some(latest)) = (earliest, latest) {
+            let buffer_seconds = (latest - earliest) as f64;
+            let current_u64 = current.map(|c| c as u64);
+            let live_offset = current_u64.map(|pos| {
+                if pos <= latest as u64 {
+                    (latest as u64 - pos) as f64
+                } else {
+                    0.0
+                }
+            });
+
+            Some(DvrWindowInfo {
+                stream_id: source_id.clone(),
+                earliest_available: earliest as u64,
+                latest_available: latest as u64,
+                buffer_seconds,
+                current_position: current_u64,
+                live_offset_secs: live_offset,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     Ok(PlaybackInfo {
         config: PlaybackConfig {
             session_id,
@@ -202,6 +289,7 @@ fn row_to_playback_info(row: sqlx::postgres::PgRow) -> Result<PlaybackInfo> {
             start_time_secs,
             speed,
             low_latency: false, // Default to false for database rows
+            dvr,
         },
         state,
         lease_id: row.try_get("lease_id").ok(),
@@ -210,7 +298,16 @@ fn row_to_playback_info(row: sqlx::postgres::PgRow) -> Result<PlaybackInfo> {
         current_position_secs: row.try_get("current_position_secs").ok(),
         duration_secs: row.try_get("duration_secs").ok(),
         last_error: row.try_get("last_error").ok(),
-        started_at: row.try_get::<Option<i64>, _>("started_at").ok().flatten().map(|t| t as u64),
-        stopped_at: row.try_get::<Option<i64>, _>("stopped_at").ok().flatten().map(|t| t as u64),
+        started_at: row
+            .try_get::<Option<i64>, _>("started_at")
+            .ok()
+            .flatten()
+            .map(|t| t as u64),
+        stopped_at: row
+            .try_get::<Option<i64>, _>("stopped_at")
+            .ok()
+            .flatten()
+            .map(|t| t as u64),
+        dvr_window,
     })
 }
