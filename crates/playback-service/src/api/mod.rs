@@ -32,6 +32,8 @@ pub fn create_router(manager: Arc<PlaybackManager>, cache: Arc<EdgeCache>) -> Ro
         .route("/v1/dvr/window", post(get_dvr_window))
         .route("/v1/dvr/seek", post(dvr_seek))
         .route("/v1/dvr/jump_to_live", post(jump_to_live))
+        // Time-axis preview endpoint
+        .route("/v1/preview/time_axis", post(get_time_axis_preview))
         .with_state(manager)
         // WebRTC WHEP endpoints (with separate state)
         .nest("/whep",

@@ -452,6 +452,13 @@ This document provides detailed information about each service in the Quadrant V
   - Configurable buffer limits (default: 5 minutes, up to 1 hour)
   - Support for both timestamp-based and time-offset seeking
 - **Time-based navigation**: Seek support for recordings with timestamp control
+- **Time-axis preview**:
+  - Generate evenly-spaced thumbnail previews along recording timelines
+  - Configurable thumbnail count, dimensions, and quality
+  - Base64-encoded JPEG thumbnails with position metadata
+  - Position percentage calculation for timeline UI rendering
+  - Automatic video duration detection
+  - Support for MP4, MKV, and HLS recordings
 - **Playback controls**: Pause, resume, stop, and speed control
 - **PostgreSQL-backed storage**: Persistent playback session state
 - **Multi-source support**: Playback from both live streams and recordings
@@ -467,6 +474,37 @@ This document provides detailed information about each service in the Quadrant V
 - `/v1/dvr/window` - Get DVR window information (available time range)
 - `/v1/dvr/seek` - Seek to timestamp or offset from live edge
 - `/v1/dvr/jump_to_live` - Return to live edge from DVR mode
+
+#### Time-Axis Preview API
+- `/v1/preview/time_axis` - Generate time-axis preview thumbnails (POST)
+  - Request body:
+    ```json
+    {
+      "source_id": "recording-123",
+      "source_type": "recording",
+      "count": 10,
+      "width": 320,
+      "height": 180,
+      "quality": 5
+    }
+    ```
+  - Response:
+    ```json
+    {
+      "source_id": "recording-123",
+      "source_type": "recording",
+      "duration_secs": 120.0,
+      "thumbnails": [
+        {
+          "timestamp_secs": 12.0,
+          "position_percent": 0.1,
+          "width": 320,
+          "height": 180,
+          "image_data": "base64-encoded-jpeg-data"
+        }
+      ]
+    }
+    ```
 
 #### WebRTC (WHEP) API
 - `/whep/stream/{stream_id}` - WHEP endpoint for live stream playback (POST SDP offer)

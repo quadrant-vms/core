@@ -253,3 +253,50 @@ pub struct DvrSegment {
     /// Full path to segment file
     pub file_path: String,
 }
+
+// === Time-Axis Preview ===
+
+/// Request for time-axis preview thumbnails
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeAxisPreviewRequest {
+    /// Recording ID or stream ID
+    pub source_id: String,
+    /// Source type: "recording" or "stream"
+    pub source_type: PlaybackSourceType,
+    /// Number of thumbnails to generate (evenly spaced)
+    pub count: u32,
+    /// Thumbnail width in pixels
+    pub width: Option<u32>,
+    /// Thumbnail height in pixels
+    pub height: Option<u32>,
+    /// JPEG quality (1-10, lower = smaller file size)
+    pub quality: Option<u32>,
+}
+
+/// Individual thumbnail in the time-axis preview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeAxisThumbnail {
+    /// Timestamp in seconds from start
+    pub timestamp_secs: f64,
+    /// Position as percentage of total duration (0.0 - 1.0)
+    pub position_percent: f64,
+    /// Thumbnail width in pixels
+    pub width: u32,
+    /// Thumbnail height in pixels
+    pub height: u32,
+    /// Base64-encoded JPEG image data
+    pub image_data: String,
+}
+
+/// Response containing time-axis preview thumbnails
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeAxisPreviewResponse {
+    /// Source identifier
+    pub source_id: String,
+    /// Source type
+    pub source_type: PlaybackSourceType,
+    /// Total duration in seconds
+    pub duration_secs: f64,
+    /// List of thumbnails evenly spaced along the timeline
+    pub thumbnails: Vec<TimeAxisThumbnail>,
+}

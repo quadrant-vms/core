@@ -5,10 +5,12 @@ use axum::{
 };
 use common::playback::*;
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::playback::{BlockingParams, PlaybackManager};
+use crate::preview::{generate_time_axis_preview, PreviewConfig};
 
 pub async fn healthz() -> &'static str {
     "ok"
@@ -211,6 +213,36 @@ pub async fn jump_to_live(
                 live_offset_secs: None,
                 message: Some(format!("Jump to live failed: {}", e)),
             }))
+        }
+    }
+}
+
+// === Time-Axis Preview Endpoints ===
+
+/// Generate time-axis preview thumbnails for a recording
+pub async fn get_time_axis_preview(
+    Json(req): Json<TimeAxisPreviewRequest>,
+) -> Result<Json<TimeAxisPreviewResponse>, StatusCode> {
+    info!(
+        source_id = %req.source_id,
+        source_type = ?req.source_type,
+        count = req.count,
+        "time-axis preview request"
+    );
+
+    // Get recording storage root from environment or use default
+    let storage_root = std::env::var("RECORDING_STORAGE_ROOT")
+        .unwrap_or_else(|_| "./data/recordings".to_string());
+    let storage_path = PathBuf::from(storage_root);
+
+    // Use default preview config
+    let config = PreviewConfig::default();
+
+    match generate_time_axis_preview(req, &storage_path, &config) {
+        Ok(response) => Ok(Json(response)),
+        Err(e) => {
+            error!("failed to generate time-axis preview: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }
