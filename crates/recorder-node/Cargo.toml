@@ -3,6 +3,9 @@ name = "recorder-node"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 common = { path = "../common" }
 telemetry = { path = "../telemetry" }

@@ -3,6 +3,9 @@ name = "alert-service"
 version = "0.1.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 # Web framework
 axum = "0.7"

@@ -3,6 +3,9 @@ name = "stream-node"
 version = "0.2.0"
 edition = "2021"
 
+[lints]
+workspace = true
+
 [dependencies]
 common = { path = "../common" }
 telemetry = { path = "../telemetry" }
