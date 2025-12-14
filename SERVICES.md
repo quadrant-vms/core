@@ -191,6 +191,15 @@ This document provides detailed information about each service in the Quadrant V
     - Support for MoveNet, MediaPipe Pose, or similar ONNX models
     - Keypoint confidence tracking
     - Person ID tracking
+  - **License Plate Recognition (LPR)**: Automated plate detection and OCR
+    - Two-stage pipeline: detection + OCR
+    - YOLOv8-based plate detection
+    - CRNN/LSTM-based OCR for text recognition
+    - Configurable character vocabulary (digits, letters, symbols)
+    - CTC (Connectionist Temporal Classification) decoding
+    - Multi-plate detection per frame
+    - CPU and GPU inference with automatic fallback
+    - Configurable confidence/IoU thresholds
 - **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
 - **GPU acceleration optimization**:
   - CUDA and TensorRT execution providers
@@ -211,11 +220,21 @@ This document provides detailed information about each service in the Quadrant V
 - `AI_SERVICE_ADDR`: Bind address (default: 127.0.0.1:8088)
 - `COORDINATOR_URL`: Coordinator service URL
 - `NODE_ID`: Unique node identifier
-- `YOLOV8_MODEL_PATH`: YOLOv8 ONNX model file path
-- `YOLOV8_CONFIDENCE`: Detection confidence threshold (default: 0.5)
-- `POSE_MODEL_PATH`: Pose estimation ONNX model file path
-- `POSE_CONFIDENCE`: Pose confidence threshold (default: 0.5)
-- `POSE_KEYPOINT_CONFIDENCE`: Keypoint confidence threshold (default: 0.3)
+- **YOLOv8 Object Detection**:
+  - `YOLOV8_MODEL_PATH`: YOLOv8 ONNX model file path
+  - `YOLOV8_CONFIDENCE`: Detection confidence threshold (default: 0.5)
+  - `YOLOV8_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
+  - `YOLOV8_DEVICE_ID`: GPU device ID (default: 0)
+- **Pose Estimation**:
+  - `POSE_MODEL_PATH`: Pose estimation ONNX model file path
+  - `POSE_CONFIDENCE`: Pose confidence threshold (default: 0.5)
+  - `POSE_KEYPOINT_CONFIDENCE`: Keypoint confidence threshold (default: 0.3)
+- **License Plate Recognition (LPR)**:
+  - `LPR_DETECTION_MODEL`: LPR detection ONNX model file path
+  - `LPR_OCR_MODEL`: LPR OCR ONNX model file path (optional, detection-only if not set)
+  - `LPR_CONFIDENCE`: Plate detection confidence threshold (default: 0.6)
+  - `LPR_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
+  - `LPR_DEVICE_ID`: GPU device ID (default: 0)
 
 #### Metrics
 - Active AI tasks

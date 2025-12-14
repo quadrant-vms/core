@@ -1,8 +1,8 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
-    plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
-    plugin::registry::PluginRegistry, plugin::yolov8_detector::YoloV8DetectorPlugin,
-    plugin::AiPlugin, AiServiceState,
+    plugin::lpr::LprPlugin, plugin::mock_detector::MockDetectorPlugin,
+    plugin::pose_estimation::PoseEstimationPlugin, plugin::registry::PluginRegistry,
+    plugin::yolov8_detector::YoloV8DetectorPlugin, plugin::AiPlugin, AiServiceState,
 };
 use anyhow::Result;
 use common::state_store::StateStore;
@@ -91,6 +91,36 @@ async fn main() -> Result<()> {
             "Pose estimation model not found at '{}', skipping pose_estimation plugin registration. \
             Set POSE_MODEL_PATH environment variable to enable.",
             pose_model_path
+        );
+    }
+
+    // Register License Plate Recognition (LPR) plugin if model files exist
+    let lpr_detection_model = std::env::var("LPR_DETECTION_MODEL")
+        .unwrap_or_else(|_| "models/lpr_detector.onnx".to_string());
+
+    if std::path::Path::new(&lpr_detection_model).exists() {
+        let mut lpr_plugin = LprPlugin::new();
+        let lpr_ocr_model = std::env::var("LPR_OCR_MODEL").ok();
+
+        let lpr_config = serde_json::json!({
+            "detection_model_path": lpr_detection_model,
+            "ocr_model_path": lpr_ocr_model,
+            "confidence_threshold": std::env::var("LPR_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.6)
+        });
+        if let Err(e) = lpr_plugin.init(lpr_config).await {
+            tracing::warn!("Failed to initialize LPR plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(lpr_plugin))).await?;
+            info!("Registered lpr plugin with detection model: {}", lpr_detection_model);
+        }
+    } else {
+        info!(
+            "LPR detection model not found at '{}', skipping lpr plugin registration. \
+            Set LPR_DETECTION_MODEL and optionally LPR_OCR_MODEL environment variables to enable.",
+            lpr_detection_model
         );
     }
 
