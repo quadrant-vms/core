@@ -93,6 +93,8 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Health check endpoints** (`/readyz`) with dependency verification
 - **Centralized structured logging** with JSON/pretty/compact formats, correlation IDs for request tracing, and configurable log aggregation
 - **Distributed tracing** with OpenTelemetry OTLP support (compatible with Jaeger, Zipkin, and other OTLP collectors), automatic span propagation across services, and configurable sampling rates
+- **Service Level Objective (SLO) metrics** with comprehensive monitoring across availability, latency, error rate, throughput, and resource utilization dimensions - all labeled by tenant and node for granular insights
+- **Pre-built Grafana dashboards** for SLO monitoring with overview, tenant-specific, and node-specific views including error budget tracking and custom metrics aggregation
 
 ---
 
@@ -109,7 +111,6 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Stateless architecture with HA support
 
 ### 🔜 Upcoming Features
-- **Enhanced observability**: SLO dashboards by tenant/node, custom metrics aggregation
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
 - **Additional AI models**: Facial recognition, action recognition, license plate recognition
 

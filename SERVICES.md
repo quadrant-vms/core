@@ -672,6 +672,17 @@ These values optimize for low latency while maintaining reliability. For ultra-l
 - **Log rotation**: File-based logging with daily rotation (optional)
 - **Prometheus metrics registry**: Centralized metric collection across all services
 - **Configurable log filtering**: Environment-based log level control per module
+- **Service Level Objective (SLO) metrics** with comprehensive monitoring across four dimensions:
+  - **Availability**: Service uptime, health checks, dependency status (by tenant and node)
+  - **Latency**: Request processing time, database query latency, external API latency, TTFB
+  - **Error Rate**: Failed requests (4xx/5xx), database errors, external API errors, pipeline failures
+  - **Throughput**: Request rate, bytes processed, concurrent operations, queue depth
+  - **Resource Utilization**: CPU, memory, disk I/O, network bandwidth
+- **Pre-built Grafana dashboards** for SLO monitoring:
+  - **Overview dashboard**: Cross-service SLO monitoring with tenant/node filtering
+  - **Tenant-specific dashboards**: SLO compliance and error budgets per tenant
+  - **Node-specific dashboards**: Resource utilization and workload distribution per node
+  - **Custom metrics aggregation**: Flexible dashboard generation for any tenant/node combination
 
 #### Configuration (Environment Variables)
 
@@ -739,6 +750,76 @@ let log_config = LogConfig::new("my-service")
     .with_environment("production")
     .with_node_id("node-1");
 telemetry::init_structured_logging(log_config);
+```
+
+**With SLO Metrics Tracking:**
+```rust
+use telemetry::SloTracker;
+use std::time::Instant;
+
+// Create an SLO tracker for your service
+let slo_tracker = SloTracker::new("playback-service", "node-1");
+
+// Mark service as up
+slo_tracker.set_service_status(true, Some("tenant-123"));
+
+// Track request latency and status
+let start = Instant::now();
+let result = handle_request().await;
+let duration = start.elapsed().as_secs_f64();
+
+slo_tracker.record_request_latency(
+    "/api/playback/start",
+    duration,
+    Some("tenant-123")
+);
+
+slo_tracker.record_request(
+    "/api/playback/start",
+    "POST",
+    200,
+    Some("tenant-123")
+);
+
+// Track database operations
+let db_start = Instant::now();
+let sessions = db.query_sessions().await?;
+let db_duration = db_start.elapsed().as_secs_f64();
+
+slo_tracker.record_db_latency("select", db_duration, Some("tenant-123"));
+
+// Track bytes processed
+slo_tracker.record_bytes_processed("stream", 1024 * 1024, Some("tenant-123"));
+
+// Track concurrent operations
+slo_tracker.set_concurrent_operations("playback_sessions", 5, Some("tenant-123"));
+
+// Record pipeline failures
+if let Err(e) = pipeline.run().await {
+    slo_tracker.record_pipeline_failure(
+        "hls_delivery",
+        "segment_not_found",
+        Some("tenant-123")
+    );
+}
+
+// Export SLO metrics at /metrics/slo endpoint
+use telemetry::encode_slo_metrics;
+let metrics_output = encode_slo_metrics()?;
+```
+
+**Grafana Dashboard Generation:**
+```rust
+use telemetry::{generate_slo_dashboard, generate_tenant_slo_dashboard};
+use std::fs;
+
+// Generate overview dashboard JSON
+let overview_dashboard = generate_slo_dashboard();
+fs::write("grafana-slo-overview.json", serde_json::to_string_pretty(&overview_dashboard)?)?;
+
+// Generate tenant-specific dashboard
+let tenant_dashboard = generate_tenant_slo_dashboard("tenant-123");
+fs::write("grafana-tenant-123.json", serde_json::to_string_pretty(&tenant_dashboard)?)?;
 ```
 
 #### Distributed Tracing
