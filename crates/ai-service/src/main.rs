@@ -1,6 +1,7 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
     plugin::action_recognition::ActionRecognitionPlugin,
+    plugin::crowd_analytics::CrowdAnalyticsPlugin,
     plugin::facial_recognition::FacialRecognitionPlugin, plugin::lpr::LprPlugin,
     plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
     plugin::registry::PluginRegistry, plugin::yolov8_detector::YoloV8DetectorPlugin,
@@ -188,6 +189,49 @@ async fn main() -> Result<()> {
             "Action recognition model not found at '{}', skipping action_recognition plugin registration. \
             Set ACTION_RECOGNITION_MODEL environment variable to enable.",
             action_model_path
+        );
+    }
+
+    // Register Crowd Analytics plugin if model file exists
+    let crowd_model_path = std::env::var("CROWD_ANALYTICS_MODEL")
+        .unwrap_or_else(|_| "models/yolov8n.onnx".to_string());
+
+    if std::path::Path::new(&crowd_model_path).exists() {
+        let mut crowd_plugin = CrowdAnalyticsPlugin::new();
+        let crowd_config = serde_json::json!({
+            "model_path": crowd_model_path,
+            "confidence_threshold": std::env::var("CROWD_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.5),
+            "grid_size": std::env::var("CROWD_GRID_SIZE")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(10),
+            "coverage_area_sqm": std::env::var("CROWD_COVERAGE_AREA")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(100.0),
+            "min_cluster_size": std::env::var("CROWD_MIN_CLUSTER_SIZE")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(3),
+            "cluster_distance_threshold": std::env::var("CROWD_CLUSTER_DISTANCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(100.0)
+        });
+        if let Err(e) = crowd_plugin.init(crowd_config).await {
+            tracing::warn!("Failed to initialize Crowd Analytics plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(crowd_plugin))).await?;
+            info!("Registered crowd_analytics plugin with model: {}", crowd_model_path);
+        }
+    } else {
+        info!(
+            "Crowd analytics model not found at '{}', skipping crowd_analytics plugin registration. \
+            Set CROWD_ANALYTICS_MODEL environment variable to enable.",
+            crowd_model_path
         );
     }
 

@@ -218,6 +218,17 @@ This document provides detailed information about each service in the Quadrant V
     - CPU and GPU inference with automatic fallback
     - Configurable confidence threshold (default: 0.6)
     - Supports standard action recognition ONNX models (e.g., SlowFast, TimeSformer, X3D)
+  - **Crowd Analytics**: Person counting, density analysis, and hotspot detection
+    - YOLOv8-based person detection
+    - Real-time person counting with confidence tracking
+    - Grid-based density heatmap (configurable NxN grid, default 10x10)
+    - Crowd density levels: low/medium/high/critical (people per square meter)
+    - Distance-based clustering for hotspot identification
+    - Spatial distribution analysis with bounding box visualization
+    - Configurable coverage area for density calculations (default: 100m²)
+    - Configurable cluster size threshold (default: 3 people minimum)
+    - CPU and GPU inference with automatic fallback
+    - Ideal for public safety, retail analytics, and crowd management
 - **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
 - **GPU acceleration optimization**:
   - CUDA and TensorRT execution providers
@@ -270,6 +281,15 @@ This document provides detailed information about each service in the Quadrant V
   - `ACTION_TEMPORAL_WINDOW`: Number of frames to buffer for temporal analysis (default: 16)
   - `ACTION_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
   - `ACTION_DEVICE_ID`: GPU device ID (default: 0)
+- **Crowd Analytics**:
+  - `CROWD_ANALYTICS_MODEL`: YOLOv8 ONNX model file path for person detection (default: models/yolov8n.onnx)
+  - `CROWD_CONFIDENCE`: Person detection confidence threshold (default: 0.5)
+  - `CROWD_GRID_SIZE`: Density heatmap grid size (NxN, default: 10)
+  - `CROWD_COVERAGE_AREA`: Camera coverage area in square meters (default: 100.0)
+  - `CROWD_MIN_CLUSTER_SIZE`: Minimum people count for hotspot detection (default: 3)
+  - `CROWD_CLUSTER_DISTANCE`: Distance threshold for clustering in pixels (default: 100.0)
+  - `CROWD_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
+  - `CROWD_DEVICE_ID`: GPU device ID (default: 0)
 
 #### Metrics
 - Active AI tasks

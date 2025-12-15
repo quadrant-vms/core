@@ -1,4 +1,5 @@
 pub mod action_recognition;
+pub mod crowd_analytics;
 pub mod facial_recognition;
 pub mod lpr;
 pub mod mock_detector;

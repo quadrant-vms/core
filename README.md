@@ -64,6 +64,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **Action recognition**: Temporal video analysis detecting 20+ human actions (walking, running, sitting, waving, etc.)
 - **License plate recognition (LPR)**: Two-stage detection and OCR for automatic plate reading
 - **Facial recognition**: Two-stage face detection and embedding extraction with face database matching
+- **Crowd analytics**: Person counting, crowd density analysis, hotspot detection, and spatial distribution heatmaps
 - **GPU acceleration**: CUDA and TensorRT support with automatic fallback
 - **Frame capture pipeline**: Automatic frame extraction from live streams and recordings
 - **Modular plugin architecture**: Extensible system for custom AI models
@@ -115,7 +116,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 
 ### 🔜 Upcoming Features
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
-- **Additional AI models**: Crowd analytics, anomaly detection
+- **Additional AI models**: Anomaly detection
 
 ---
 
