@@ -210,6 +210,14 @@ This document provides detailed information about each service in the Quadrant V
     - Multi-face detection per frame
     - CPU and GPU inference with automatic fallback
     - Configurable similarity threshold for matching
+  - **Action Recognition**: Temporal video analysis for human action detection
+    - Detects 20+ action classes: walking, running, sitting, standing, waving, jumping, clapping, pointing, talking, phone_call, drinking, eating, reading, writing, pushing, pulling, carrying, throwing, catching, falling
+    - Temporal frame buffering (configurable window, default 16 frames)
+    - Sequence-based inference for temporal coherence
+    - Multi-action detection per sequence with confidence scores
+    - CPU and GPU inference with automatic fallback
+    - Configurable confidence threshold (default: 0.6)
+    - Supports standard action recognition ONNX models (e.g., SlowFast, TimeSformer, X3D)
 - **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
 - **GPU acceleration optimization**:
   - CUDA and TensorRT execution providers
@@ -256,6 +264,12 @@ This document provides detailed information about each service in the Quadrant V
   - `FACE_SIMILARITY_THRESHOLD`: Cosine similarity threshold for face matching (default: 0.5)
   - `FACE_RECOGNITION_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
   - `FACE_RECOGNITION_DEVICE_ID`: GPU device ID (default: 0)
+- **Action Recognition**:
+  - `ACTION_RECOGNITION_MODEL`: Action recognition ONNX model file path
+  - `ACTION_CONFIDENCE`: Action detection confidence threshold (default: 0.6)
+  - `ACTION_TEMPORAL_WINDOW`: Number of frames to buffer for temporal analysis (default: 16)
+  - `ACTION_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
+  - `ACTION_DEVICE_ID`: GPU device ID (default: 0)
 
 #### Metrics
 - Active AI tasks

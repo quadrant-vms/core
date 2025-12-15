@@ -1,5 +1,6 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
+    plugin::action_recognition::ActionRecognitionPlugin,
     plugin::facial_recognition::FacialRecognitionPlugin, plugin::lpr::LprPlugin,
     plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
     plugin::registry::PluginRegistry, plugin::yolov8_detector::YoloV8DetectorPlugin,
@@ -156,6 +157,37 @@ async fn main() -> Result<()> {
             "Face detection model not found at '{}', skipping facial_recognition plugin registration. \
             Set FACE_DETECTION_MODEL and optionally FACE_EMBEDDING_MODEL environment variables to enable.",
             face_detection_model
+        );
+    }
+
+    // Register Action Recognition plugin if model file exists
+    let action_model_path = std::env::var("ACTION_RECOGNITION_MODEL")
+        .unwrap_or_else(|_| "models/action_recognition.onnx".to_string());
+
+    if std::path::Path::new(&action_model_path).exists() {
+        let mut action_plugin = ActionRecognitionPlugin::new();
+        let action_config = serde_json::json!({
+            "model_path": action_model_path,
+            "confidence_threshold": std::env::var("ACTION_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.6),
+            "temporal_window": std::env::var("ACTION_TEMPORAL_WINDOW")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .unwrap_or(16)
+        });
+        if let Err(e) = action_plugin.init(action_config).await {
+            tracing::warn!("Failed to initialize Action Recognition plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(action_plugin))).await?;
+            info!("Registered action_recognition plugin with model: {}", action_model_path);
+        }
+    } else {
+        info!(
+            "Action recognition model not found at '{}', skipping action_recognition plugin registration. \
+            Set ACTION_RECOGNITION_MODEL environment variable to enable.",
+            action_model_path
         );
     }
 
