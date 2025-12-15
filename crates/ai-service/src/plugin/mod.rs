@@ -1,3 +1,4 @@
+pub mod facial_recognition;
 pub mod lpr;
 pub mod mock_detector;
 pub mod pose_estimation;
@@ -11,6 +12,11 @@ use common::ai_tasks::{AiResult, PluginInfo, VideoFrame};
 /// Core trait that all AI plugins must implement
 #[async_trait]
 pub trait AiPlugin: Send + Sync {
+    /// Downcast to Any for type-specific operations
+    fn as_any(&self) -> &dyn std::any::Any;
+
+    /// Downcast to Any (mutable) for type-specific operations
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
     /// Get the unique plugin identifier (e.g., "yolov8_detector")
     fn id(&self) -> &'static str;
 

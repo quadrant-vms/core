@@ -1,8 +1,9 @@
-/// License Plate Recognition (LPR) plugin using ONNX Runtime
+/// Facial Recognition plugin using ONNX Runtime
 ///
-/// This plugin performs two-stage license plate recognition:
-/// 1. Detection stage: Locates license plates in the image using YOLOv8
-/// 2. OCR stage: Reads the text from detected plates using CRNN/LSTM model
+/// This plugin performs two-stage facial recognition:
+/// 1. Detection stage: Locates faces in the image using RetinaFace/SCRFD
+/// 2. Embedding stage: Extracts facial embeddings using ArcFace/FaceNet
+/// 3. Matching stage: Compares embeddings against enrolled face database
 use super::AiPlugin;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -16,17 +17,18 @@ use ort::{
     value::Value,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LprConfig {
-    /// Path to the license plate detection ONNX model file
+pub struct FacialRecognitionConfig {
+    /// Path to the face detection ONNX model file
     pub detection_model_path: String,
 
-    /// Path to the OCR ONNX model file (optional - if not provided, only detection is performed)
-    pub ocr_model_path: Option<String>,
+    /// Path to the face embedding ONNX model file (optional - if not provided, only detection is performed)
+    pub embedding_model_path: Option<String>,
 
-    /// Confidence threshold for plate detections (0.0 to 1.0)
+    /// Confidence threshold for face detections (0.0 to 1.0)
     #[serde(default = "default_confidence")]
     pub confidence_threshold: f32,
 
@@ -34,7 +36,7 @@ pub struct LprConfig {
     #[serde(default = "default_iou_threshold")]
     pub iou_threshold: f32,
 
-    /// Maximum number of plates to detect per frame
+    /// Maximum number of faces to detect per frame
     #[serde(default = "default_max_detections")]
     pub max_detections: usize,
 
@@ -42,17 +44,13 @@ pub struct LprConfig {
     #[serde(default = "default_detection_input_size")]
     pub detection_input_size: u32,
 
-    /// OCR model input width
-    #[serde(default = "default_ocr_input_width")]
-    pub ocr_input_width: u32,
+    /// Embedding model input size (width and height)
+    #[serde(default = "default_embedding_input_size")]
+    pub embedding_input_size: u32,
 
-    /// OCR model input height
-    #[serde(default = "default_ocr_input_height")]
-    pub ocr_input_height: u32,
-
-    /// Character vocabulary for OCR (default: digits + uppercase letters)
-    #[serde(default = "default_char_vocab")]
-    pub char_vocab: String,
+    /// Cosine similarity threshold for face matching (0.0 to 1.0, higher = stricter)
+    #[serde(default = "default_similarity_threshold")]
+    pub similarity_threshold: f32,
 
     /// Execution provider preference (CPU, CUDA, TensorRT)
     #[serde(default = "default_execution_provider")]
@@ -80,25 +78,19 @@ fn default_iou_threshold() -> f32 {
 }
 
 fn default_max_detections() -> usize {
-    10
+    50
 }
 
 fn default_detection_input_size() -> u32 {
     640
 }
 
-fn default_ocr_input_width() -> u32 {
-    200
+fn default_embedding_input_size() -> u32 {
+    112
 }
 
-fn default_ocr_input_height() -> u32 {
-    64
-}
-
-fn default_char_vocab() -> String {
-    // Common characters found on license plates (digits + uppercase letters)
-    // CTC blank character is at index 0, so vocab starts at index 1
-    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-".to_string()
+fn default_similarity_threshold() -> f32 {
+    0.5
 }
 
 fn default_execution_provider() -> String {
@@ -117,18 +109,17 @@ fn default_inter_threads() -> usize {
     1
 }
 
-impl Default for LprConfig {
+impl Default for FacialRecognitionConfig {
     fn default() -> Self {
         Self {
-            detection_model_path: "models/lpr_detector.onnx".to_string(),
-            ocr_model_path: Some("models/lpr_ocr.onnx".to_string()),
+            detection_model_path: "models/face_detector.onnx".to_string(),
+            embedding_model_path: Some("models/face_embedding.onnx".to_string()),
             confidence_threshold: default_confidence(),
             iou_threshold: default_iou_threshold(),
             max_detections: default_max_detections(),
             detection_input_size: default_detection_input_size(),
-            ocr_input_width: default_ocr_input_width(),
-            ocr_input_height: default_ocr_input_height(),
-            char_vocab: default_char_vocab(),
+            embedding_input_size: default_embedding_input_size(),
+            similarity_threshold: default_similarity_threshold(),
             execution_provider: default_execution_provider(),
             device_id: default_device_id(),
             intra_threads: default_intra_threads(),
@@ -137,22 +128,121 @@ impl Default for LprConfig {
     }
 }
 
-/// License Plate Recognition plugin
-pub struct LprPlugin {
-    config: LprConfig,
-    detection_session: Option<Arc<Mutex<Session>>>,
-    ocr_session: Option<Arc<Mutex<Session>>>,
-    execution_provider_used: Arc<Mutex<String>>,
+/// Enrolled face record in the database
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EnrolledFace {
+    /// Unique face ID
+    pub face_id: String,
+
+    /// Person's name or identifier
+    pub name: String,
+
+    /// Face embedding vector (512-D typical for ArcFace/FaceNet)
+    pub embedding: Vec<f32>,
+
+    /// Additional metadata (age, gender, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+
+    /// Enrollment timestamp (Unix timestamp in milliseconds)
+    pub enrolled_at: u64,
 }
 
-impl LprPlugin {
+/// Face match result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaceMatch {
+    /// Matched face ID from database
+    pub face_id: String,
+
+    /// Person's name
+    pub name: String,
+
+    /// Cosine similarity score (0.0 to 1.0)
+    pub similarity: f32,
+
+    /// Additional metadata from enrolled face
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Facial Recognition plugin
+pub struct FacialRecognitionPlugin {
+    config: FacialRecognitionConfig,
+    detection_session: Option<Arc<tokio::sync::Mutex<Session>>>,
+    embedding_session: Option<Arc<tokio::sync::Mutex<Session>>>,
+    execution_provider_used: Arc<RwLock<String>>,
+    /// In-memory face database: face_id -> EnrolledFace
+    face_database: Arc<RwLock<HashMap<String, EnrolledFace>>>,
+}
+
+impl FacialRecognitionPlugin {
     pub fn new() -> Self {
         Self {
-            config: LprConfig::default(),
+            config: FacialRecognitionConfig::default(),
             detection_session: None,
-            ocr_session: None,
-            execution_provider_used: Arc::new(Mutex::new("CPU".to_string())),
+            embedding_session: None,
+            execution_provider_used: Arc::new(RwLock::new("CPU".to_string())),
+            face_database: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Enroll a new face into the database
+    pub async fn enroll_face(
+        &self,
+        face_id: String,
+        name: String,
+        face_image: &DynamicImage,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<EnrolledFace> {
+        // Extract embedding from the face image
+        let embedding = self.extract_embedding(face_image).await?;
+
+        let enrolled_face = EnrolledFace {
+            face_id: face_id.clone(),
+            name,
+            embedding,
+            metadata,
+            enrolled_at: common::validation::safe_unix_timestamp(),
+        };
+
+        // Store in database
+        self.face_database
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to lock face database: {}", e))?
+            .insert(face_id, enrolled_face.clone());
+
+        Ok(enrolled_face)
+    }
+
+    /// Remove a face from the database
+    pub fn remove_face(&self, face_id: &str) -> Result<bool> {
+        let removed = self
+            .face_database
+            .write()
+            .map_err(|e| anyhow::anyhow!("Failed to lock face database: {}", e))?
+            .remove(face_id)
+            .is_some();
+        Ok(removed)
+    }
+
+    /// List all enrolled faces
+    pub fn list_faces(&self) -> Result<Vec<EnrolledFace>> {
+        Ok(self
+            .face_database
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to lock face database: {}", e))?
+            .values()
+            .cloned()
+            .collect())
+    }
+
+    /// Get face database size
+    pub fn database_size(&self) -> Result<usize> {
+        Ok(self
+            .face_database
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to lock face database: {}", e))?
+            .len())
     }
 
     /// Preprocess image for detection model
@@ -177,19 +267,23 @@ impl LprPlugin {
         Ok(input)
     }
 
-    /// Preprocess cropped plate image for OCR model
-    fn preprocess_for_ocr(&self, img: &DynamicImage) -> Result<Array<f32, IxDyn>> {
-        let width = self.config.ocr_input_width;
-        let height = self.config.ocr_input_height;
-        let resized = img.resize_exact(width, height, image::imageops::FilterType::Triangle);
-        let gray_img = resized.to_luma8();
+    /// Preprocess cropped face image for embedding model
+    fn preprocess_for_embedding(&self, img: &DynamicImage) -> Result<Array<f32, IxDyn>> {
+        let size = self.config.embedding_input_size;
+        let resized = img.resize_exact(size, size, image::imageops::FilterType::Triangle);
+        let rgb_img = resized.to_rgb8();
 
-        // Convert to NCHW format and normalize to [0, 1]
-        let mut input = Array::zeros(IxDyn(&[1, 1, height as usize, width as usize]));
+        // Convert to NCHW format and normalize to [-1, 1] (typical for ArcFace)
+        let mut input = Array::zeros(IxDyn(&[1, 3, size as usize, size as usize]));
 
-        for (x, y, pixel) in gray_img.enumerate_pixels() {
-            let gray = pixel[0] as f32 / 255.0;
-            input[[0, 0, y as usize, x as usize]] = gray;
+        for (x, y, pixel) in rgb_img.enumerate_pixels() {
+            let r = (pixel[0] as f32 / 127.5) - 1.0;
+            let g = (pixel[1] as f32 / 127.5) - 1.0;
+            let b = (pixel[2] as f32 / 127.5) - 1.0;
+
+            input[[0, 0, y as usize, x as usize]] = r;
+            input[[0, 1, y as usize, x as usize]] = g;
+            input[[0, 2, y as usize, x as usize]] = b;
         }
 
         Ok(input)
@@ -243,7 +337,7 @@ impl LprPlugin {
         }
     }
 
-    /// Post-process detection output (YOLOv8 format)
+    /// Post-process detection output (YOLO/RetinaFace format)
     fn postprocess_detection(
         &self,
         output: Array<f32, IxDyn>,
@@ -255,7 +349,7 @@ impl LprPlugin {
 
         let mut boxes = Vec::new();
 
-        // YOLOv8 output format: [batch, 5, num_predictions] (4 box coords + 1 confidence)
+        // YOLO output format: [batch, 5, num_predictions] (4 box coords + 1 confidence)
         let num_predictions = output.shape()[2];
 
         for i in 0..num_predictions {
@@ -296,83 +390,99 @@ impl LprPlugin {
         Ok(filtered_boxes.into_iter().take(self.config.max_detections).collect())
     }
 
-    /// Perform OCR on a cropped plate image using CTC decoding
-    fn recognize_plate(&self, plate_img: &DynamicImage) -> Result<String> {
-        if self.ocr_session.is_none() {
-            return Ok("N/A".to_string());
+    /// Extract face embedding vector
+    async fn extract_embedding(&self, face_img: &DynamicImage) -> Result<Vec<f32>> {
+        if self.embedding_session.is_none() {
+            return Err(anyhow::anyhow!("Embedding model not initialized"));
         }
 
         let session_lock = self
-            .ocr_session
+            .embedding_session
             .as_ref()
-            .context("OCR model not initialized")?;
+            .context("Embedding model not initialized")?;
 
-        // Preprocess plate image
-        let input_array = self.preprocess_for_ocr(plate_img)?;
+        // Preprocess face image
+        let input_array = self.preprocess_for_embedding(face_img)?;
 
         // Convert to ort Value
         let input_tensor = Value::from_array(input_array)?;
 
-        // Run OCR inference
-        let mut session = session_lock
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to lock OCR session: {}", e))?;
+        // Run embedding inference
+        let mut session = session_lock.lock().await;
         let outputs = session.run(ort::inputs![input_tensor])?;
 
-        // Get output tensor (softmax probabilities over vocabulary)
-        // Expected shape: [batch, sequence_length, vocab_size]
-        // Note: Different OCR models may use different output names (output, output0, etc.)
+        // Get output tensor (embedding vector)
+        // Expected shape: [batch, embedding_dim] (e.g., [1, 512])
         let output_value = outputs
             .get("output")
             .or_else(|| outputs.get("output0"))
-            .or_else(|| outputs.get("logits"))
-            .context("No OCR output tensor found (tried: output, output0, logits)")?;
+            .or_else(|| outputs.get("embedding"))
+            .context("No embedding output tensor found")?;
         let (shape, data) = output_value.try_extract_tensor::<f32>()?;
 
         let shape_usize: Vec<usize> = shape.as_ref().iter().map(|&x| x as usize).collect();
         let output = Array::from_shape_vec(IxDyn(&shape_usize), data.to_vec())?;
 
-        // Decode using CTC greedy decoding
-        let text = self.ctc_decode(&output)?;
+        // Extract embedding vector and normalize (L2 normalization)
+        let embedding_dim = output.shape()[1];
+        let mut embedding: Vec<f32> = Vec::with_capacity(embedding_dim);
 
-        Ok(text)
-    }
-
-    /// CTC greedy decoding
-    fn ctc_decode(&self, output: &Array<f32, IxDyn>) -> Result<String> {
-        let sequence_length = output.shape()[1];
-        let vocab_size = output.shape()[2];
-
-        let mut result = String::new();
-        let mut prev_char_idx = 0; // CTC blank is index 0
-
-        for t in 0..sequence_length {
-            // Find character with highest probability at this timestep
-            let mut max_prob = output[[0, t, 0]];
-            let mut max_idx = 0;
-
-            for c in 1..vocab_size {
-                let prob = output[[0, t, c]];
-                if prob > max_prob {
-                    max_prob = prob;
-                    max_idx = c;
-                }
-            }
-
-            // CTC decoding: skip blank (index 0) and repeated characters
-            if max_idx > 0 && max_idx != prev_char_idx {
-                // Convert index to character (vocab is 1-indexed, with blank at 0)
-                let char_idx = max_idx - 1;
-                if char_idx < self.config.char_vocab.len() {
-                    let ch = self.config.char_vocab.chars().nth(char_idx).context("Invalid character index")?;
-                    result.push(ch);
-                }
-            }
-
-            prev_char_idx = max_idx;
+        for i in 0..embedding_dim {
+            embedding.push(output[[0, i]]);
         }
 
-        Ok(result)
+        // L2 normalization
+        let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            for val in &mut embedding {
+                *val /= norm;
+            }
+        }
+
+        Ok(embedding)
+    }
+
+    /// Calculate cosine similarity between two embeddings
+    fn cosine_similarity(&self, embedding1: &[f32], embedding2: &[f32]) -> f32 {
+        if embedding1.len() != embedding2.len() {
+            return 0.0;
+        }
+
+        let dot_product: f32 = embedding1
+            .iter()
+            .zip(embedding2.iter())
+            .map(|(a, b)| a * b)
+            .sum();
+
+        // Since embeddings are L2-normalized, dot product = cosine similarity
+        dot_product
+    }
+
+    /// Match a face embedding against the database
+    fn match_face(&self, embedding: &[f32]) -> Result<Option<FaceMatch>> {
+        let database = self
+            .face_database
+            .read()
+            .map_err(|e| anyhow::anyhow!("Failed to lock face database: {}", e))?;
+
+        let mut best_match: Option<FaceMatch> = None;
+        let mut best_similarity = self.config.similarity_threshold;
+
+        for enrolled_face in database.values() {
+            let similarity = self.cosine_similarity(embedding, &enrolled_face.embedding);
+
+            if similarity > best_similarity {
+                best_similarity = similarity;
+                best_match = Some(FaceMatch {
+                    face_id: enrolled_face.face_id.clone(),
+                    name: enrolled_face.name.clone(),
+                    similarity,
+                    metadata: enrolled_face.metadata.clone(),
+                });
+            }
+        }
+
+        Ok(best_match)
     }
 
     /// Create ONNX session with execution provider fallback
@@ -465,14 +575,14 @@ impl LprPlugin {
     }
 }
 
-impl Default for LprPlugin {
+impl Default for FacialRecognitionPlugin {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl AiPlugin for LprPlugin {
+impl AiPlugin for FacialRecognitionPlugin {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -482,15 +592,15 @@ impl AiPlugin for LprPlugin {
     }
 
     fn id(&self) -> &'static str {
-        "lpr"
+        "facial_recognition"
     }
 
     fn name(&self) -> &'static str {
-        "License Plate Recognition"
+        "Facial Recognition"
     }
 
     fn description(&self) -> &'static str {
-        "Two-stage license plate detection and recognition using ONNX models"
+        "Two-stage facial recognition: detection + embedding extraction with face matching"
     }
 
     fn version(&self) -> &'static str {
@@ -503,19 +613,19 @@ impl AiPlugin for LprPlugin {
             "properties": {
                 "detection_model_path": {
                     "type": "string",
-                    "default": "models/lpr_detector.onnx",
-                    "description": "Path to the license plate detection ONNX model"
+                    "default": "models/face_detector.onnx",
+                    "description": "Path to the face detection ONNX model"
                 },
-                "ocr_model_path": {
+                "embedding_model_path": {
                     "type": "string",
-                    "description": "Path to the OCR ONNX model (optional)"
+                    "description": "Path to the face embedding ONNX model (optional)"
                 },
                 "confidence_threshold": {
                     "type": "number",
                     "minimum": 0.0,
                     "maximum": 1.0,
                     "default": 0.6,
-                    "description": "Minimum confidence threshold for plate detections"
+                    "description": "Minimum confidence threshold for face detections"
                 },
                 "iou_threshold": {
                     "type": "number",
@@ -527,28 +637,25 @@ impl AiPlugin for LprPlugin {
                 "max_detections": {
                     "type": "integer",
                     "minimum": 1,
-                    "default": 10,
-                    "description": "Maximum number of plates per frame"
+                    "default": 50,
+                    "description": "Maximum number of faces per frame"
                 },
                 "detection_input_size": {
                     "type": "integer",
                     "default": 640,
                     "description": "Detection model input size"
                 },
-                "ocr_input_width": {
+                "embedding_input_size": {
                     "type": "integer",
-                    "default": 200,
-                    "description": "OCR model input width"
+                    "default": 112,
+                    "description": "Embedding model input size"
                 },
-                "ocr_input_height": {
-                    "type": "integer",
-                    "default": 64,
-                    "description": "OCR model input height"
-                },
-                "char_vocab": {
-                    "type": "string",
-                    "default": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-",
-                    "description": "Character vocabulary for OCR"
+                "similarity_threshold": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "default": 0.5,
+                    "description": "Cosine similarity threshold for face matching"
                 },
                 "execution_provider": {
                     "type": "string",
@@ -593,10 +700,10 @@ impl AiPlugin for LprPlugin {
         }
 
         // Read GPU configuration from environment variables if set
-        if let Ok(provider) = std::env::var("LPR_EXECUTION_PROVIDER") {
+        if let Ok(provider) = std::env::var("FACE_RECOGNITION_EXECUTION_PROVIDER") {
             self.config.execution_provider = provider;
         }
-        if let Ok(device_id) = std::env::var("LPR_DEVICE_ID") {
+        if let Ok(device_id) = std::env::var("FACE_RECOGNITION_DEVICE_ID") {
             if let Ok(id) = device_id.parse::<i32>() {
                 self.config.device_id = id;
             }
@@ -605,28 +712,28 @@ impl AiPlugin for LprPlugin {
         // Initialize detection model
         let (detection_session, actual_provider) =
             self.create_session(&self.config.detection_model_path)?;
-        self.detection_session = Some(Arc::new(Mutex::new(detection_session)));
-        *self.execution_provider_used.lock().map_err(|e| anyhow::anyhow!("Failed to lock execution provider: {}", e))? = actual_provider.clone();
+        self.detection_session = Some(Arc::new(tokio::sync::Mutex::new(detection_session)));
+        *self.execution_provider_used.write().map_err(|e| anyhow::anyhow!("Failed to lock execution provider: {}", e))? = actual_provider.clone();
 
         tracing::info!(
-            "Initialized LPR detection model - path: {}, provider: {}, device: {}",
+            "Initialized face detection model - path: {}, provider: {}, device: {}",
             self.config.detection_model_path,
             actual_provider,
             self.config.device_id
         );
 
-        // Initialize OCR model if provided
-        if let Some(ref ocr_path) = self.config.ocr_model_path {
-            let (ocr_session, ocr_provider) = self.create_session(ocr_path)?;
-            self.ocr_session = Some(Arc::new(Mutex::new(ocr_session)));
+        // Initialize embedding model if provided
+        if let Some(ref embedding_path) = self.config.embedding_model_path {
+            let (embedding_session, embedding_provider) = self.create_session(embedding_path)?;
+            self.embedding_session = Some(Arc::new(tokio::sync::Mutex::new(embedding_session)));
 
             tracing::info!(
-                "Initialized LPR OCR model - path: {}, provider: {}",
-                ocr_path,
-                ocr_provider
+                "Initialized face embedding model - path: {}, provider: {}",
+                embedding_path,
+                embedding_provider
             );
         } else {
-            tracing::info!("OCR model not configured - detection only mode");
+            tracing::info!("Embedding model not configured - detection only mode");
         }
 
         Ok(())
@@ -650,50 +757,73 @@ impl AiPlugin for LprPlugin {
         let original_width = img.width();
         let original_height = img.height();
 
-        // Stage 1: Detect license plates
+        // Stage 1: Detect faces
         let input_array = self.preprocess_for_detection(&img)?;
         let input_tensor = Value::from_array(input_array)?;
 
         let inference_start = std::time::Instant::now();
-        let mut detection_session = detection_session_lock
-            .lock()
-            .map_err(|e| anyhow::anyhow!("Failed to lock detection session: {}", e))?;
+        let mut detection_session = detection_session_lock.lock().await;
         let outputs = detection_session.run(ort::inputs![input_tensor])?;
         let detection_time = inference_start.elapsed();
 
-        // Get detection output - try common YOLO output names
+        // Get detection output
         let output_value = outputs
             .get("output0")
             .or_else(|| outputs.get("output"))
             .or_else(|| outputs.get("boxes"))
-            .context("No detection output tensor found (tried: output0, output, boxes)")?;
+            .context("No detection output tensor found")?;
         let (shape, data) = output_value.try_extract_tensor::<f32>()?;
 
         let shape_usize: Vec<usize> = shape.as_ref().iter().map(|&x| x as usize).collect();
         let output = Array::from_shape_vec(IxDyn(&shape_usize), data.to_vec())?;
 
         // Post-process detections
-        let plate_boxes = self.postprocess_detection(output, original_width, original_height)?;
+        let face_boxes = self.postprocess_detection(output, original_width, original_height)?;
 
-        // Stage 2: OCR on each detected plate
+        // Stage 2: Extract embeddings and match faces
         let mut detections = Vec::new();
-        for (bbox, confidence) in plate_boxes {
-            // Crop plate region
-            let plate_img = img.crop_imm(bbox.x, bbox.y, bbox.width, bbox.height);
+        for (bbox, confidence) in face_boxes {
+            // Crop face region
+            let face_img = img.crop_imm(bbox.x, bbox.y, bbox.width, bbox.height);
 
-            // Perform OCR
-            let plate_text = self.recognize_plate(&plate_img).unwrap_or_else(|e| {
-                tracing::warn!("OCR failed: {}", e);
-                "UNKNOWN".to_string()
-            });
+            // Extract embedding and try to match
+            let match_result = if self.embedding_session.is_some() {
+                match self.extract_embedding(&face_img).await {
+                    Ok(embedding) => self.match_face(&embedding).ok().flatten(),
+                    Err(e) => {
+                        tracing::warn!("Embedding extraction failed: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
+            // Create detection result
+            let (class, metadata) = if let Some(face_match) = match_result {
+                (
+                    face_match.name.clone(),
+                    Some(serde_json::json!({
+                        "face_id": face_match.face_id,
+                        "similarity": face_match.similarity,
+                        "matched": true,
+                        "metadata": face_match.metadata,
+                    })),
+                )
+            } else {
+                (
+                    "unknown".to_string(),
+                    Some(serde_json::json!({
+                        "matched": false,
+                    })),
+                )
+            };
 
             detections.push(Detection {
-                class: "license_plate".to_string(),
+                class,
                 confidence,
                 bbox,
-                metadata: Some(serde_json::json!({
-                    "plate_number": plate_text,
-                })),
+                metadata,
             });
         }
 
@@ -706,7 +836,7 @@ impl AiPlugin for LprPlugin {
             0.0
         };
 
-        let execution_provider = self.execution_provider_used.lock().map_err(|e| anyhow::anyhow!("Failed to lock execution provider: {}", e))?.clone();
+        let execution_provider = self.execution_provider_used.read().map_err(|e| anyhow::anyhow!("Failed to lock execution provider: {}", e))?.clone();
 
         // Track metrics
         telemetry::metrics::AI_SERVICE_GPU_INFERENCE
@@ -729,10 +859,11 @@ impl AiPlugin for LprPlugin {
                 "frame_height": original_height,
                 "frame_sequence": frame.sequence,
                 "detection_model": self.config.detection_model_path,
-                "ocr_model": self.config.ocr_model_path,
+                "embedding_model": self.config.embedding_model_path,
                 "execution_provider": execution_provider,
                 "device_id": self.config.device_id,
-                "detection_time_ms": detection_time.as_millis() as u64
+                "detection_time_ms": detection_time.as_millis() as u64,
+                "database_size": self.database_size().unwrap_or(0)
             })),
         })
     }
@@ -742,9 +873,9 @@ impl AiPlugin for LprPlugin {
     }
 
     async fn shutdown(&mut self) -> Result<()> {
-        tracing::info!("Shutting down LPR plugin");
+        tracing::info!("Shutting down Facial Recognition plugin");
         self.detection_session = None;
-        self.ocr_session = None;
+        self.embedding_session = None;
         Ok(())
     }
 }
@@ -755,32 +886,30 @@ mod tests {
 
     #[test]
     fn test_config_defaults() {
-        let config = LprConfig::default();
+        let config = FacialRecognitionConfig::default();
         assert_eq!(config.confidence_threshold, 0.6);
         assert_eq!(config.iou_threshold, 0.4);
-        assert_eq!(config.max_detections, 10);
+        assert_eq!(config.max_detections, 50);
         assert_eq!(config.detection_input_size, 640);
-        assert_eq!(config.ocr_input_width, 200);
-        assert_eq!(config.ocr_input_height, 64);
-        assert!(config.char_vocab.contains("0123456789"));
-        assert!(config.char_vocab.contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ"));
+        assert_eq!(config.embedding_input_size, 112);
+        assert_eq!(config.similarity_threshold, 0.5);
     }
 
     #[test]
     fn test_calculate_iou() {
-        let plugin = LprPlugin::new();
+        let plugin = FacialRecognitionPlugin::new();
 
         let box1 = BoundingBox {
             x: 10,
             y: 10,
             width: 50,
-            height: 20,
+            height: 50,
         };
         let box2 = BoundingBox {
             x: 30,
-            y: 15,
+            y: 30,
             width: 50,
-            height: 20,
+            height: 50,
         };
 
         let iou = plugin.calculate_iou(&box1, &box2);
@@ -795,91 +924,36 @@ mod tests {
             x: 100,
             y: 100,
             width: 50,
-            height: 20,
+            height: 50,
         };
         let iou_none = plugin.calculate_iou(&box1, &box3);
         assert_eq!(iou_none, 0.0);
     }
 
     #[test]
-    fn test_nms() {
-        let plugin = LprPlugin::new();
+    fn test_cosine_similarity() {
+        let plugin = FacialRecognitionPlugin::new();
 
-        let boxes = vec![
-            (
-                BoundingBox {
-                    x: 10,
-                    y: 10,
-                    width: 100,
-                    height: 30,
-                },
-                0.9,
-            ),
-            (
-                BoundingBox {
-                    x: 15,
-                    y: 12,
-                    width: 100,
-                    height: 30,
-                },
-                0.8,
-            ),
-            (
-                BoundingBox {
-                    x: 200,
-                    y: 200,
-                    width: 100,
-                    height: 30,
-                },
-                0.85,
-            ),
-        ];
+        // Identical normalized embeddings
+        let embedding1 = vec![0.6, 0.8, 0.0, 0.0]; // L2 norm = 1.0
+        let similarity = plugin.cosine_similarity(&embedding1, &embedding1);
+        assert!((similarity - 1.0).abs() < 0.001);
 
-        let filtered = plugin.nms(boxes);
-        // Should keep highest confidence from overlapping + non-overlapping
-        assert_eq!(filtered.len(), 2);
-        assert_eq!(filtered[0].1, 0.9);
+        // Orthogonal normalized embeddings
+        let embedding2 = vec![1.0, 0.0, 0.0, 0.0]; // L2 norm = 1.0
+        let embedding3 = vec![0.0, 1.0, 0.0, 0.0]; // L2 norm = 1.0
+        let similarity_orth = plugin.cosine_similarity(&embedding2, &embedding3);
+        assert!(similarity_orth.abs() < 0.001);
     }
 
     #[test]
-    fn test_ctc_decode_simple() {
-        let plugin = LprPlugin::new();
+    fn test_database_operations() {
+        let plugin = FacialRecognitionPlugin::new();
 
-        // Create a simple output: [batch=1, sequence=5, vocab=38]
-        // Simulate output for "ABC" (indices 11, 12, 13 in default vocab after digits)
-        let vocab_size = plugin.config.char_vocab.len() + 1; // +1 for CTC blank
-        let sequence_length = 5;
+        assert_eq!(plugin.database_size().ok(), Some(0));
 
-        let mut output_data = vec![0.0f32; 1 * sequence_length * vocab_size];
-
-        // Fill with small probabilities
-        for i in 0..output_data.len() {
-            output_data[i] = 0.01;
-        }
-
-        // Set high probabilities for our target characters
-        // Format: [batch, timestep, char_index]
-        // Blank at t=0
-        output_data[0] = 0.9; // t=0, blank
-
-        // 'A' at t=1 (index 10+1=11 in vocab, which is 'A')
-        output_data[1 * vocab_size + 11] = 0.9;
-
-        // 'B' at t=2 (index 11+1=12)
-        output_data[2 * vocab_size + 12] = 0.9;
-
-        // 'C' at t=3 (index 12+1=13)
-        output_data[3 * vocab_size + 13] = 0.9;
-
-        // Blank at t=4
-        output_data[4 * vocab_size + 0] = 0.9;
-
-        let output = Array::from_shape_vec(
-            IxDyn(&[1, sequence_length, vocab_size]),
-            output_data,
-        ).expect("Failed to create test array");
-
-        let result = plugin.ctc_decode(&output).expect("CTC decode failed");
-        assert_eq!(result, "ABC");
+        // Test list empty database
+        let faces = plugin.list_faces().ok();
+        assert_eq!(faces, Some(vec![]));
     }
 }

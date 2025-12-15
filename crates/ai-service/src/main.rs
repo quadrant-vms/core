@@ -1,8 +1,9 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
-    plugin::lpr::LprPlugin, plugin::mock_detector::MockDetectorPlugin,
-    plugin::pose_estimation::PoseEstimationPlugin, plugin::registry::PluginRegistry,
-    plugin::yolov8_detector::YoloV8DetectorPlugin, plugin::AiPlugin, AiServiceState,
+    plugin::facial_recognition::FacialRecognitionPlugin, plugin::lpr::LprPlugin,
+    plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
+    plugin::registry::PluginRegistry, plugin::yolov8_detector::YoloV8DetectorPlugin,
+    plugin::AiPlugin, AiServiceState,
 };
 use anyhow::Result;
 use common::state_store::StateStore;
@@ -121,6 +122,40 @@ async fn main() -> Result<()> {
             "LPR detection model not found at '{}', skipping lpr plugin registration. \
             Set LPR_DETECTION_MODEL and optionally LPR_OCR_MODEL environment variables to enable.",
             lpr_detection_model
+        );
+    }
+
+    // Register Facial Recognition plugin if model files exist
+    let face_detection_model = std::env::var("FACE_DETECTION_MODEL")
+        .unwrap_or_else(|_| "models/face_detector.onnx".to_string());
+
+    if std::path::Path::new(&face_detection_model).exists() {
+        let mut face_recognition_plugin = FacialRecognitionPlugin::new();
+        let face_embedding_model = std::env::var("FACE_EMBEDDING_MODEL").ok();
+
+        let face_recognition_config = serde_json::json!({
+            "detection_model_path": face_detection_model,
+            "embedding_model_path": face_embedding_model,
+            "confidence_threshold": std::env::var("FACE_CONFIDENCE")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.6),
+            "similarity_threshold": std::env::var("FACE_SIMILARITY_THRESHOLD")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .unwrap_or(0.5)
+        });
+        if let Err(e) = face_recognition_plugin.init(face_recognition_config).await {
+            tracing::warn!("Failed to initialize Facial Recognition plugin: {}", e);
+        } else {
+            registry.register(Arc::new(RwLock::new(face_recognition_plugin))).await?;
+            info!("Registered facial_recognition plugin with detection model: {}", face_detection_model);
+        }
+    } else {
+        info!(
+            "Face detection model not found at '{}', skipping facial_recognition plugin registration. \
+            Set FACE_DETECTION_MODEL and optionally FACE_EMBEDDING_MODEL environment variables to enable.",
+            face_detection_model
         );
     }
 

@@ -200,6 +200,16 @@ This document provides detailed information about each service in the Quadrant V
     - Multi-plate detection per frame
     - CPU and GPU inference with automatic fallback
     - Configurable confidence/IoU thresholds
+  - **Facial Recognition**: Face detection, embedding extraction, and database matching
+    - Two-stage pipeline: detection + embedding
+    - RetinaFace/SCRFD-based face detection
+    - ArcFace/FaceNet-based face embedding extraction (512-D vectors)
+    - In-memory face database with L2-normalized embeddings
+    - Cosine similarity-based face matching
+    - Face enrollment, removal, and listing via REST API
+    - Multi-face detection per frame
+    - CPU and GPU inference with automatic fallback
+    - Configurable similarity threshold for matching
 - **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
 - **GPU acceleration optimization**:
   - CUDA and TensorRT execution providers
@@ -214,6 +224,10 @@ This document provides detailed information about each service in the Quadrant V
 #### REST API
 - `/v1/tasks` - AI task lifecycle management
 - `/v1/tasks/:id/frames` - Frame submission for processing
+- `/v1/faces` - Face enrollment and listing
+  - `POST /v1/faces` - Enroll a new face with base64 image
+  - `GET /v1/faces` - List all enrolled faces
+  - `DELETE /v1/faces/:id` - Remove a face from database
 - `/health` - Health check with plugin status
 
 #### Configuration
@@ -235,6 +249,13 @@ This document provides detailed information about each service in the Quadrant V
   - `LPR_CONFIDENCE`: Plate detection confidence threshold (default: 0.6)
   - `LPR_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
   - `LPR_DEVICE_ID`: GPU device ID (default: 0)
+- **Facial Recognition**:
+  - `FACE_DETECTION_MODEL`: Face detection ONNX model file path
+  - `FACE_EMBEDDING_MODEL`: Face embedding ONNX model file path (optional, detection-only if not set)
+  - `FACE_CONFIDENCE`: Face detection confidence threshold (default: 0.6)
+  - `FACE_SIMILARITY_THRESHOLD`: Cosine similarity threshold for face matching (default: 0.5)
+  - `FACE_RECOGNITION_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
+  - `FACE_RECOGNITION_DEVICE_ID`: GPU device ID (default: 0)
 
 #### Metrics
 - Active AI tasks

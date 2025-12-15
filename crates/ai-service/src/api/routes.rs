@@ -1,4 +1,5 @@
 use crate::state::AiServiceState;
+use crate::plugin::facial_recognition::FacialRecognitionPlugin;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -9,6 +10,7 @@ use common::ai_tasks::{
     AiTaskStartRequest, AiTaskStartResponse, AiTaskStopResponse, PluginListResponse,
     VideoFrame,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 /// Start a new AI task
@@ -199,5 +201,232 @@ pub async fn metrics() -> impl IntoResponse {
             )
                 .into_response()
         }
+    }
+}
+
+// ============================================================================
+// Facial Recognition Endpoints
+// ============================================================================
+
+/// Request to enroll a new face
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnrollFaceRequest {
+    pub face_id: String,
+    pub name: String,
+    pub image_data: String, // Base64 encoded image
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Response for face enrollment
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnrollFaceResponse {
+    pub success: bool,
+    pub face_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+/// Enroll a new face into the facial recognition database
+pub async fn enroll_face(
+    State(state): State<AiServiceState>,
+    Json(request): Json<EnrollFaceRequest>,
+) -> impl IntoResponse {
+    // Get the facial recognition plugin
+    let plugin_result = state.plugins().get("facial_recognition").await;
+
+    let plugin = match plugin_result {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(EnrollFaceResponse {
+                    success: false,
+                    face_id: request.face_id,
+                    message: Some(format!("Facial recognition plugin not available: {}", e)),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Decode base64 image
+    let image_data = match base64::Engine::decode(&base64::prelude::BASE64_STANDARD, &request.image_data) {
+        Ok(data) => data,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(EnrollFaceResponse {
+                    success: false,
+                    face_id: request.face_id,
+                    message: Some(format!("Invalid base64 image data: {}", e)),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let img = match image::load_from_memory(&image_data) {
+        Ok(img) => img,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(EnrollFaceResponse {
+                    success: false,
+                    face_id: request.face_id,
+                    message: Some(format!("Invalid image format: {}", e)),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Downcast to FacialRecognitionPlugin
+    let mut plugin_write = plugin.write().await;
+    let face_plugin = match plugin_write.as_any_mut().downcast_mut::<FacialRecognitionPlugin>() {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(EnrollFaceResponse {
+                    success: false,
+                    face_id: request.face_id,
+                    message: Some("Failed to access facial recognition plugin".to_string()),
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Enroll the face
+    match face_plugin.enroll_face(request.face_id.clone(), request.name, &img, request.metadata).await {
+        Ok(_) => (
+            StatusCode::OK,
+            Json(EnrollFaceResponse {
+                success: true,
+                face_id: request.face_id,
+                message: Some("Face enrolled successfully".to_string()),
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(EnrollFaceResponse {
+                success: false,
+                face_id: request.face_id,
+                message: Some(format!("Failed to enroll face: {}", e)),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// Remove a face from the facial recognition database
+pub async fn remove_face(
+    State(state): State<AiServiceState>,
+    Path(face_id): Path<String>,
+) -> impl IntoResponse {
+    let plugin_result = state.plugins().get("facial_recognition").await;
+
+    let plugin = match plugin_result {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "success": false,
+                    "message": format!("Facial recognition plugin not available: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let plugin_write = plugin.write().await;
+    let face_plugin = match plugin_write.as_any().downcast_ref::<FacialRecognitionPlugin>() {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "message": "Failed to access facial recognition plugin"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    match face_plugin.remove_face(&face_id) {
+        Ok(removed) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": removed,
+                "message": if removed {
+                    "Face removed successfully"
+                } else {
+                    "Face not found"
+                }
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "success": false,
+                "message": format!("Failed to remove face: {}", e)
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// List all enrolled faces
+pub async fn list_faces(State(state): State<AiServiceState>) -> impl IntoResponse {
+    let plugin_result = state.plugins().get("facial_recognition").await;
+
+    let plugin = match plugin_result {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "error": format!("Facial recognition plugin not available: {}", e)
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let plugin_read = plugin.read().await;
+    let face_plugin = match plugin_read.as_any().downcast_ref::<FacialRecognitionPlugin>() {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "error": "Failed to access facial recognition plugin"
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    match face_plugin.list_faces() {
+        Ok(faces) => (
+            StatusCode::OK,
+            Json(json!({
+                "faces": faces,
+                "count": faces.len()
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "error": format!("Failed to list faces: {}", e)
+            })),
+        )
+            .into_response(),
     }
 }

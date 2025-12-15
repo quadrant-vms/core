@@ -403,6 +403,14 @@ impl Default for PoseEstimationPlugin {
 
 #[async_trait]
 impl AiPlugin for PoseEstimationPlugin {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
     fn id(&self) -> &'static str {
         "pose_estimation"
     }

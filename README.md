@@ -62,6 +62,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **YOLOv8 object detection**: Real-time detection with 80 COCO classes
 - **Pose estimation**: Human pose detection with COCO 17 keypoint format
 - **License plate recognition (LPR)**: Two-stage detection and OCR for automatic plate reading
+- **Facial recognition**: Two-stage face detection and embedding extraction with face database matching
 - **GPU acceleration**: CUDA and TensorRT support with automatic fallback
 - **Frame capture pipeline**: Automatic frame extraction from live streams and recordings
 - **Modular plugin architecture**: Extensible system for custom AI models
@@ -113,7 +114,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 
 ### 🔜 Upcoming Features
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
-- **Additional AI models**: Facial recognition, action recognition
+- **Additional AI models**: Action recognition, crowd analytics
 
 ---
 
