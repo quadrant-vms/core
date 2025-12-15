@@ -1,6 +1,7 @@
 use ai_service::{
     api, config::AiServiceConfig, coordinator::HttpCoordinatorClient,
     plugin::action_recognition::ActionRecognitionPlugin,
+    plugin::anomaly_detection::AnomalyDetectorPlugin,
     plugin::crowd_analytics::CrowdAnalyticsPlugin,
     plugin::facial_recognition::FacialRecognitionPlugin, plugin::lpr::LprPlugin,
     plugin::mock_detector::MockDetectorPlugin, plugin::pose_estimation::PoseEstimationPlugin,
@@ -38,6 +39,11 @@ async fn main() -> Result<()> {
     let mock_detector = Arc::new(RwLock::new(MockDetectorPlugin::new()));
     registry.register(mock_detector).await?;
     info!("Registered mock_object_detector plugin");
+
+    // Always register anomaly detector
+    let anomaly_detector = Arc::new(RwLock::new(AnomalyDetectorPlugin::new()));
+    registry.register(anomaly_detector).await?;
+    info!("Registered anomaly_detector plugin");
 
     // Register YOLOv8 detector if model file exists
     let yolov8_model_path = std::env::var("YOLOV8_MODEL_PATH")

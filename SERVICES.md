@@ -229,6 +229,27 @@ This document provides detailed information about each service in the Quadrant V
     - Configurable cluster size threshold (default: 3 people minimum)
     - CPU and GPU inference with automatic fallback
     - Ideal for public safety, retail analytics, and crowd management
+  - **Anomaly Detection**: Temporal and spatial anomaly detection for security and monitoring
+    - **Temporal anomaly detection**: Detects unusual patterns in time-series metrics
+      - Statistical analysis using moving averages and standard deviations
+      - Tracks object counts per class over time
+      - Configurable sensitivity (Z-score threshold, default: 2.0 standard deviations)
+      - Configurable history size (default: 100 samples)
+      - Minimum sample requirement before detection starts (default: 10 samples)
+      - Detects sudden spikes/drops in object counts
+      - Useful for detecting unusual activity levels (e.g., sudden crowds, empty areas)
+    - **Spatial anomaly detection**: Detects objects in restricted or unusual zones
+      - Zone-based monitoring with polygon/bounding box definitions
+      - Restricted object classes per zone (e.g., no persons in secure area)
+      - Allowed object classes per zone (e.g., only vehicles in parking lot)
+      - Object center-point zone containment detection
+      - Multiple zone support with unique identifiers
+      - Configurable confidence thresholds for detections
+    - **Combined anomaly detection**: Detects both temporal and spatial anomalies simultaneously
+    - No model file required - pure algorithmic detection
+    - Low CPU overhead, no GPU needed
+    - Real-time anomaly alerts with detailed metadata
+    - Ideal for security monitoring, perimeter protection, and behavioral analysis
 - **Frame capture pipeline**: FFmpeg-based frame extraction with REST API
 - **GPU acceleration optimization**:
   - CUDA and TensorRT execution providers
@@ -290,6 +311,15 @@ This document provides detailed information about each service in the Quadrant V
   - `CROWD_CLUSTER_DISTANCE`: Distance threshold for clustering in pixels (default: 100.0)
   - `CROWD_EXECUTION_PROVIDER`: CPU/CUDA/TensorRT (default: CUDA)
   - `CROWD_DEVICE_ID`: GPU device ID (default: 0)
+- **Anomaly Detection**: (No environment variables - configured via plugin config)
+  - `enable_temporal`: Enable temporal anomaly detection (default: true)
+  - `enable_spatial`: Enable spatial anomaly detection (default: true)
+  - `sensitivity`: Z-score threshold for anomaly detection (default: 2.0, range: 0.5-5.0)
+  - `history_size`: Number of historical samples to maintain (default: 100, range: 10-1000)
+  - `min_samples`: Minimum samples before anomaly detection starts (default: 10, range: 5-100)
+  - `tracked_classes`: Object classes to track (empty = all classes)
+  - `zones`: Array of restricted zones with allowed/restricted classes
+  - `confidence_threshold`: Minimum confidence for detections to analyze (default: 0.5)
 
 #### Metrics
 - Active AI tasks

@@ -65,6 +65,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **License plate recognition (LPR)**: Two-stage detection and OCR for automatic plate reading
 - **Facial recognition**: Two-stage face detection and embedding extraction with face database matching
 - **Crowd analytics**: Person counting, crowd density analysis, hotspot detection, and spatial distribution heatmaps
+- **Anomaly detection**: Temporal and spatial anomaly detection for unusual patterns, restricted zone violations, and abnormal object counts
 - **GPU acceleration**: CUDA and TensorRT support with automatic fallback
 - **Frame capture pipeline**: Automatic frame extraction from live streams and recordings
 - **Modular plugin architecture**: Extensible system for custom AI models
@@ -116,7 +117,6 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 
 ### 🔜 Upcoming Features
 - **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
-- **Additional AI models**: Anomaly detection
 
 ---
 
