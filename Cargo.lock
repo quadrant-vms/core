@@ -4745,6 +4745,7 @@ dependencies = [
  "telemetry",
  "tokio",
  "tokio-util",
+ "tower 0.5.2",
  "tracing",
  "uuid",
 ]
@@ -5946,6 +5947,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
+ "tower 0.5.2",
  "tracing",
 ]
 

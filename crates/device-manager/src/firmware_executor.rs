@@ -43,7 +43,8 @@ impl FirmwareExecutor {
             .store
             .get_device(&update.device_id)
             .await
-            .context("failed to get device")?;
+            .context("failed to get device")?
+            .ok_or_else(|| anyhow!("device not found: {}", update.device_id))?;
 
         // Create cancellation token
         let cancel_token = CancellationToken::new();
@@ -309,7 +310,7 @@ impl FirmwareExecutor {
         let initial_count = active.len();
 
         // Remove updates that are no longer active
-        active.retain(|update_id, _| {
+        active.retain(|_update_id, _| {
             // Check if update is completed/failed/cancelled in database
             // For now, we just check if the cancel token is cancelled
             // In production, you'd query the database

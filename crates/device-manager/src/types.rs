@@ -596,7 +596,7 @@ pub struct FirmwareFile {
     pub release_notes: Option<String>,
     pub release_date: Option<DateTime<Utc>>,
     pub min_device_version: Option<String>,
-    pub compatible_models: Vec<String>,
+    pub compatible_models: Option<Vec<String>>,
     pub metadata: Option<JsonValue>,
 
     // Validation

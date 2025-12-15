@@ -84,7 +84,7 @@ pub async fn upload_firmware_file(
             req.release_notes.as_deref(),
             req.release_date,
             req.min_device_version.as_deref(),
-            req.compatible_models.as_deref().map(|v| v.as_slice()),
+            req.compatible_models.as_deref(),
             None, // uploaded_by - would come from auth context
         )
         .await
@@ -214,8 +214,13 @@ pub async fn initiate_firmware_update(
     let device = state.store.get_device(&device_id).await.map_err(|e| {
         error!("failed to get device: {}", e);
         (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "failed to retrieve device", "details": e.to_string()})),
+        )
+    })?.ok_or_else(|| {
+        (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": "device not found", "details": e.to_string()})),
+            Json(json!({"error": "device not found"})),
         )
     })?;
 
