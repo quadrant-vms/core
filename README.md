@@ -20,6 +20,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **`stream-node`** - RTSP to HLS transcoding with S3 storage and AI frame capture
 - **`recorder-node`** - FFmpeg-based recording pipeline with retention management and search indexing
 - **`playback-service`** - Multi-protocol playback delivery (HLS/RTSP) for live streams and recordings
+- **`operator-ui`** - Web-based dashboard for monitoring and managing all VMS operations
 
 ### Intelligence & Automation
 - **`ai-service`** - Modular AI plugin system with YOLOv8 object detection, pose estimation, and GPU acceleration
@@ -115,8 +116,14 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Retention & search capabilities
 - Stateless architecture with HA support
 
-### 🔜 Upcoming Features
-- **Operator UI**: Dashboards for devices/streams/recordings/AI tasks/alerts with incident workflows
+### Operator Dashboard
+- **Web-based Operator UI**: Responsive React dashboard for monitoring and management
+- **Multi-view interface**: Devices, live streams, recordings, AI tasks, alerts, and incidents
+- **Real-time WebSocket updates**: Live data streaming for dashboard statistics
+- **Incident workflow system**: Create, acknowledge, resolve incidents with notes and timeline
+- **Search capabilities**: Full-text search for recordings and AI detections
+- **Alert rule management**: Enable/disable alert rules directly from UI
+- **Stream control**: Start/stop live streams from dashboard
 
 ---
 
@@ -167,6 +174,9 @@ cargo run -p alert-service
 
 # Playback service (playback delivery)
 cargo run -p playback-service
+
+# Operator UI (web dashboard)
+cargo run -p operator-ui
 ```
 
 ### Docker Compose Stack
@@ -192,6 +202,7 @@ quadrant-vms/core/
 │   ├── common/              # Shared utilities
 │   ├── coordinator/         # Lease scheduler
 │   ├── device-manager/      # Device management
+│   ├── operator-ui/         # Web dashboard
 │   ├── playback-service/    # Playback delivery
 │   ├── recorder-node/       # Recording pipeline
 │   ├── stream-node/         # RTSP → HLS transcoding

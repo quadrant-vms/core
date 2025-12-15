@@ -10,7 +10,7 @@ members = [
   "crates/auth-service",
   "crates/device-manager",
   "crates/alert-service",
-  "crates/playback-service",
+  "crates/playback-service", "crates/operator-ui",
 ]
 resolver = "2"
 

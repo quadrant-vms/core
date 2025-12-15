@@ -330,6 +330,16 @@ This is a **Cargo workspace** with multiple crates:
    - Entry point: `crates/playback-service/src/main.rs`
    - **Status**: Complete (with WebRTC support)
 
+12. **operator-ui** (`crates/operator-ui/`)
+   - Web-based operator dashboard for VMS monitoring and management
+   - React + Vite frontend with JavaScript
+   - Real-time WebSocket updates for live data
+   - Multi-view interface: Dashboard, Devices, Streams, Recordings, AI Tasks, Alerts, Incidents
+   - Incident workflow system with notes and timeline
+   - Entry point: `crates/operator-ui/src/main.rs`
+   - Frontend: `crates/operator-ui/frontend/`
+   - **Status**: Complete
+
 ### Key Files
 
 - `Cargo.toml` - Workspace manifest
@@ -339,6 +349,7 @@ This is a **Cargo workspace** with multiple crates:
 - `CLAUDE.md` - Development guide for Claude Code (this file)
 - `tests/gateway_coordinator.rs` - End-to-end integration tests
 - `tests/ai_service.rs` - AI service integration tests
+- `tests/operator_ui.rs` - Operator UI integration tests
 - `.env` / `example.env` - Configuration (not in git)
 - `profiles/` - Deployment profiles (compose/desktop/k8s)
 - `data/hls/` - HLS output directory (runtime generated)
@@ -392,39 +403,26 @@ make status-dc
 ```
 
 
-**Recently Completed**: Edge Caching for Playback Service
-- ✅ In-memory LRU cache for HLS segments and playlists
-- ✅ Configurable TTL and size limits (10K items, 1GB default)
-- ✅ HTTP cache headers (ETag, Cache-Control) for validation
-- ✅ Prometheus metrics endpoint (/metrics/cache)
-- ✅ Automatic eviction based on LRU policy
-- ✅ Cache hit/miss tracking and statistics
-- ✅ Environment-based configuration
-- ✅ Comprehensive unit and integration tests
+**Recently Completed**: Operator UI Web Dashboard
+- ✅ React + Vite + JavaScript frontend with responsive dark theme
+- ✅ Real-time WebSocket updates for live dashboard statistics
+- ✅ Multi-view interface: Dashboard, Devices, Streams, Recordings, AI Tasks, Alerts, Incidents
+- ✅ Incident workflow system with create, acknowledge, resolve, and notes
+- ✅ Search capabilities for recordings and AI detections
+- ✅ Alert rule management (enable/disable)
+- ✅ Stream control (start/stop)
+- ✅ REST API backend with service integration
+- ✅ Integration tests for all API endpoints
+- ✅ Comprehensive documentation in README.md and SERVICES.md
 
 **Previous Milestones**:
-- **WebRTC Playback Support**:
-  - ✅ WHEP (WebRTC-HTTP Egress Protocol) implementation
-  - ✅ WebRTC peer connection management
-  - ✅ SDP offer/answer exchange via HTTP
-  - ✅ H.264 video and Opus audio codec support
-  - ✅ STUN server integration for NAT traversal
+- **Edge Caching for Playback Service**: LRU cache with configurable TTL and size limits
+- **WebRTC Playback Support**: WHEP protocol implementation for ultra-low-latency streaming
+- **LL-HLS Support**: Low-latency HLS with partial segments and blocking playlist reload
+- **Time-Axis Preview Thumbnails**: Evenly-spaced thumbnail generation for video scrubbing
+- **Distributed Observability**: Centralized logging, OpenTelemetry tracing, and SLO metrics
 
-- **LL-HLS (Low-Latency HLS) Support**:
-- ✅ LL-HLS playlist generation with partial segments
-- ✅ Blocking playlist reload support (CAN-BLOCK-RELOAD)
-- ✅ Preload hints for upcoming segments
-- ✅ HLS version 9+ compliance with EXT-X-PART tags
-- ✅ Query parameter support (_HLS_msn, _HLS_part)
-- ✅ Configurable part duration and blocking behavior
-- ✅ Integration tests for LL-HLS playback
-- ✅ Updated documentation (README.md and SERVICES.md)
-
-**Next Feature**: Enhanced Observability
-- 🔜 Time-axis preview thumbnails for playback
-- 🔜 Centralized structured logging
-- 🔜 Distributed tracing across services
-- 🔜 SLO dashboards and alerts
+**Completed Feature List**: All planned features from the roadmap have been implemented
 
 ### Common Tasks
 ### Common Tasks
