@@ -4,6 +4,41 @@ This document provides detailed information about each service in the Quadrant V
 
 ---
 
+## 🚀 Deployment
+
+### Quick Start with Docker Compose
+
+The easiest way to deploy all services is using Docker Compose:
+
+```bash
+# Initialize configuration
+make docker-init
+
+# Build and start all services
+make docker-build
+make docker-up
+
+# Access the Operator UI
+open http://localhost:8090
+```
+
+**Service Endpoints:**
+- **Operator UI**: http://localhost:8090 - Web dashboard
+- **Admin Gateway**: http://localhost:8081 - REST API
+- **Coordinator**: http://localhost:8082 - Lease management
+- **Auth Service**: http://localhost:8086 - Authentication
+- **Device Manager**: http://localhost:8087 - Device management
+- **AI Service**: http://localhost:8088 - AI processing
+- **Alert Service**: http://localhost:8089 - Alerts & notifications
+- **Playback Service**: http://localhost:8084 - Video playback
+- **Stream Node**: http://localhost:8080 - Live streaming
+- **Recorder Node**: http://localhost:8085 - Recording
+- **MinIO Console**: http://localhost:9001 - S3 storage UI
+
+**For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**
+
+---
+
 ## Core Services
 
 ### `operator-ui` - Web Dashboard

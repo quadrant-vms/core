@@ -179,14 +179,53 @@ cargo run -p playback-service
 cargo run -p operator-ui
 ```
 
-### Docker Compose Stack
-```bash
-# Initialize and start all services
-make init-dc
+### Docker Compose Deployment (Recommended)
 
-# Check service status
-make status-dc
+**For complete VMS deployment with all services:**
+
+```bash
+# 1. Initialize environment configuration
+make docker-init
+
+# 2. Review and customize .env file
+vim .env
+
+# 3. Build all service images
+make docker-build
+
+# 4. Start the entire stack
+make docker-up
+
+# 5. Check service status
+make docker-status
+
+# 6. View logs
+make docker-logs
 ```
+
+**Access the services:**
+- **Operator UI Dashboard**: http://localhost:8090
+- **Admin Gateway API**: http://localhost:8081
+- **MinIO Console**: http://localhost:9001 (credentials in `.env`)
+
+**Common operations:**
+```bash
+# Stop all services
+make docker-down
+
+# Restart all services
+make docker-restart
+
+# View specific service logs
+make logs-ui          # Operator UI
+make logs-coordinator # Coordinator
+make logs-gateway     # Admin Gateway
+
+# Clean up (removes all data!)
+make docker-clean
+```
+
+**📚 For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**
 
 ---
 

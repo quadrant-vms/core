@@ -1,0 +1,432 @@
+version: "3.9"
+
+# =========================================================
+# Quadrant VMS - Complete Deployment Stack
+# =========================================================
+# This Docker Compose file deploys a complete VMS cluster with:
+# - Infrastructure (PostgreSQL, MinIO S3, Redis)
+# - Core services (Coordinator, Admin Gateway, Stream/Recorder nodes)
+# - Management services (Auth, Device Manager)
+# - Intelligence services (AI Service, Alert Service)
+# - Frontend (Operator UI, Playback Service)
+# =========================================================
+
+networks:
+  vms-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  minio-data:
+  redis-data:
+  hls-data:
+  recordings-data:
+  ai-models:
+
+services:
+  # =========================================================
+  # Infrastructure Services
+  # =========================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vms-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vms123}
+      POSTGRES_DB: ${POSTGRES_DB:-quadrant_vms}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - vms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: vms-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - vms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: vms-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - vms-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # =========================================================
+  # Core Coordination Services
+  # =========================================================
+
+  coordinator:
+    build:
+      context: .
+      dockerfile: crates/coordinator/Dockerfile
+    image: quadrant-vms/coordinator:latest
+    container_name: vms-coordinator
+    environment:
+      COORDINATOR_ADDR: 0.0.0.0:8082
+      LEASE_STORE_TYPE: postgres
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vms}:${POSTGRES_PASSWORD:-vms123}@postgres:5432/${POSTGRES_DB:-quadrant_vms}
+      LEASE_DEFAULT_TTL_SECS: ${LEASE_DEFAULT_TTL_SECS:-30}
+      LEASE_MAX_TTL_SECS: ${LEASE_MAX_TTL_SECS:-300}
+      CLUSTER_ENABLED: ${CLUSTER_ENABLED:-false}
+      NODE_ID: ${COORDINATOR_NODE_ID:-coordinator-1}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${COORDINATOR_PORT:-8082}:8082"
+    networks:
+      - vms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # Authentication & Authorization
+  # =========================================================
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: crates/auth-service/Dockerfile
+    image: quadrant-vms/auth-service:latest
+    container_name: vms-auth-service
+    environment:
+      AUTH_SERVICE_ADDR: 0.0.0.0:8086
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vms}:${POSTGRES_PASSWORD:-vms123}@postgres:5432/${POSTGRES_DB:-quadrant_vms}
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-in-production}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
+      API_TOKEN_EXPIRY_DAYS: ${API_TOKEN_EXPIRY_DAYS:-90}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${AUTH_SERVICE_PORT:-8086}:8086"
+    networks:
+      - vms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # Device Management
+  # =========================================================
+
+  device-manager:
+    build:
+      context: .
+      dockerfile: crates/device-manager/Dockerfile
+    image: quadrant-vms/device-manager:latest
+    container_name: vms-device-manager
+    environment:
+      DEVICE_MANAGER_ADDR: 0.0.0.0:8087
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vms}:${POSTGRES_PASSWORD:-vms123}@postgres:5432/${POSTGRES_DB:-quadrant_vms}
+      HEALTH_CHECK_INTERVAL_SECS: ${HEALTH_CHECK_INTERVAL_SECS:-60}
+      DISCOVERY_TIMEOUT_SECS: ${DISCOVERY_TIMEOUT_SECS:-10}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${DEVICE_MANAGER_PORT:-8087}:8087"
+    networks:
+      - vms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # Video Ingestion & Processing
+  # =========================================================
+
+  stream-node:
+    build:
+      context: .
+      dockerfile: crates/stream-node/Dockerfile
+    image: quadrant-vms/stream-node:latest
+    container_name: vms-stream-node
+    environment:
+      STREAM_NODE_ADDR: 0.0.0.0:8080
+      HLS_ROOT: /data/hls
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-vms-streams}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${STREAM_NODE_PORT:-8080}:8080"
+    volumes:
+      - hls-data:/data/hls
+    networks:
+      - vms-network
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  recorder-node:
+    build:
+      context: .
+      dockerfile: crates/recorder-node/Dockerfile
+    image: quadrant-vms/recorder-node:latest
+    container_name: vms-recorder-node
+    environment:
+      RECORDER_NODE_ADDR: 0.0.0.0:8085
+      RECORDING_ROOT: /data/recordings
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-vms-recordings}
+      COORDINATOR_URL: http://coordinator:8082
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${RECORDER_NODE_PORT:-8085}:8085"
+    volumes:
+      - recordings-data:/data/recordings
+    networks:
+      - vms-network
+    depends_on:
+      coordinator:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # AI & Intelligence Services
+  # =========================================================
+
+  ai-service:
+    build:
+      context: .
+      dockerfile: crates/ai-service/Dockerfile
+    image: quadrant-vms/ai-service:latest
+    container_name: vms-ai-service
+    environment:
+      AI_SERVICE_ADDR: 0.0.0.0:8088
+      COORDINATOR_URL: http://coordinator:8082
+      NODE_ID: ${AI_NODE_ID:-ai-1}
+      YOLOV8_MODEL_PATH: ${YOLOV8_MODEL_PATH:-/models/yolov8n.onnx}
+      ENABLE_GPU: ${ENABLE_GPU:-false}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${AI_SERVICE_PORT:-8088}:8088"
+    volumes:
+      - ai-models:/models
+    networks:
+      - vms-network
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    # GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # Alert & Notification Services
+  # =========================================================
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: crates/alert-service/Dockerfile
+    image: quadrant-vms/alert-service:latest
+    container_name: vms-alert-service
+    environment:
+      ALERT_SERVICE_ADDR: 0.0.0.0:8089
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vms}:${POSTGRES_PASSWORD:-vms123}@postgres:5432/${POSTGRES_DB:-quadrant_vms}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@vms.local}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${ALERT_SERVICE_PORT:-8089}:8089"
+    networks:
+      - vms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # =========================================================
+  # Playback & Frontend Services
+  # =========================================================
+
+  playback-service:
+    build:
+      context: .
+      dockerfile: crates/playback-service/Dockerfile
+    image: quadrant-vms/playback-service:latest
+    container_name: vms-playback-service
+    environment:
+      PLAYBACK_SERVICE_ADDR: 0.0.0.0:8084
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vms}:${POSTGRES_PASSWORD:-vms123}@postgres:5432/${POSTGRES_DB:-quadrant_vms}
+      HLS_BASE_URL: ${HLS_BASE_URL:-http://localhost:8084/hls}
+      CACHE_ENABLED: ${CACHE_ENABLED:-true}
+      CACHE_MAX_SIZE_MB: ${CACHE_MAX_SIZE_MB:-512}
+      CACHE_TTL_SECS: ${CACHE_TTL_SECS:-300}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${PLAYBACK_SERVICE_PORT:-8084}:8084"
+    volumes:
+      - hls-data:/data/hls:ro
+      - recordings-data:/data/recordings:ro
+    networks:
+      - vms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  admin-gateway:
+    build:
+      context: .
+      dockerfile: crates/admin-gateway/Dockerfile
+    image: quadrant-vms/admin-gateway:latest
+    container_name: vms-admin-gateway
+    environment:
+      ADMIN_GATEWAY_ADDR: 0.0.0.0:8081
+      COORDINATOR_ENDPOINT: http://coordinator:8082
+      STREAM_WORKER_ENDPOINT: http://stream-node:8080
+      RECORDER_WORKER_ENDPOINT: http://recorder-node:8085
+      NODE_ID: ${GATEWAY_NODE_ID:-gateway-1}
+      ENABLE_STATE_STORE: ${ENABLE_STATE_STORE:-false}
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${ADMIN_GATEWAY_PORT:-8081}:8081"
+    networks:
+      - vms-network
+    depends_on:
+      coordinator:
+        condition: service_healthy
+      stream-node:
+        condition: service_healthy
+      recorder-node:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  operator-ui:
+    build:
+      context: .
+      dockerfile: crates/operator-ui/Dockerfile
+    image: quadrant-vms/operator-ui:latest
+    container_name: vms-operator-ui
+    environment:
+      OPERATOR_UI_ADDR: 0.0.0.0:8090
+      FRONTEND_DIR: /app/frontend/dist
+      DEVICE_MANAGER_URL: http://device-manager:8087
+      ADMIN_GATEWAY_URL: http://admin-gateway:8081
+      RECORDER_NODE_URL: http://recorder-node:8085
+      AI_SERVICE_URL: http://ai-service:8088
+      ALERT_SERVICE_URL: http://alert-service:8089
+      AUTH_SERVICE_URL: http://auth-service:8086
+      PLAYBACK_SERVICE_URL: http://playback-service:8084
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "${OPERATOR_UI_PORT:-8090}:8090"
+    networks:
+      - vms-network
+    depends_on:
+      admin-gateway:
+        condition: service_healthy
+      device-manager:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      alert-service:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      playback-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
