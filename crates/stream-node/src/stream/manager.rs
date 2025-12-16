@@ -110,9 +110,9 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
         .ok_or_else(|| anyhow!("bad segment path"))?,
     );
 
-    info!(id=%spec_req.id, preset=%tuned.name, args=?args, "trying pipeline");
+    info!(id=%spec_req.id, preset=%tuned.name, args=?args, "trying FFmpeg pipeline");
 
-    match Command::new("gst-launch-1.0")
+    match Command::new("ffmpeg")
       .args(&args)
       .stdout(Stdio::inherit())
       .stderr(Stdio::inherit())

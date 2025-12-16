@@ -23,71 +23,79 @@ pub fn hls_root() -> PathBuf {
   }
 }
 
+/// Build FFmpeg command arguments for HLS transcoding
+///
+/// Creates FFmpeg arguments to convert RTSP stream to HLS format:
+/// - Uses TCP transport for RTSP (more reliable than UDP)
+/// - Copies video codec (no re-encoding)
+/// - Generates HLS playlist with 2-second segments
+/// - Keeps last 5 segments in playlist
 pub fn build_pipeline_args(
-  codec: &Codec,
+  _codec: &Codec, // Not used in FFmpeg (codec is copied as-is)
   container: &Container,
   uri: &str,
-  latency_ms: u32,
-  parse_opts: &[String], // e.g. ["config-interval=-1"]
+  _latency_ms: u32, // Not used in FFmpeg (GStreamer legacy parameter)
+  _parse_opts: &[String], // Not used in FFmpeg (GStreamer legacy parameter)
   playlist: &str,
   segment: &str,
 ) -> Vec<String> {
   let mut args: Vec<String> = Vec::new();
 
-  // Source
-  args.push("rtspsrc".into());
-  args.push(format!("location={}", uri));
-  args.push(format!("latency={}", latency_ms));
-  args.push("!".into());
+  // Input options
+  args.push("-rtsp_transport".into());
+  args.push("tcp".into());
+  args.push("-i".into());
+  args.push(uri.to_string());
 
-  match codec {
-    Codec::H264 => {
-      args.push("rtph264depay".into());
-      args.push("!".into());
-      args.push("h264parse".into());
-      for opt in parse_opts {
-        args.push(opt.clone());
-      }
-      args.push("!".into());
-    }
-    Codec::H265 => {
-      args.push("rtph265depay".into());
-      args.push("!".into());
-      args.push("h265parse".into());
-      for opt in parse_opts {
-        args.push(opt.clone());
-      }
-      args.push("!".into());
-    }
-  }
+  // Codec selection (copy to avoid re-encoding)
+  args.push("-c:v".into());
+  args.push("copy".into());
+  args.push("-c:a".into());
+  args.push("copy".into());
 
-  match container {
-    Container::Ts => {
-      args.push("mpegtsmux".into());
-      args.push("!".into());
-      args.push("hlssink".into());
-      args.push(format!("max-files={}", 5));
-      args.push(format!("target-duration={}", 2));
-      args.push(format!("playlist-location={}", playlist));
-      args.push(format!("location={}", segment));
-    }
+  // HLS output format
+  args.push("-f".into());
+  args.push("hls".into());
+
+  // HLS segment duration (2 seconds)
+  args.push("-hls_time".into());
+  args.push("2".into());
+
+  // Keep last 5 segments
+  args.push("-hls_list_size".into());
+  args.push("5".into());
+
+  // Segment filename pattern
+  args.push("-hls_segment_filename".into());
+  let segment_path = match container {
+    Container::Ts => segment.to_string(),
     Container::Fmp4 => {
-      args.push("mp4mux".into());
-      args.push("fragment-duration=2000000".into()); // 2s (ns)
-      args.push("streamable=true".into());
-      args.push("!".into());
-      args.push("hlssink2".into());
-      args.push(format!("max-files={}", 5));
-      args.push(format!("target-duration={}", 2));
-      args.push(format!("playlist-location={}", playlist));
-      let loc = if segment.ends_with(".ts") {
+      if segment.ends_with(".ts") {
         segment.replace(".ts", ".m4s")
       } else {
-        format!("{segment}.m4s")
-      };
-      args.push(format!("location={}", loc));
+        format!("{}.m4s", segment)
+      }
+    }
+  };
+  args.push(segment_path);
+
+  // HLS flags for better compatibility
+  args.push("-hls_flags".into());
+  match container {
+    Container::Ts => {
+      // Standard TS segments
+      args.push("delete_segments".into());
+    }
+    Container::Fmp4 => {
+      // Fragmented MP4 segments (fMP4)
+      args.push("delete_segments+independent_segments".into());
+      args.push("-hls_segment_type".into());
+      args.push("fmp4".into());
     }
   }
+
+  // Playlist location (output file)
+  args.push(playlist.to_string());
 
   args
 }
@@ -107,11 +115,35 @@ mod tests {
       "/seg_%05d.ts",
     );
     let joined = args.join(" ");
-    assert!(joined.contains("rtph264depay"));
-    assert!(joined.contains("h264parse"));
-    assert!(joined.contains("mpegtsmux"));
-    assert!(joined.contains("hlssink"));
-    assert!(joined.contains("playlist-location=/p.m3u8"));
-    assert!(joined.contains("location=/seg_%05d.ts"));
+    // FFmpeg arguments
+    assert!(joined.contains("-rtsp_transport"));
+    assert!(joined.contains("tcp"));
+    assert!(joined.contains("-i"));
+    assert!(joined.contains("rtsp://x"));
+    assert!(joined.contains("-c:v"));
+    assert!(joined.contains("copy"));
+    assert!(joined.contains("-f"));
+    assert!(joined.contains("hls"));
+    assert!(joined.contains("-hls_segment_filename"));
+    assert!(joined.contains("/seg_%05d.ts"));
+    assert!(joined.contains("/p.m3u8"));
+  }
+
+  #[test]
+  fn build_fmp4_args_uses_m4s_extension() {
+    let args = build_pipeline_args(
+      &Codec::H264,
+      &Container::Fmp4,
+      "rtsp://test",
+      0,
+      &[],
+      "/playlist.m3u8",
+      "/seg_%05d.ts",
+    );
+    let joined = args.join(" ");
+    // Should convert .ts to .m4s for fMP4
+    assert!(joined.contains("/seg_%05d.m4s"));
+    assert!(joined.contains("-hls_segment_type"));
+    assert!(joined.contains("fmp4"));
   }
 }

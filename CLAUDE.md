@@ -453,7 +453,7 @@ make status-dc
 ### Dependencies
 
 - Uses standard Rust ecosystem (tokio, axum, etc.)
-- FFmpeg/GStreamer for video processing
+- FFmpeg for video processing (transcoding, recording, probing)
 - S3-compatible storage for media
 
 ### Ignore Patterns
