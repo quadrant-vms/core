@@ -350,10 +350,11 @@ impl PostgresLeaseStore {
       .await
       .context("failed to connect to PostgreSQL")?;
 
-    sqlx::migrate!("./migrations")
-      .run(&pool)
-      .await
-      .context("failed to run database migrations")?;
+    // Migrations are expected to be run manually or via dedicated migration tool
+    // sqlx::migrate!()
+    //   .run(&pool)
+    //   .await
+    //   .context("failed to run database migrations")?;
 
     Ok(Self {
       pool,

@@ -32,9 +32,9 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
-    /// Database URL (can also be set via DATABASE_URL env var)
+    /// Database URL
     #[arg(long, env = "DATABASE_URL")]
-    database_url: String,
+    database_url: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -135,8 +135,13 @@ async fn main() -> Result<()> {
     telemetry::init();
     let cli = Cli::parse();
 
+    // Get database URL from CLI or environment
+    let database_url = cli.database_url
+        .or_else(|| std::env::var("DATABASE_URL").ok())
+        .context("DATABASE_URL must be provided via --database-url or DATABASE_URL env var")?;
+
     // Connect to database
-    let pool = PgPool::connect(&cli.database_url)
+    let pool = PgPool::connect(&database_url)
         .await
         .context("failed to connect to database")?;
 
@@ -164,22 +169,22 @@ async fn check_schema(pool: &PgPool) -> Result<()> {
     info!("Checking database schema...");
 
     // Query migration version table
-    let result = sqlx::query!(
+    let result: Option<(i64, String, chrono::DateTime<Utc>)> = sqlx::query_as(
         r#"
         SELECT version, description, installed_on
         FROM _sqlx_migrations
         ORDER BY installed_on DESC
         LIMIT 1
-        "#
+        "#,
     )
     .fetch_optional(pool)
     .await?;
 
-    if let Some(row) = result {
+    if let Some((version, description, installed_on)) = result {
         info!(
-            version = row.version,
-            description = %row.description,
-            installed_on = %row.installed_on,
+            version = version,
+            description = %description,
+            installed_on = %installed_on,
             "Latest migration"
         );
     } else {
@@ -187,20 +192,20 @@ async fn check_schema(pool: &PgPool) -> Result<()> {
     }
 
     // Check tables exist
-    let tables = sqlx::query!(
+    let tables: Vec<(String,)> = sqlx::query_as(
         r#"
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'public'
         AND table_name IN ('leases', 'streams', 'recordings', 'ai_tasks')
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await?;
 
     info!("Found {} required tables", tables.len());
-    for table in tables {
-        info!(table = %table.table_name, "Table exists");
+    for (table_name,) in tables {
+        info!(table = %table_name, "Table exists");
     }
 
     Ok(())
@@ -220,7 +225,7 @@ async fn list_orphans(state_store: &PgStateStore, node_id: Option<&str>) -> Resu
             orphans.push(OrphanedResource {
                 resource_type: "stream".to_string(),
                 id: stream.config.id.clone(),
-                node_id: stream.node_id.clone(),
+                node_id: stream.node_id.clone().unwrap_or_else(|| "unknown".to_string()),
                 state: format!("{:?}", stream.state),
                 lease_id: stream.lease_id.clone(),
                 last_error: stream.last_error.clone(),
@@ -234,7 +239,7 @@ async fn list_orphans(state_store: &PgStateStore, node_id: Option<&str>) -> Resu
             orphans.push(OrphanedResource {
                 resource_type: "recording".to_string(),
                 id: recording.config.id.clone(),
-                node_id: recording.node_id.clone(),
+                node_id: recording.node_id.clone().unwrap_or_else(|| "unknown".to_string()),
                 state: format!("{:?}", recording.state),
                 lease_id: recording.lease_id.clone(),
                 last_error: recording.last_error.clone(),
@@ -445,7 +450,8 @@ async fn show_stats(state_store: &PgStateStore) -> Result<()> {
         .count();
 
     for stream in &streams {
-        *streams_by_node.entry(stream.node_id.clone()).or_insert(0) += 1;
+        let node_id = stream.node_id.clone().unwrap_or_else(|| "unknown".to_string());
+        *streams_by_node.entry(node_id).or_insert(0) += 1;
     }
 
     let active_recordings = recordings.iter().filter(|r| r.state.is_active()).count();
@@ -455,8 +461,9 @@ async fn show_stats(state_store: &PgStateStore) -> Result<()> {
         .count();
 
     for recording in &recordings {
+        let node_id = recording.node_id.clone().unwrap_or_else(|| "unknown".to_string());
         *recordings_by_node
-            .entry(recording.node_id.clone())
+            .entry(node_id)
             .or_insert(0) += 1;
     }
 

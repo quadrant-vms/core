@@ -15,11 +15,11 @@ impl DeviceStore {
             .await
             .context("failed to connect to database")?;
 
-        // Run migrations
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .context("failed to run migrations")?;
+        // Run migrations (commented out - run migrations manually)
+        // sqlx::migrate!()
+        //     .run(&pool)
+        //     .await
+        //     .context("failed to run migrations")?;
 
         Ok(Self { pool })
     }

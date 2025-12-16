@@ -106,11 +106,11 @@ async fn main() -> Result<()> {
             .connect(&database_url)
             .await?;
 
-        // Run migrations
-        info!("Running database migrations");
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await?;
+        // Run migrations (commented out - run migrations manually)
+        // info!("Running database migrations");
+        // sqlx::migrate!()
+        //     .run(&pool)
+        //     .await?;
 
         Some(Arc::new(PlaybackStore::new(pool)))
     } else {

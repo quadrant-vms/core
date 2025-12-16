@@ -33,11 +33,11 @@ async fn main() -> Result<()> {
 
     info!("Connected to database");
 
-    // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .context("Failed to run migrations")?;
+    // Run migrations (commented out - run migrations manually)
+    // sqlx::migrate!("./migrations")
+    //     .run(&pool)
+    //     .await
+    //     .context("Failed to run migrations")?;
 
     info!("Migrations complete");
 

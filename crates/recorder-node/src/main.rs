@@ -85,11 +85,11 @@ async fn main() -> anyhow::Result<()> {
       .connect(&database_url)
       .await?;
 
-    // Run migrations
-    info!("running retention database migrations");
-    sqlx::migrate!("./migrations")
-      .run(&pool)
-      .await?;
+    // Run migrations (commented out - run migrations manually)
+    // info!("running retention database migrations");
+    // sqlx::migrate!()
+    //   .run(&pool)
+    //   .await?;
 
     // Initialize retention store and executor
     let retention_store = Arc::new(PostgresRetentionStore::new(pool));
