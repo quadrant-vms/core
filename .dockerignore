@@ -1,0 +1,72 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Documentation
+*.md
+docs/
+CLAUDE.md
+README.md
+SERVICES.md
+RELIABILITY_AUDIT.md
+AUTHENTICATION.md
+HA_DEPLOYMENT.md
+GPU_ACCELERATION.md
+
+# Build artifacts
+target/
+**/target/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Data directories
+data/
+*.db
+*.sqlite
+
+# Logs
+*.log
+logs/
+
+# Node.js (keep node_modules for operator-ui)
+**/node_modules/
+!crates/operator-ui/frontend/node_modules/
+
+# Test files
+tests/
+*.test.*
+*.spec.*
+
+# Docker
+.dockerignore
+docker-compose*.yml
+
+# Profiles
+profiles/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
