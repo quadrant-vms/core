@@ -318,9 +318,16 @@ impl PlaybackManager {
     }
 
     fn find_recording_path(&self, recording_id: &str) -> Result<PathBuf> {
+        // Validate recording_id to prevent path traversal
+        common::validation::validate_id(recording_id, "recording_id")?;
+
         // Look for recording file with various extensions
         for ext in &["mp4", "mkv", "m3u8"] {
             let path = self.recording_storage_root.join(format!("{}.{}", recording_id, ext));
+
+            // Ensure the resolved path is within the storage root
+            common::validation::validate_path_components(&path, Some(&self.recording_storage_root), "recording_path")?;
+
             if path.exists() {
                 return Ok(path);
             }

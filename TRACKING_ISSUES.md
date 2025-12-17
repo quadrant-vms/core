@@ -8,7 +8,7 @@
 
 This document tracks all outstanding reliability and safety issues identified in the comprehensive audit. Issues are prioritized by severity and potential impact on production systems.
 
-**Progress**: 26/120 issues resolved (22% complete)
+**Progress**: 34/120 issues resolved (28% complete)
 
 ---
 
@@ -138,7 +138,7 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 
 ### P1-6: Stream Lifecycle - Orphaned Upload Tasks
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH
 **Impact**: Resource leaks, S3 watchers never cancelled
 **Location**:
@@ -147,9 +147,13 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 
 **Issue**: S3 upload tasks not tracked or cancelled when streams stop
 
-**Fix Required**: Track `JoinHandle`s and cancel on stream stop
+**Fix Applied**:
+- Modified registry to track `JoinHandle<()>` for upload tasks
+- Cancel upload task via `.abort()` when stream stops
+- Cancel upload task on stream exit in `list_streams()`
+- Fixed path safety in uploader.rs (line 100)
 
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 2-3 hours ✅ COMPLETED
 
 ---
 
@@ -157,7 +161,7 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 
 ### P2-1: Stream API Ergonomics & Validation
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: MEDIUM
 **Impact**: Poor REST semantics, missing input validation
 **Location**: `crates/stream-node/src/api/routes.rs`
@@ -166,18 +170,20 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 1. GET requests used for state-changing operations
 2. No input validation via `common::validation`
 
-**Fix Required**:
-- Change `/start` → POST with JSON body
-- Change `/stop` → DELETE with JSON body
-- Add `validation::validate_id()`, `validation::validate_uri()`
+**Fix Applied**:
+- Added POST `/start` with JSON body (new recommended endpoint)
+- Added DELETE `/stop` with JSON body (new recommended endpoint)
+- Maintained legacy GET endpoints for backward compatibility
+- Added input validation for `stream_id` and `source_uri` using `common::validation`
+- Updated route handlers with proper HTTP methods
 
-**Estimated Effort**: 2 hours
+**Estimated Effort**: 2 hours ✅ COMPLETED
 
 ---
 
 ### P2-2: Dependency Hygiene
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: LOW
 **Impact**: Using deprecated/unused dependencies
 **Location**: `crates/stream-node/Cargo.toml`
@@ -186,9 +192,12 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 1. `serde_yaml = "0.9.34+deprecated"` (deprecated)
 2. `lazy_static` (unused)
 
-**Fix Required**: Migrate to maintained crate, remove unused deps
+**Fix Applied**:
+- Migrated from `serde_yaml` to `serde_yml = "0.0.12"` (maintained fork)
+- Removed unused `lazy_static` dependency
+- Updated imports in `crates/stream-node/src/compat/mod.rs`
 
-**Estimated Effort**: 1 hour
+**Estimated Effort**: 1 hour ✅ COMPLETED
 
 ---
 
@@ -213,7 +222,7 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 
 ### P2-4: Path/Filename Safety in S3 Uploader
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH
 **Impact**: Service crash on malformed paths
 **Location**: `crates/stream-node/src/storage/uploader.rs:100`
@@ -223,9 +232,12 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 let filename = path.file_name().unwrap();  // Panics on ".." or malformed paths
 ```
 
-**Fix Required**: Sanitize S3 object keys, handle path errors gracefully
+**Fix Applied**:
+- Replaced `.unwrap()` with `Option` pattern matching
+- Logs warning and skips malformed paths instead of panicking
+- Graceful error handling for invalid filenames
 
-**Estimated Effort**: 1 hour
+**Estimated Effort**: 1 hour ✅ COMPLETED
 
 ---
 
@@ -247,47 +259,51 @@ let filename = path.file_name().unwrap();  // Panics on ".." or malformed paths
 
 ### P2-6: UUID Parsing Robustness (Service Audit)
 
-**Status**: 🟢 Alert-service fixed, other services need audit
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH
 **Impact**: Service crashes on malformed UUIDs
 
-**Services to Audit**:
-- ✅ alert-service (DONE)
-- ❓ admin-gateway
-- ❓ device-manager
-- ❓ recorder-node
-- ❓ ai-service
+**Services Audited**:
+- ✅ alert-service (DONE - previously fixed)
+- ✅ admin-gateway (CLEAN - no unsafe UUID parsing)
+- ✅ device-manager (CLEAN - no unsafe UUID parsing)
+- ✅ recorder-node (FIXED - 2 instances improved with logging)
+- ✅ ai-service (CLEAN - no unsafe UUID parsing)
 
-**Fix Required**: Ensure all UUID parsing uses `validation::parse_uuid`
+**Fix Applied**:
+- Improved UUID parsing in `recorder-node/src/search/store.rs` (lines 30, 78)
+- Added `common::validation::parse_uuid()` with fallback and logging
+- All services now use safe UUID parsing with graceful error handling
 
-**Estimated Effort**: 3-4 hours
+**Estimated Effort**: 3-4 hours ✅ COMPLETED
 
 ---
 
 ### P2-7: Path Traversal Hardening
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH (Security)
 **Impact**: Unauthorized file access
 **Locations**:
 - `crates/playback-service/src/playback/manager.rs:305-319`
-- `crates/recorder-node/src/recording/manager.rs`
+- `crates/recorder-node/src/recording/thumbnail_generator.rs`
 
 **Issue**: No canonicalization or bounds checking on recording/HLS paths
 
-**Fix Required**:
-```rust
-use common::validation;
-validation::validate_path_components(&path, Some(&storage_root), "recording_path")?;
-```
+**Fix Applied**:
+- Added `validation::validate_id()` for recording_id inputs
+- Added `validation::validate_path_components()` to ensure paths stay within storage root
+- Applied to `playback-service/src/playback/manager.rs::find_recording_path()`
+- Applied to `recorder-node/src/recording/thumbnail_generator.rs::find_recording_path()`
+- Prevents path traversal attacks like `../../etc/passwd`
 
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 2-3 hours ✅ COMPLETED
 
 ---
 
 ### P2-8: MQTT/Webhook Robustness
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: MEDIUM
 **Impact**: Silent notification failures
 **Location**: `crates/alert-service/src/notifier.rs`
@@ -296,17 +312,19 @@ validation::validate_path_components(&path, Some(&storage_root), "recording_path
 1. MQTT eventloop stops on error (line 254-265) - no reconnection
 2. Webhook client has no timeout (line 132)
 
-**Fix Required**:
-- Add exponential backoff reconnection for MQTT
-- Add configurable timeout for webhook requests
+**Fix Applied**:
+- ✅ Webhook already had 30-second timeout (verified at line 130)
+- ✅ Added exponential backoff reconnection for MQTT eventloop
+- Retry delay starts at 1 second, doubles on each failure, capped at 60 seconds
+- MQTT connection now automatically recovers from network issues
 
-**Estimated Effort**: 2-3 hours
+**Estimated Effort**: 2-3 hours ✅ COMPLETED
 
 ---
 
 ### P2-9: Regex Safety (ReDoS Prevention)
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH (Security)
 **Impact**: Denial of Service via malicious regex patterns
 **Location**: `crates/alert-service/src/rule_engine.rs:210`
@@ -318,13 +336,13 @@ let regex = Regex::new(&pattern).unwrap();  // No validation
 
 **Attack Vector**: User submits pattern like `(a+)+b` → catastrophic backtracking
 
-**Fix Required**:
-```rust
-validation::validate_regex_pattern(&pattern)?;
-let regex = Regex::new(&pattern)?;
-```
+**Fix Applied**:
+- Added `common::validation::validate_regex_pattern()` before regex compilation
+- Returns `false` with warning log instead of panicking on invalid patterns
+- Graceful error handling for compilation failures
+- Prevents ReDoS attacks from malicious regex patterns
 
-**Estimated Effort**: 1 hour
+**Estimated Effort**: 1 hour ✅ COMPLETED
 
 ---
 
@@ -348,7 +366,7 @@ let regex = Regex::new(&pattern)?;
 
 ### P3-2: Database Enum Parsing Fallbacks
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: LOW
 **Impact**: Service crash on corrupted DB data
 **Location**: `crates/alert-service/src/store.rs:178-179`
@@ -358,9 +376,13 @@ let regex = Regex::new(&pattern)?;
 severity: row.get::<String, _>("severity").parse().unwrap(),
 ```
 
-**Fix Required**: Use `.unwrap_or(Default::default())` or return error
+**Fix Applied**:
+- Added `Default` derive to `Severity` and `TriggerType` enums
+- Replaced `.unwrap()` with `.unwrap_or_default()` for graceful fallbacks
+- Added warning logs when invalid enum values are encountered
+- Service now continues operation instead of crashing on corrupted data
 
-**Estimated Effort**: 1 hour
+**Estimated Effort**: 1 hour ✅ COMPLETED
 
 ---
 
@@ -413,10 +435,10 @@ Additional issues found in code comments (not yet triaged):
 
 | Priority | Open | In Progress | Completed | Total |
 |----------|------|-------------|-----------|-------|
-| **P1 (Critical)** | 1 | 0 | 5 | 6 |
-| **P2 (High)** | 9 | 0 | 0 | 9 |
-| **P3 (Medium)** | 4 | 0 | 0 | 4 |
-| **TOTAL** | **14** | **0** | **5** | **19** |
+| **P1 (Critical)** | 0 | 0 | 6 | 6 |
+| **P2 (High)** | 3 | 0 | 6 | 9 |
+| **P3 (Medium)** | 3 | 0 | 1 | 4 |
+| **TOTAL** | **6** | **0** | **13** | **19** |
 
 **Previously Completed** (see [RELIABILITY_FIXES_APPLIED.md](RELIABILITY_FIXES_APPLIED.md)):
 - ✅ UUID parsing panics (alert-service) - 10 issues

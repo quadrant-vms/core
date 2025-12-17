@@ -169,14 +169,26 @@ impl AlertStore {
 
         match row {
             Some(row) => {
+                let severity_str: String = row.get("severity");
+                let severity = severity_str.parse().map_err(|e| {
+                    tracing::warn!(severity=%severity_str, error=%e, "invalid severity in database, using default");
+                    e
+                }).unwrap_or_default();
+
+                let trigger_type_str: String = row.get("trigger_type");
+                let trigger_type = trigger_type_str.parse().map_err(|e| {
+                    tracing::warn!(trigger_type=%trigger_type_str, error=%e, "invalid trigger_type in database, using default");
+                    e
+                }).unwrap_or_default();
+
                 let rule = AlertRule {
                     id: row.get("id"),
                     tenant_id: row.get("tenant_id"),
                     name: row.get("name"),
                     description: row.get("description"),
                     enabled: row.get("enabled"),
-                    severity: row.get::<String, _>("severity").parse().unwrap(),
-                    trigger_type: row.get::<String, _>("trigger_type").parse().unwrap(),
+                    severity,
+                    trigger_type,
                     condition_json: row.get("condition_json"),
                     suppress_duration_secs: row.get("suppress_duration_secs"),
                     max_alerts_per_hour: row.get("max_alerts_per_hour"),

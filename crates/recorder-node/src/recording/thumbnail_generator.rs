@@ -107,11 +107,18 @@ pub fn generate_recording_thumbnail_grid(
 
 /// Find the recording file path from the recording ID
 pub fn find_recording_path(storage_root: &Path, recording_id: &str) -> Result<PathBuf> {
+    // Validate recording_id to prevent path traversal
+    common::validation::validate_id(recording_id, "recording_id")?;
+
     // Try different possible file extensions
     let extensions = ["mp4", "mkv", "m3u8"];
 
     for ext in &extensions {
         let path = storage_root.join(format!("{}.{}", recording_id, ext));
+
+        // Ensure the resolved path is within the storage root
+        common::validation::validate_path_components(&path, Some(storage_root), "recording_path")?;
+
         if path.exists() {
             debug!(
                 recording_id = recording_id,
@@ -124,6 +131,10 @@ pub fn find_recording_path(storage_root: &Path, recording_id: &str) -> Result<Pa
 
     // Also check in subdirectories (for HLS)
     let hls_path = storage_root.join(recording_id).join("index.m3u8");
+
+    // Ensure the resolved path is within the storage root
+    common::validation::validate_path_components(&hls_path, Some(storage_root), "recording_path")?;
+
     if hls_path.exists() {
         debug!(
             recording_id = recording_id,

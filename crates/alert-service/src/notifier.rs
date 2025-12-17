@@ -266,14 +266,23 @@ impl MqttChannel {
 
         let (client, mut eventloop) = AsyncClient::new(mqtt_options, 10);
 
-        // Spawn eventloop task
+        // Spawn eventloop task with reconnection logic
         tokio::spawn(async move {
+            let mut retry_delay = Duration::from_secs(1);
+            const MAX_RETRY_DELAY: Duration = Duration::from_secs(60);
+
             loop {
                 match eventloop.poll().await {
-                    Ok(_) => {}
+                    Ok(_) => {
+                        // Reset retry delay on successful poll
+                        retry_delay = Duration::from_secs(1);
+                    }
                     Err(e) => {
-                        error!("MQTT eventloop error: {}", e);
-                        break;
+                        error!("MQTT eventloop error: {}, retrying in {:?}", e, retry_delay);
+                        tokio::time::sleep(retry_delay).await;
+
+                        // Exponential backoff with cap
+                        retry_delay = std::cmp::min(retry_delay * 2, MAX_RETRY_DELAY);
                     }
                 }
             }

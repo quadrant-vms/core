@@ -27,7 +27,11 @@ impl PostgresSearchStore {
 #[async_trait]
 impl SearchStore for PostgresSearchStore {
   async fn index_recording(&self, entry: &RecordingIndexEntry) -> Result<()> {
-    let id = Uuid::parse_str(&entry.id).unwrap_or_else(|_| Uuid::new_v4());
+    let id = common::validation::parse_uuid(&entry.id, "recording_id")
+      .unwrap_or_else(|_| {
+        tracing::warn!(id=%entry.id, "invalid UUID, generating new one");
+        Uuid::new_v4()
+      });
     let tenant_id = entry.tenant_id.as_ref().and_then(|s| Uuid::parse_str(s).ok());
     let started_at = chrono::DateTime::from_timestamp(entry.started_at, 0);
     let stopped_at = entry.stopped_at.and_then(|t| chrono::DateTime::from_timestamp(t, 0));
@@ -75,7 +79,11 @@ impl SearchStore for PostgresSearchStore {
   }
 
   async fn index_event(&self, entry: &EventIndexEntry) -> Result<()> {
-    let id = Uuid::parse_str(&entry.id).unwrap_or_else(|_| Uuid::new_v4());
+    let id = common::validation::parse_uuid(&entry.id, "event_id")
+      .unwrap_or_else(|_| {
+        tracing::warn!(id=%entry.id, "invalid UUID, generating new one");
+        Uuid::new_v4()
+      });
     let tenant_id = entry.tenant_id.as_ref().and_then(|s| Uuid::parse_str(s).ok());
     let occurred_at = chrono::DateTime::from_timestamp(entry.occurred_at, 0);
     let event_data_json = serde_json::to_value(&entry.event_data)?;

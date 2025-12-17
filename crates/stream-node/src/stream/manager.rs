@@ -12,6 +12,7 @@ use std::{
   time::{Duration, Instant},
 };
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 // Maximum concurrent streams to prevent OOM
@@ -36,7 +37,7 @@ pub struct StreamStatus {
   pub output_dir: PathBuf,
 }
 
-static REGISTRY: Lazy<Mutex<HashMap<String, (Child, StreamStatus, StreamSpec)>>> =
+static REGISTRY: Lazy<Mutex<HashMap<String, (Child, StreamStatus, StreamSpec, Option<JoinHandle<()>>)>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn readiness_timeout() -> Duration {
@@ -146,6 +147,17 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
             playlist: playlist.clone(),
             output_dir: out_dir.clone(),
           };
+          // Spawn upload task
+          let dir_for_upload = out_dir.clone();
+          let id_for_upload = spec_req.id.clone();
+          let upload_handle = tokio::spawn(async move {
+            let mut cfg = UploaderConfig::default();
+            cfg.prefix = id_for_upload.clone();
+            if let Err(e) = storage::watch_and_upload(dir_for_upload, cfg, id_for_upload).await {
+              error!("uploader error: {e}");
+            }
+          });
+
           {
             let mut reg = REGISTRY.lock().await;
             reg.insert(
@@ -159,22 +171,11 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
                   codec,
                   container,
                 },
+                Some(upload_handle),
               ),
             );
           }
           STREAMS_RUNNING.inc();
-
-          {
-            let dir_for_upload = out_dir.clone();
-            let id_for_upload = spec_req.id.clone();
-            tokio::spawn(async move {
-              let mut cfg = UploaderConfig::default();
-              cfg.prefix = id_for_upload.clone();
-              if let Err(e) = storage::watch_and_upload(dir_for_upload, cfg, id_for_upload).await {
-                error!("uploader error: {e}");
-              }
-            });
-          }
 
           info!(id=%spec_req.id, preset=%tuned.name, "pipeline ready");
           return Ok(());
@@ -228,8 +229,16 @@ async fn wait_for_hls_ready(dir: &PathBuf, timeout: Duration) -> bool {
 
 pub async fn stop_stream(id: &str) -> Result<()> {
   let mut reg = REGISTRY.lock().await;
-  if let Some((mut child, _status, _spec)) = reg.remove(id) {
+  if let Some((mut child, _status, _spec, upload_handle)) = reg.remove(id) {
+    // Kill FFmpeg process
     let _ = child.kill();
+
+    // Cancel upload task if it exists
+    if let Some(handle) = upload_handle {
+      handle.abort();
+      info!(id=%id, "upload task cancelled");
+    }
+
     STREAMS_RUNNING.dec();
     Ok(())
   } else {
@@ -240,7 +249,7 @@ pub async fn stop_stream(id: &str) -> Result<()> {
 pub async fn list_streams() -> Vec<StreamStatus> {
   let mut reg = REGISTRY.lock().await;
   let mut to_remove = vec![];
-  for (id, (child, status, _spec)) in reg.iter_mut() {
+  for (id, (child, status, _spec, _upload)) in reg.iter_mut() {
     if let Ok(Some(_exit)) = child.try_wait() {
       status.running = false;
       to_remove.push(id.clone());
@@ -249,9 +258,14 @@ pub async fn list_streams() -> Vec<StreamStatus> {
     }
   }
   for id in to_remove {
-    reg.remove(&id);
-    STREAMS_RUNNING.dec();
+    if let Some((_child, _status, _spec, upload_handle)) = reg.remove(&id) {
+      // Cancel upload task on stream exit
+      if let Some(handle) = upload_handle {
+        handle.abort();
+      }
+      STREAMS_RUNNING.dec();
+    }
   }
 
-  reg.values().map(|(_c, s, _)| s.clone()).collect()
+  reg.values().map(|(_c, s, _, _)| s.clone()).collect()
 }

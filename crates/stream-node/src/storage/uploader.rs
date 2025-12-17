@@ -97,7 +97,11 @@ pub async fn watch_and_upload(dir: PathBuf, s3cfg: S3Config, prefix: String) -> 
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let key = format!("{}/{}", prefix, path.file_name().unwrap().to_string_lossy());
+    let Some(filename) = path.file_name() else {
+      warn!("invalid path, no filename: {:?}", path);
+      continue;
+    };
+    let key = format!("{}/{}", prefix, filename.to_string_lossy());
     match tokio::fs::read(&path).await {
       Ok(bytes) => {
         let body = ByteStream::from(bytes);

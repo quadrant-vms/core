@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
-pub struct StartQuery {
+pub struct StartRequest {
   pub id: String,
   pub uri: String,
   #[serde(default = "default_codec")]
@@ -14,6 +14,22 @@ pub fn default_codec() -> String {
 }
 pub fn default_container() -> String {
   "ts".into()
+}
+
+#[derive(Deserialize)]
+pub struct StopRequest {
+  pub id: String,
+}
+
+// Legacy query support (deprecated)
+#[derive(Deserialize)]
+pub struct StartQuery {
+  pub id: String,
+  pub uri: String,
+  #[serde(default = "default_codec")]
+  pub codec: String,
+  #[serde(default = "default_container")]
+  pub container: String,
 }
 
 #[derive(Deserialize)]

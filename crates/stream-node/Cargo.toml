@@ -17,10 +17,9 @@ tokio-util = "0.7"
 base64 = "0.22"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yaml = "0.9.34+deprecated"
+serde_yml = "0.0.12"
 tracing = "0.1"
 reqwest = { version = "0.12", features = ["json", "stream"] }
-lazy_static = "1.5.0"
 aws-credential-types = "1.2.8"
 aws-config = "1"
 aws-sdk-s3 = "1"

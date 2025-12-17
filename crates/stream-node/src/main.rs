@@ -1,4 +1,4 @@
-use axum::{middleware, routing::get, Router};
+use axum::{middleware, routing::{delete, get, post}, Router};
 use telemetry::{trace_http_request, TracingConfig};
 use tokio::net::TcpListener;
 use tower::ServiceBuilder;
@@ -27,6 +27,10 @@ async fn main() -> anyhow::Result<()> {
   let app = Router::new()
     .route("/healthz", get(api::healthz))
     .route("/streams", get(api::list_streams))
+    // Recommended REST endpoints with proper HTTP methods
+    .route("/start", post(api::start_stream))
+    .route("/stop", delete(api::stop_stream))
+    // Legacy GET endpoints (deprecated but maintained for compatibility)
     .route("/start", get(api::start_stream_api))
     .route("/stop", get(api::stop_stream_api))
     .route("/metrics", get(|| async { metrics::render() }))

@@ -36,7 +36,7 @@ pub fn load_profiles_from_dir(dir: &Path) -> Vec<profile::CameraProfile> {
 
       match std::fs::read_to_string(&path) {
         Ok(s) => {
-          match serde_yaml::from_str::<profile::CameraProfile>(&s) {
+          match serde_yml::from_str::<profile::CameraProfile>(&s) {
             Ok(mut p) => {
               // attach source file hint for debugging
               p.source_file = Some(path.to_string_lossy().to_string());

@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type, Default)]
 #[sqlx(type_name = "text")]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
+    #[default]
     Info,
     Warning,
     Error,
@@ -38,7 +39,7 @@ impl std::str::FromStr for Severity {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type, Default)]
 #[sqlx(type_name = "text")]
 #[serde(rename_all = "snake_case")]
 pub enum TriggerType {
@@ -53,6 +54,7 @@ pub enum TriggerType {
     StreamStopped,
     StreamFailed,
     HealthCheckFailed,
+    #[default]
     Custom,
 }
 

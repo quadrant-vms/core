@@ -206,9 +206,20 @@ impl RuleEngine {
 
     /// Simple wildcard matching (* and ? support)
     fn wildcard_match(&self, pattern: &str, text: &str) -> bool {
+        // Validate regex pattern to prevent ReDoS attacks
+        if let Err(e) = common::validation::validate_regex_pattern(pattern) {
+            tracing::warn!(pattern=%pattern, error=%e, "invalid regex pattern");
+            return false;
+        }
+
         let pattern = pattern.replace('*', ".*").replace('?', ".");
-        let re = regex::Regex::new(&format!("^{}$", pattern)).unwrap();
-        re.is_match(text)
+        match regex::Regex::new(&format!("^{}$", pattern)) {
+            Ok(re) => re.is_match(text),
+            Err(e) => {
+                tracing::warn!(pattern=%pattern, error=%e, "failed to compile regex");
+                false
+            }
+        }
     }
 
     /// Check if alert should be suppressed
@@ -308,10 +319,10 @@ impl RuleEngine {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_wildcard_match() {
+    #[tokio::test]
+    async fn test_wildcard_match() {
         let engine = RuleEngine {
-            store: AlertStore::new(sqlx::PgPool::connect_lazy("").unwrap()),
+            store: AlertStore::new(sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap()),
         };
 
         assert!(engine.wildcard_match("Camera*", "Camera1"));
@@ -323,10 +334,10 @@ mod tests {
         assert!(!engine.wildcard_match("Cam?ra", "Cam12ra"));
     }
 
-    #[test]
-    fn test_operator_matching() {
+    #[tokio::test]
+    async fn test_operator_matching() {
         let engine = RuleEngine {
-            store: AlertStore::new(sqlx::PgPool::connect_lazy("").unwrap()),
+            store: AlertStore::new(sqlx::PgPool::connect_lazy("postgres://localhost/test").unwrap()),
         };
 
         let actual = serde_json::json!(85.5);
