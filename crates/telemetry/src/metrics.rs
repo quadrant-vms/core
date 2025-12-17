@@ -138,6 +138,19 @@ lazy_static! {
         metric
     };
 
+    pub static ref STREAM_NODE_STREAM_REJECTIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "stream_node_stream_rejections_total",
+                "Total number of rejected stream requests",
+            ),
+            &["reason"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
     // ==== Recorder Node Metrics ====
     pub static ref RECORDER_NODE_ACTIVE_RECORDINGS: IntGauge = {
         let metric = IntGauge::new("recorder_node_active_recordings", "Number of active recordings")
@@ -189,6 +202,63 @@ lazy_static! {
         let metric = Counter::new(
             "recorder_node_bytes_recorded_total",
             "Total bytes recorded",
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref RECORDER_NODE_RECORDING_REJECTIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "recorder_node_recording_rejections_total",
+                "Total number of rejected recording requests",
+            ),
+            &["reason"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    // ==== Playback Service Metrics ====
+    pub static ref PLAYBACK_SERVICE_ACTIVE_SESSIONS: IntGauge = {
+        let metric = IntGauge::new("playback_service_active_sessions", "Number of active playback sessions")
+            .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref PLAYBACK_SERVICE_SESSION_OPERATIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "playback_service_session_operations_total",
+                "Total number of playback session operations",
+            ),
+            &["operation", "status"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref PLAYBACK_SERVICE_SESSION_REJECTIONS: IntCounterVec = {
+        let metric = IntCounterVec::new(
+            Opts::new(
+                "playback_service_session_rejections_total",
+                "Total number of rejected playback session requests",
+            ),
+            &["reason"],
+        )
+        .expect("metric can be created");
+        REGISTRY.register(Box::new(metric.clone())).ok();
+        metric
+    };
+
+    pub static ref PLAYBACK_SERVICE_BYTES_SERVED: Counter = {
+        let metric = Counter::new(
+            "playback_service_bytes_served_total",
+            "Total bytes served to playback clients",
         )
         .expect("metric can be created");
         REGISTRY.register(Box::new(metric.clone())).ok();
@@ -421,6 +491,45 @@ mod tests {
         assert_eq!(
             AI_SERVICE_FRAMES_PROCESSED
                 .with_label_values(&["mock_detector", "success"])
+                .get(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_playback_service_metrics_accessible() {
+        PLAYBACK_SERVICE_ACTIVE_SESSIONS.set(8);
+        assert_eq!(PLAYBACK_SERVICE_ACTIVE_SESSIONS.get(), 8);
+
+        PLAYBACK_SERVICE_SESSION_REJECTIONS
+            .with_label_values(&["capacity"])
+            .inc();
+        assert_eq!(
+            PLAYBACK_SERVICE_SESSION_REJECTIONS
+                .with_label_values(&["capacity"])
+                .get(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_rejection_metrics_accessible() {
+        STREAM_NODE_STREAM_REJECTIONS
+            .with_label_values(&["capacity"])
+            .inc();
+        assert_eq!(
+            STREAM_NODE_STREAM_REJECTIONS
+                .with_label_values(&["capacity"])
+                .get(),
+            1
+        );
+
+        RECORDER_NODE_RECORDING_REJECTIONS
+            .with_label_values(&["capacity"])
+            .inc();
+        assert_eq!(
+            RECORDER_NODE_RECORDING_REJECTIONS
+                .with_label_values(&["capacity"])
                 .get(),
             1
         );

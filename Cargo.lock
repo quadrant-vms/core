@@ -4192,6 +4192,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "telemetry",
  "tempfile",
  "tokio",
  "tokio-util",

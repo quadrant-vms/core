@@ -161,6 +161,10 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
     }
     // Check concurrent stream limit
     if reg.len() >= MAX_CONCURRENT_STREAMS {
+      // Increment rejection metric with "capacity" reason
+      telemetry::metrics::STREAM_NODE_STREAM_REJECTIONS
+        .with_label_values(&["capacity"])
+        .inc();
       return Err(anyhow!(
         "Maximum concurrent streams ({}) exceeded. Cannot start new stream.",
         MAX_CONCURRENT_STREAMS

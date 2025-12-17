@@ -77,6 +77,10 @@ impl PlaybackManager {
         {
             let sessions = self.sessions.read().await;
             if sessions.len() >= MAX_CONCURRENT_SESSIONS {
+                // Increment rejection metric with "capacity" reason
+                telemetry::metrics::PLAYBACK_SERVICE_SESSION_REJECTIONS
+                    .with_label_values(&["capacity"])
+                    .inc();
                 return Err(anyhow!(
                     "Maximum concurrent playback sessions ({}) exceeded. Cannot start new session.",
                     MAX_CONCURRENT_SESSIONS

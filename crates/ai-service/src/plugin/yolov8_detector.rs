@@ -540,7 +540,8 @@ impl AiPlugin for YoloV8DetectorPlugin {
         };
 
         self.session = Some(Arc::new(Mutex::new(session)));
-        *self.execution_provider_used.lock().unwrap() = actual_provider.clone();
+        *self.execution_provider_used.lock()
+            .expect("BUG: execution_provider_used mutex poisoned during initialization") = actual_provider.clone();
 
         tracing::info!(
             "Initialized YOLOv8 detector - model: {}, provider: {}, device: {}, confidence: {}, input_size: {}",
@@ -606,7 +607,9 @@ impl AiPlugin for YoloV8DetectorPlugin {
             0.0
         };
 
-        let execution_provider = self.execution_provider_used.lock().unwrap().clone();
+        let execution_provider = self.execution_provider_used.lock()
+            .expect("BUG: execution_provider_used mutex poisoned")
+            .clone();
 
         // Track GPU/CPU inference metrics
         telemetry::metrics::AI_SERVICE_GPU_INFERENCE

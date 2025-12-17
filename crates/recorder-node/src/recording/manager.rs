@@ -121,6 +121,10 @@ impl RecordingManager {
     }
     // Check concurrent recording limit
     if recordings.len() >= MAX_CONCURRENT_RECORDINGS {
+      // Increment rejection metric with "capacity" reason
+      telemetry::metrics::RECORDER_NODE_RECORDING_REJECTIONS
+        .with_label_values(&["capacity"])
+        .inc();
       return Ok(RecordingStartResponse {
         accepted: false,
         lease_id: None,

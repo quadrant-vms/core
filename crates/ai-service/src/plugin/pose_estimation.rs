@@ -569,7 +569,8 @@ impl AiPlugin for PoseEstimationPlugin {
         };
 
         self.session = Some(Arc::new(Mutex::new(session)));
-        *self.execution_provider_used.lock().unwrap() = actual_provider.clone();
+        *self.execution_provider_used.lock()
+            .expect("BUG: execution_provider_used mutex poisoned during initialization") = actual_provider.clone();
 
         tracing::info!(
             "Initialized pose estimation plugin - model: {}, provider: {}, device: {}, input_size: {}",
@@ -643,7 +644,9 @@ impl AiPlugin for PoseEstimationPlugin {
             0.0
         };
 
-        let execution_provider = self.execution_provider_used.lock().unwrap().clone();
+        let execution_provider = self.execution_provider_used.lock()
+            .expect("BUG: execution_provider_used mutex poisoned")
+            .clone();
 
         // Track metrics
         telemetry::metrics::AI_SERVICE_GPU_INFERENCE

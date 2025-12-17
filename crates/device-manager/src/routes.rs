@@ -225,6 +225,39 @@ async fn update_device(
             .into_response();
     }
 
+    // Validate optional name field
+    if let Some(ref name) = req.name {
+        if let Err(e) = common::validation::validate_name(name, "name") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid name: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Validate optional primary_uri field
+    if let Some(ref uri) = req.primary_uri {
+        if let Err(e) = common::validation::validate_uri(uri, "primary_uri") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid primary_uri: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
+    // Validate optional secondary_uri field
+    if let Some(ref uri) = req.secondary_uri {
+        if let Err(e) = common::validation::validate_uri(uri, "secondary_uri") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid secondary_uri: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
     // Check device exists and user has access
     match state.store.get_device(&device_id).await {
         Ok(Some(device)) => {
@@ -592,10 +625,45 @@ async fn batch_update_devices(
             .into_response();
     }
 
+    // Validate update request fields
+    if let Some(ref name) = req.update.name {
+        if let Err(e) = common::validation::validate_name(name, "name") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid name: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+    if let Some(ref uri) = req.update.primary_uri {
+        if let Err(e) = common::validation::validate_uri(uri, "primary_uri") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid primary_uri: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+    if let Some(ref uri) = req.update.secondary_uri {
+        if let Err(e) = common::validation::validate_uri(uri, "secondary_uri") {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("invalid secondary_uri: {}", e)})),
+            )
+                .into_response();
+        }
+    }
+
     let mut succeeded = Vec::new();
     let mut failed = HashMap::new();
 
     for device_id in req.device_ids {
+        // Validate each device_id
+        if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+            failed.insert(device_id.clone(), format!("invalid device_id: {}", e));
+            continue;
+        }
+
         // Check device exists and user has access
         match state.store.get_device(&device_id).await {
             Ok(Some(device)) => {
