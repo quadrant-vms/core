@@ -9,7 +9,8 @@ use openidconnect::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use crate::{error::ApiError, models::OidcProvider};
 
@@ -44,7 +45,7 @@ impl OidcClientManager {
     pub async fn get_client(&self, provider: &OidcProvider) -> Result<CoreClient, ApiError> {
         // Check cache first
         {
-            let clients = self.clients.read().unwrap();
+            let clients = self.clients.read().await;
             if let Some(client) = clients.get(&provider.provider_id) {
                 return Ok(client.clone());
             }
@@ -55,7 +56,7 @@ impl OidcClientManager {
 
         // Cache it
         {
-            let mut clients = self.clients.write().unwrap();
+            let mut clients = self.clients.write().await;
             clients.insert(provider.provider_id.clone(), client.clone());
         }
 
@@ -111,7 +112,7 @@ impl OidcClientManager {
 
         // Store state for CSRF validation
         {
-            let mut states = self.states.write().unwrap();
+            let mut states = self.states.write().await;
             states.insert(
                 csrf_state.secret().clone(),
                 (provider.provider_id.clone(), nonce.secret().clone()),
@@ -131,7 +132,7 @@ impl OidcClientManager {
     ) -> Result<OidcUserInfo, ApiError> {
         // Verify CSRF state
         let (provider_id, nonce_secret) = {
-            let mut states = self.states.write().unwrap();
+            let mut states = self.states.write().await;
             states
                 .remove(state)
                 .ok_or_else(|| ApiError::bad_request("invalid or expired state"))?
@@ -194,18 +195,18 @@ impl OidcClientManager {
     }
 
     /// Invalidate cached client for a provider (call when provider config changes)
-    pub fn invalidate_client(&self, provider_id: &str) {
-        let mut clients = self.clients.write().unwrap();
+    pub async fn invalidate_client(&self, provider_id: &str) {
+        let mut clients = self.clients.write().await;
         clients.remove(provider_id);
     }
 
     /// Clean up expired CSRF states (should be called periodically)
-    pub fn cleanup_expired_states(&self, _max_age_secs: i64) {
+    pub async fn cleanup_expired_states(&self, _max_age_secs: i64) {
         // For simplicity, we'll remove all states older than max_age
         // In production, you'd want to store timestamps with states
         // For now, we just clear states that are older than a reasonable timeout
         // This is a simple implementation - consider using a TTL cache in production
-        let mut states = self.states.write().unwrap();
+        let mut states = self.states.write().await;
         if states.len() > 1000 {
             // Prevent unbounded growth
             states.clear();
@@ -303,10 +304,10 @@ mod tests {
         assert!(keycloak.issuer_url.contains("realms/myrealm"));
     }
 
-    #[test]
-    fn test_oidc_manager_creation() {
+    #[tokio::test]
+    async fn test_oidc_manager_creation() {
         let manager = OidcClientManager::new();
-        let clients = manager.clients.read().unwrap();
+        let clients = manager.clients.read().await;
         assert_eq!(clients.len(), 0);
     }
 }

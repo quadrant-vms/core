@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::{SocketAddr, UdpSocket};
@@ -269,8 +269,16 @@ impl OnvifDiscoveryClient {
         let name = self.extract_scope_value(&scopes, "name");
         let location = self.extract_scope_value(&scopes, "location");
 
+        // Ensure we have at least one xaddr (device service URL)
+        let device_service_url = xaddr_list.first()
+            .ok_or_else(|| {
+                warn!("ONVIF device returned empty xaddr list, skipping");
+                anyhow!("Empty xaddr list")
+            })
+            .ok()?;
+
         Some(DiscoveredDevice {
-            device_service_url: xaddr_list.first().unwrap().clone(),
+            device_service_url: device_service_url.clone(),
             scopes,
             types,
             xaddrs: xaddr_list,

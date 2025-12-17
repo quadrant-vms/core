@@ -12,6 +12,9 @@ use super::dvr::DvrBufferManager;
 use super::ll_hls::{BlockingParams, HlsVariant, LlHlsConfig, LlHlsPlaylistGenerator};
 use super::store::PlaybackStore;
 
+// Maximum concurrent playback sessions to prevent OOM
+const MAX_CONCURRENT_SESSIONS: usize = 10000;
+
 /// In-memory playback session data
 struct SessionData {
     info: PlaybackInfo,
@@ -69,6 +72,17 @@ impl PlaybackManager {
     /// Start a new playback session
     pub async fn start(&self, config: PlaybackConfig) -> Result<PlaybackInfo> {
         info!(session_id = %config.session_id, source = %config.source_id, "starting playback session");
+
+        // Check concurrent session limit
+        {
+            let sessions = self.sessions.read().await;
+            if sessions.len() >= MAX_CONCURRENT_SESSIONS {
+                return Err(anyhow!(
+                    "Maximum concurrent playback sessions ({}) exceeded. Cannot start new session.",
+                    MAX_CONCURRENT_SESSIONS
+                ));
+            }
+        }
 
         // Validate source exists
         self.validate_source(&config).await?;
@@ -151,7 +165,11 @@ impl PlaybackManager {
             },
         );
 
-        info!(session_id = %config.session_id, url = %info.playback_url.as_ref().unwrap(), "playback session started");
+        if let Some(url) = &info.playback_url {
+            info!(session_id = %config.session_id, url = %url, "playback session started");
+        } else {
+            info!(session_id = %config.session_id, "playback session started (no URL)");
+        }
         Ok(info)
     }
 
@@ -167,10 +185,7 @@ impl PlaybackManager {
             // Update state
             let mut info = session_data.info;
             info.state = PlaybackState::Stopped;
-            info.stopped_at = Some(std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs());
+            info.stopped_at = Some(common::validation::safe_unix_timestamp());
 
             if let Some(store) = &self.store {
                 store.save(&info).await?;
@@ -322,12 +337,15 @@ impl PlaybackManager {
         let recording_path = self.find_recording_path(recording_id)?;
 
         // Use ffprobe to get duration
+        let path_str = recording_path.to_str()
+            .ok_or_else(|| anyhow!("Recording path contains invalid UTF-8"))?;
+
         let output = tokio::process::Command::new("ffprobe")
             .args(&[
                 "-v", "error",
                 "-show_entries", "format=duration",
                 "-of", "default=noprint_wrappers=1:nokey=1",
-                recording_path.to_str().unwrap(),
+                path_str,
             ])
             .output()
             .await?;

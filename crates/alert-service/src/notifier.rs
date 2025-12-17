@@ -216,8 +216,12 @@ impl NotificationChannel for WebhookChannel {
     }
 }
 
+// Maximum MQTT clients to cache (prevent unbounded growth)
+const MAX_MQTT_CLIENTS: usize = 100;
+
 pub struct MqttChannel {
     // We'll keep a cache of MQTT clients per broker
+    // Using LRU-like eviction: when limit reached, remove random oldest entry
     clients: Arc<tokio::sync::Mutex<HashMap<String, AsyncClient>>>,
 }
 
@@ -233,6 +237,17 @@ impl MqttChannel {
 
         if let Some(client) = clients.get(&config.broker) {
             return Ok(client.clone());
+        }
+
+        // Enforce cache size limit (simple eviction: remove first entry if at capacity)
+        if clients.len() >= MAX_MQTT_CLIENTS {
+            if let Some(key_to_remove) = clients.keys().next().cloned() {
+                clients.remove(&key_to_remove);
+                tracing::warn!(
+                    removed_broker = %key_to_remove,
+                    "MQTT client cache full, evicted oldest entry"
+                );
+            }
         }
 
         // Parse broker URL

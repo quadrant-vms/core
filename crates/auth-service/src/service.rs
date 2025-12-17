@@ -392,14 +392,14 @@ impl AuthService {
             .await?;
 
         // Invalidate cached client when provider config changes
-        self.oidc_manager.invalidate_client(provider_id);
+        self.oidc_manager.invalidate_client(provider_id).await;
 
         Ok(provider)
     }
 
     pub async fn delete_oidc_provider(&self, provider_id: &str) -> Result<(), ApiError> {
         self.repo.delete_oidc_provider(provider_id).await?;
-        self.oidc_manager.invalidate_client(provider_id);
+        self.oidc_manager.invalidate_client(provider_id).await;
         Ok(())
     }
 

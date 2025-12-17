@@ -154,7 +154,8 @@ impl DvrBufferManager {
             return;
         }
 
-        let latest = inner.segments.back().unwrap().end_timestamp;
+        // SAFETY: We just checked that segments is not empty above
+        let latest = inner.segments.back().expect("BUG: segments should not be empty").end_timestamp;
         let earliest_allowed = latest.saturating_sub(inner.max_buffer_secs as u64);
 
         while let Some(segment) = inner.segments.front() {
@@ -186,8 +187,9 @@ impl DvrBufferManager {
             });
         }
 
-        let earliest = inner.segments.front().unwrap().start_timestamp;
-        let latest = inner.segments.back().unwrap().end_timestamp;
+        // SAFETY: We just checked that segments is not empty above
+        let earliest = inner.segments.front().expect("BUG: segments should not be empty").start_timestamp;
+        let latest = inner.segments.back().expect("BUG: segments should not be empty").end_timestamp;
         let buffer_seconds = (latest - earliest) as f64;
 
         let live_offset_secs = current_position.map(|pos| {

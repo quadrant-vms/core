@@ -14,6 +14,9 @@ use std::{
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
+// Maximum concurrent streams to prevent OOM
+const MAX_CONCURRENT_STREAMS: usize = 1000;
+
 #[derive(Clone, Debug)]
 pub struct StreamSpec {
   pub id: String,
@@ -49,6 +52,13 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
     let reg = REGISTRY.lock().await;
     if reg.contains_key(&spec_req.id) {
       return Err(anyhow!("stream '{}' already running", spec_req.id));
+    }
+    // Check concurrent stream limit
+    if reg.len() >= MAX_CONCURRENT_STREAMS {
+      return Err(anyhow!(
+        "Maximum concurrent streams ({}) exceeded. Cannot start new stream.",
+        MAX_CONCURRENT_STREAMS
+      ));
     }
   }
 

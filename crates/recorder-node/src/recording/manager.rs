@@ -16,6 +16,9 @@ use super::frame_capturer::{self, FrameCaptureConfig};
 use super::pipeline::RecordingPipeline;
 use crate::coordinator::CoordinatorClient;
 
+// Maximum concurrent recordings to prevent OOM
+const MAX_CONCURRENT_RECORDINGS: usize = 500;
+
 lazy_static! {
   pub static ref RECORDING_MANAGER: RecordingManager = RecordingManager::new();
 }
@@ -102,6 +105,17 @@ impl RecordingManager {
         accepted: false,
         lease_id: None,
         message: Some(format!("recording {} already exists", id)),
+      });
+    }
+    // Check concurrent recording limit
+    if recordings.len() >= MAX_CONCURRENT_RECORDINGS {
+      return Ok(RecordingStartResponse {
+        accepted: false,
+        lease_id: None,
+        message: Some(format!(
+          "Maximum concurrent recordings ({}) exceeded. Cannot start new recording.",
+          MAX_CONCURRENT_RECORDINGS
+        )),
       });
     }
     drop(recordings);
