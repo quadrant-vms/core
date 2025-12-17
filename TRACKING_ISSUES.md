@@ -1,6 +1,6 @@
 # Quadrant VMS - Tracking Issues
 
-**Last Updated**: 2025-12-17
+**Last Updated**: 2025-12-17 (Added P3-5: Integration Tests, P3-6: K8s Deployment, P3-7: Docker Compose Validation)
 **Source**: [RELIABILITY_AUDIT.md](RELIABILITY_AUDIT.md)
 **Fixes Applied**: [RELIABILITY_FIXES_APPLIED.md](RELIABILITY_FIXES_APPLIED.md)
 
@@ -8,7 +8,7 @@
 
 This document tracks all outstanding reliability and safety issues identified in the comprehensive audit. Issues are prioritized by severity and potential impact on production systems.
 
-**Progress**: 34/120 issues resolved (28% complete)
+**Progress**: 18/22 tracked issues resolved (82% complete - excludes ~100 untracked audit items)
 
 ---
 
@@ -435,6 +435,96 @@ severity: row.get::<String, _>("severity").parse().unwrap(),
 
 ---
 
+### P3-5: Integration Tests Broken
+
+**Status**: 🔴 Open
+**Severity**: MEDIUM
+**Impact**: No automated testing coverage, risk of regressions
+
+**Issues**: 9 test files failing with ~120 total compilation errors
+- `stateless_integration.rs` (70 errors) - StreamConfig/StreamInfo field mismatches
+- `ai_service.rs` (20 errors) - AiTaskConfig field changes
+- `distributed_tracing.rs` (8 errors) - Missing dependencies
+- `alert_service_integration.rs` (6 errors) - Type mismatches
+- `device_manager_integration.rs` (5 errors) - API changes
+- `playback_integration.rs` (4 errors) - PlaybackConfig missing fields
+- `lpr_plugin.rs` (3 errors) - Plugin API changes
+- `webrtc_playback.rs` (2 errors) - Router API changes
+- `edge_cache_integration.rs` (1 error) - Import issues
+
+**Root Causes**:
+1. Struct field changes: `StreamConfig` (rtsp_url → uri, removed transcode_format/segment_duration)
+2. Struct field changes: `StreamInfo` (created_at/updated_at → started_at/stopped_at)
+3. Struct field changes: `RecordingConfig` (multiple fields renamed/removed)
+4. Struct field changes: `AiTaskConfig` (input_stream_id/input_uri/frame_rate removed)
+5. Type changes: `node_id` from `String` to `Option<String>`
+6. Missing test dependencies: `telemetry`, `tempfile`, `tower`, `image`, `sqlx`
+7. Router API changes: `.oneshot()` method removed
+
+**Estimated Effort**: 12-16 hours (requires alignment with current API contracts)
+
+---
+
+### P3-6: Kubernetes Deployment Not Ready
+
+**Status**: 🔴 Open
+**Severity**: MEDIUM
+**Impact**: Cannot deploy to production Kubernetes clusters
+
+**Current State**:
+- ✅ Dockerfiles exist for all 10 services
+- ⚠️ Only minimal CRD example in `profiles/k8s/crds/minimal.yaml`
+- ❌ No Deployment/Service/Ingress manifests
+- ❌ No Helm charts
+- ❌ No StatefulSet configs for stateful services (PostgreSQL, Redis, MinIO)
+- ❌ No ConfigMap/Secret management
+- ❌ No resource limits/requests defined
+- ❌ No autoscaling (HPA) configurations
+- ❌ No network policies
+- ❌ No monitoring (ServiceMonitor for Prometheus)
+
+**Required Files**:
+1. `profiles/k8s/namespace.yaml` - Namespace definition
+2. `profiles/k8s/infrastructure/` - PostgreSQL, Redis, MinIO StatefulSets
+3. `profiles/k8s/core/` - Coordinator, Admin Gateway, Stream/Recorder nodes
+4. `profiles/k8s/services/` - Auth, Device Manager, AI, Alert, Playback, Operator UI
+5. `profiles/k8s/ingress.yaml` - Ingress for external access
+6. `profiles/k8s/kustomization.yaml` - Kustomize overlay support
+7. Optional: Helm chart in `charts/quadrant-vms/`
+
+**Estimated Effort**: 16-20 hours
+
+---
+
+### P3-7: Docker Compose Deployment Status
+
+**Status**: ⚠️ Needs Validation
+**Severity**: MEDIUM
+**Impact**: Uncertain if compose stack actually works end-to-end
+
+**Current State**:
+- ✅ Root `docker-compose.yml` is comprehensive (433 lines)
+- ✅ All 10 services defined with proper configuration
+- ✅ Infrastructure services (PostgreSQL, MinIO, Redis) included
+- ✅ Health checks defined for all services
+- ✅ Network and volume configuration present
+- ⚠️ `profiles/compose/docker-compose.yml` is outdated (only MinIO, most services commented out)
+- ❌ No documented end-to-end deployment test procedure
+- ❌ Unknown if all service dependencies work correctly
+- ❌ No smoke test script to validate deployment
+
+**Required Actions**:
+1. Test full stack deployment: `docker compose up -d`
+2. Validate all services reach healthy state
+3. Run smoke tests (create device → start stream → start recording → create alert)
+4. Update or remove outdated `profiles/compose/docker-compose.yml`
+5. Document deployment procedure in README.md or DEPLOYMENT.md
+6. Create `scripts/smoke-test.sh` for automated validation
+
+**Estimated Effort**: 4-6 hours (testing + documentation)
+
+---
+
 ## Code TODOs Found
 
 Additional issues found in code comments (not yet triaged):
@@ -454,8 +544,8 @@ Additional issues found in code comments (not yet triaged):
 |----------|------|-------------|-----------|-------|
 | **P1 (Critical)** | 0 | 0 | 6 | 6 |
 | **P2 (High)** | 0 | 0 | 9 | 9 |
-| **P3 (Medium)** | 1 | 0 | 3 | 4 |
-| **TOTAL** | **1** | **0** | **18** | **19** |
+| **P3 (Medium)** | 4 | 0 | 3 | 7 |
+| **TOTAL** | **4** | **0** | **18** | **22** |
 
 **Previously Completed** (see [RELIABILITY_FIXES_APPLIED.md](RELIABILITY_FIXES_APPLIED.md)):
 - ✅ UUID parsing panics (alert-service) - 10 issues
