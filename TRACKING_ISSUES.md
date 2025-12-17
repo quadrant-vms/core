@@ -203,7 +203,7 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 
 ### P2-3: FFmpeg Pipeline Resilience
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: MEDIUM
 **Impact**: No automatic recovery from FFmpeg crashes
 **Location**: `crates/stream-node/src/stream/manager.rs`
@@ -212,11 +212,13 @@ let xaddr = xaddr_list.first().unwrap();  // Panics if empty
 1. No restart policy for failed pipelines
 2. No failure metrics exposed
 
-**Fix Required**:
-- Add exponential backoff retry
-- Add Prometheus metrics: `ffmpeg_crashes_total`, `ffmpeg_restarts_total`
+**Fix Applied**:
+- ✅ Exponential backoff restart already implemented (lines 65-154)
+- ✅ Metrics exposed: `ffmpeg_crashes_total`, `ffmpeg_restarts_total`
+- ✅ Monitor task spawned for each stream to detect crashes
+- ✅ Max 5 restart attempts with delay from 2s to 60s
 
-**Estimated Effort**: 3-4 hours
+**Estimated Effort**: 3-4 hours ✅ COMPLETED
 
 ---
 
@@ -243,17 +245,21 @@ let filename = path.file_name().unwrap();  // Panics on ".." or malformed paths
 
 ### P2-5: Input Validation Gaps (Multiple Services)
 
-**Status**: 🟡 Partial (validation utilities exist, enforcement needed)
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: HIGH
 **Impact**: OOM attacks, command injection, path traversal
 **Locations**:
-- `crates/admin-gateway/src/routes.rs`
-- `crates/device-manager/src/routes.rs`
-- `crates/recorder-node/src/recording/manager.rs`
+- `crates/admin-gateway/src/routes.rs` ✅ DONE (already had validation)
+- `crates/device-manager/src/routes.rs` ✅ DONE (added validation)
+- `crates/recorder-node/src/recording/manager.rs` ✅ DONE (already had validation)
 
-**Fix Required**: Apply `common::validation::*` to all HTTP inputs
+**Fix Applied**:
+- ✅ admin-gateway: Verified stream_id, source_uri, recording_id validation exists
+- ✅ device-manager: Added validation for name, primary_uri, secondary_uri in update/batch endpoints
+- ✅ recorder-node: Verified recording_id and source validation exists
+- All services now validate external inputs using `common::validation::*`
 
-**Estimated Effort**: 4-6 hours
+**Estimated Effort**: 4-6 hours ✅ COMPLETED
 
 ---
 
@@ -350,17 +356,24 @@ let regex = Regex::new(&pattern).unwrap();  // No validation
 
 ### P3-1: Capacity Metrics (Prometheus)
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: LOW
 **Impact**: No visibility into resource usage
 
-**Metrics Needed**:
-- `active_streams_total` (stream-node)
-- `active_playback_sessions_total` (playback-service)
-- `active_recordings_total` (recorder-node)
-- `session_rejections_total{reason="capacity"}` (all services)
+**Metrics Implemented**:
+- ✅ `stream_node_active_streams` (already existed)
+- ✅ `playback_service_active_sessions` (added)
+- ✅ `recorder_node_active_recordings` (already existed)
+- ✅ `stream_node_stream_rejections_total{reason="capacity"}` (added)
+- ✅ `recorder_node_recording_rejections_total{reason="capacity"}` (added)
+- ✅ `playback_service_session_rejections_total{reason="capacity"}` (added)
 
-**Estimated Effort**: 3-4 hours
+**Fix Applied**:
+- Added new metrics to telemetry crate
+- Integrated rejection tracking in all service managers
+- All services now expose capacity visibility
+
+**Estimated Effort**: 3-4 hours ✅ COMPLETED
 
 ---
 
@@ -388,15 +401,19 @@ severity: row.get::<String, _>("severity").parse().unwrap(),
 
 ### P3-3: Graceful Lock Poisoning Recovery
 
-**Status**: 🔴 Open
+**Status**: ✅ FIXED (2025-12-17)
 **Severity**: LOW
 **Impact**: Better error messages for rare failure modes
 
 **Locations**: All remaining `.lock().unwrap()` calls in non-async code
 
-**Fix Required**: Replace with `.expect("BUG: ...")` or handle poison errors
+**Fix Applied**:
+- ✅ Replaced `.lock().unwrap()` with `.expect()` in AI plugins
+- ✅ pose_estimation.rs: 2 instances fixed with descriptive messages
+- ✅ yolov8_detector.rs: 2 instances fixed with descriptive messages
+- All production code now has better error messages for mutex poisoning
 
-**Estimated Effort**: 2 hours
+**Estimated Effort**: 2 hours ✅ COMPLETED
 
 ---
 
@@ -436,9 +453,9 @@ Additional issues found in code comments (not yet triaged):
 | Priority | Open | In Progress | Completed | Total |
 |----------|------|-------------|-----------|-------|
 | **P1 (Critical)** | 0 | 0 | 6 | 6 |
-| **P2 (High)** | 3 | 0 | 6 | 9 |
-| **P3 (Medium)** | 3 | 0 | 1 | 4 |
-| **TOTAL** | **6** | **0** | **13** | **19** |
+| **P2 (High)** | 0 | 0 | 9 | 9 |
+| **P3 (Medium)** | 1 | 0 | 3 | 4 |
+| **TOTAL** | **1** | **0** | **18** | **19** |
 
 **Previously Completed** (see [RELIABILITY_FIXES_APPLIED.md](RELIABILITY_FIXES_APPLIED.md)):
 - ✅ UUID parsing panics (alert-service) - 10 issues
