@@ -99,6 +99,18 @@ impl RecordingManager {
   pub async fn start(&self, req: RecordingStartRequest) -> Result<RecordingStartResponse> {
     let id = req.config.id.clone();
 
+    // Validate recording ID
+    common::validation::validate_id(&id, "recording_id")?;
+
+    // Validate source (stream_id or URI)
+    if let Some(ref stream_id) = req.config.source_stream_id {
+      common::validation::validate_id(stream_id, "source_stream_id")?;
+    } else if let Some(ref uri) = req.config.source_uri {
+      common::validation::validate_uri(uri, "source_uri")?;
+    } else {
+      return Err(anyhow!("source_stream_id or source_uri required"));
+    }
+
     let recordings = self.recordings.read().await;
     if recordings.contains_key(&id) {
       return Ok(RecordingStartResponse {
@@ -311,6 +323,9 @@ impl RecordingManager {
   }
 
   pub async fn stop(&self, id: &str) -> Result<bool> {
+    // Validate recording ID
+    common::validation::validate_id(id, "recording_id")?;
+
     let info_to_persist = {
       let mut recordings = self.recordings.write().await;
       let info = recordings

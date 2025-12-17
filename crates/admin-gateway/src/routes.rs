@@ -49,12 +49,14 @@ async fn start_stream(
   Json(payload): Json<StreamStartRequest>,
 ) -> Result<Json<StreamStartResponse>, ApiError> {
   let config = payload.config;
-  if config.id.trim().is_empty() {
-    return Err(ApiError::bad_request("stream id required"));
-  }
-  if config.uri.trim().is_empty() {
-    return Err(ApiError::bad_request("stream uri required"));
-  }
+
+  // Validate stream ID (prevent path traversal, OOM attacks)
+  common::validation::validate_id(&config.id, "stream_id")
+    .map_err(|e| ApiError::bad_request(format!("invalid stream_id: {}", e)))?;
+
+  // Validate source URI (prevent command injection, URL attacks)
+  common::validation::validate_uri(&config.uri, "source_uri")
+    .map_err(|e| ApiError::bad_request(format!("invalid source_uri: {}", e)))?;
 
   {
     let streams = state.streams().read().await;
@@ -171,6 +173,10 @@ async fn stop_stream(
   State(state): State<AppState>,
   Path(stream_id): Path<String>,
 ) -> Result<Json<StreamStopResponse>, ApiError> {
+  // Validate stream ID
+  common::validation::validate_id(&stream_id, "stream_id")
+    .map_err(|e| ApiError::bad_request(format!("invalid stream_id: {}", e)))?;
+
   let existing = {
     let streams = state.streams().read().await;
     streams.get(&stream_id).cloned()
@@ -271,10 +277,18 @@ async fn start_recording(
   State(state): State<AppState>,
   Json(payload): Json<RecordingStartRequest>,
 ) -> Result<Json<RecordingStartResponse>, ApiError> {
-  if payload.config.id.trim().is_empty() {
-    return Err(ApiError::bad_request("recording id required"));
-  }
-  if payload.config.source_stream_id.is_none() && payload.config.source_uri.is_none() {
+  // Validate recording ID
+  common::validation::validate_id(&payload.config.id, "recording_id")
+    .map_err(|e| ApiError::bad_request(format!("invalid recording_id: {}", e)))?;
+
+  // Validate source (stream_id or URI)
+  if let Some(ref stream_id) = payload.config.source_stream_id {
+    common::validation::validate_id(stream_id, "source_stream_id")
+      .map_err(|e| ApiError::bad_request(format!("invalid source_stream_id: {}", e)))?;
+  } else if let Some(ref uri) = payload.config.source_uri {
+    common::validation::validate_uri(uri, "source_uri")
+      .map_err(|e| ApiError::bad_request(format!("invalid source_uri: {}", e)))?;
+  } else {
     return Err(ApiError::bad_request("source_stream_id or source_uri required"));
   }
 
@@ -403,6 +417,10 @@ async fn stop_recording(
   State(state): State<AppState>,
   Path(recording_id): Path<String>,
 ) -> Result<Json<RecordingStopResponse>, ApiError> {
+  // Validate recording ID
+  common::validation::validate_id(&recording_id, "recording_id")
+    .map_err(|e| ApiError::bad_request(format!("invalid recording_id: {}", e)))?;
+
   let existing = {
     let recordings = state.recordings().read().await;
     recordings.get(&recording_id).cloned()

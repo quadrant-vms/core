@@ -9,9 +9,14 @@ pub static STREAMS_RUNNING: Lazy<IntGauge> = Lazy::new(|| {
   g
 });
 
-#[allow(dead_code)]
-pub static RESTARTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
-  let c = IntCounter::new("stream_restarts_total", "Total restarts of pipelines").unwrap();
+pub static FFMPEG_CRASHES_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+  let c = IntCounter::new("ffmpeg_crashes_total", "Total FFmpeg pipeline crashes").unwrap();
+  REGISTRY.register(Box::new(c.clone())).ok();
+  c
+});
+
+pub static FFMPEG_RESTARTS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+  let c = IntCounter::new("ffmpeg_restarts_total", "Total FFmpeg pipeline restart attempts").unwrap();
   REGISTRY.register(Box::new(c.clone())).ok();
   c
 });

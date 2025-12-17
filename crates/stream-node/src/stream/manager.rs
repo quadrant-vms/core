@@ -1,6 +1,6 @@
 use super::{build_pipeline_args, hls_root, Codec, Container};
 use crate::compat;
-use crate::metrics::STREAMS_RUNNING;
+use crate::metrics::{FFMPEG_CRASHES_TOTAL, FFMPEG_RESTARTS_TOTAL, STREAMS_RUNNING};
 use crate::storage::{self, S3Config as UploaderConfig};
 use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
@@ -17,6 +17,11 @@ use tracing::{error, info, warn};
 
 // Maximum concurrent streams to prevent OOM
 const MAX_CONCURRENT_STREAMS: usize = 1000;
+
+// FFmpeg restart policy configuration
+const MAX_RESTART_ATTEMPTS: u32 = 5;
+const INITIAL_RESTART_DELAY_SECS: u64 = 2;
+const MAX_RESTART_DELAY_SECS: u64 = 60;
 
 #[derive(Clone, Debug)]
 pub struct StreamSpec {
@@ -37,7 +42,16 @@ pub struct StreamStatus {
   pub output_dir: PathBuf,
 }
 
-static REGISTRY: Lazy<Mutex<HashMap<String, (Child, StreamStatus, StreamSpec, Option<JoinHandle<()>>)>>> =
+struct StreamEntry {
+  child: Child,
+  status: StreamStatus,
+  spec: StreamSpec,
+  upload_handle: Option<JoinHandle<()>>,
+  restart_count: u32,
+  monitor_handle: Option<JoinHandle<()>>,
+}
+
+static REGISTRY: Lazy<Mutex<HashMap<String, StreamEntry>>> =
   Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn readiness_timeout() -> Duration {
@@ -46,6 +60,97 @@ fn readiness_timeout() -> Duration {
     .and_then(|v| v.parse::<u64>().ok())
     .map(Duration::from_secs)
     .unwrap_or_else(|| Duration::from_secs(20))
+}
+
+/// Calculate exponential backoff delay for restart attempts
+fn calculate_restart_delay(attempt: u32) -> Duration {
+  let delay_secs = INITIAL_RESTART_DELAY_SECS * 2u64.pow(attempt);
+  Duration::from_secs(delay_secs.min(MAX_RESTART_DELAY_SECS))
+}
+
+/// Spawn a monitor task to detect FFmpeg crashes and restart with exponential backoff
+fn spawn_monitor_task(stream_id: String) -> JoinHandle<()> {
+  tokio::spawn(async move {
+    loop {
+      tokio::time::sleep(Duration::from_secs(5)).await;
+
+      let should_restart = {
+        let mut reg = REGISTRY.lock().await;
+        if let Some(entry) = reg.get_mut(&stream_id) {
+          // Check if child process has exited
+          match entry.child.try_wait() {
+            Ok(Some(exit_status)) => {
+              error!(
+                id = %stream_id,
+                exit_code = ?exit_status.code(),
+                restart_count = entry.restart_count,
+                "FFmpeg pipeline crashed"
+              );
+              FFMPEG_CRASHES_TOTAL.inc();
+
+              // Check if we should restart
+              if entry.restart_count < MAX_RESTART_ATTEMPTS {
+                entry.restart_count += 1;
+                true
+              } else {
+                warn!(
+                  id = %stream_id,
+                  max_attempts = MAX_RESTART_ATTEMPTS,
+                  "Maximum restart attempts reached, giving up"
+                );
+                entry.status.running = false;
+                false
+              }
+            }
+            Ok(None) => {
+              // Process still running
+              false
+            }
+            Err(e) => {
+              warn!(id = %stream_id, error = %e, "Failed to check process status");
+              false
+            }
+          }
+        } else {
+          // Stream entry removed, exit monitor
+          return;
+        }
+      };
+
+      if should_restart {
+        let restart_count = {
+          let reg = REGISTRY.lock().await;
+          reg.get(&stream_id).map(|e| e.restart_count).unwrap_or(0)
+        };
+
+        let delay = calculate_restart_delay(restart_count - 1);
+        info!(
+          id = %stream_id,
+          attempt = restart_count,
+          delay_secs = delay.as_secs(),
+          "Scheduling FFmpeg pipeline restart"
+        );
+
+        FFMPEG_RESTARTS_TOTAL.inc();
+        tokio::time::sleep(delay).await;
+
+        // Attempt restart
+        let spec = {
+          let reg = REGISTRY.lock().await;
+          reg.get(&stream_id).map(|e| e.spec.clone())
+        };
+
+        if let Some(spec) = spec {
+          info!(id = %stream_id, "Attempting to restart FFmpeg pipeline");
+          if let Err(e) = restart_stream_internal(&spec).await {
+            error!(id = %stream_id, error = %e, "Failed to restart FFmpeg pipeline");
+          }
+        } else {
+          return;
+        }
+      }
+    }
+  })
 }
 
 pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
@@ -158,21 +263,26 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
             }
           });
 
+          // Spawn monitor task for automatic restart
+          let monitor_handle = spawn_monitor_task(spec_req.id.clone());
+
           {
             let mut reg = REGISTRY.lock().await;
             reg.insert(
               spec_req.id.clone(),
-              (
+              StreamEntry {
                 child,
                 status,
-                StreamSpec {
+                spec: StreamSpec {
                   id: spec_req.id.clone(),
                   uri: spec_req.uri.clone(),
                   codec,
                   container,
                 },
-                Some(upload_handle),
-              ),
+                upload_handle: Some(upload_handle),
+                restart_count: 0,
+                monitor_handle: Some(monitor_handle),
+              },
             );
           }
           STREAMS_RUNNING.inc();
@@ -195,6 +305,18 @@ pub async fn start_stream(spec_req: &StreamSpec) -> Result<()> {
   }
 
   Err(last_err.unwrap_or_else(|| anyhow!("no working preset found")))
+}
+
+/// Internal function to restart a stream (called by monitor task)
+async fn restart_stream_internal(spec: &StreamSpec) -> Result<()> {
+  // First stop the existing stream (clean up resources)
+  let _ = stop_stream(&spec.id).await;
+
+  // Wait a bit before restarting
+  tokio::time::sleep(Duration::from_millis(500)).await;
+
+  // Start the stream again with the same spec
+  start_stream(spec).await
 }
 
 async fn wait_for_hls_ready(dir: &PathBuf, timeout: Duration) -> bool {
@@ -229,14 +351,20 @@ async fn wait_for_hls_ready(dir: &PathBuf, timeout: Duration) -> bool {
 
 pub async fn stop_stream(id: &str) -> Result<()> {
   let mut reg = REGISTRY.lock().await;
-  if let Some((mut child, _status, _spec, upload_handle)) = reg.remove(id) {
+  if let Some(mut entry) = reg.remove(id) {
     // Kill FFmpeg process
-    let _ = child.kill();
+    let _ = entry.child.kill();
 
     // Cancel upload task if it exists
-    if let Some(handle) = upload_handle {
+    if let Some(handle) = entry.upload_handle {
       handle.abort();
       info!(id=%id, "upload task cancelled");
+    }
+
+    // Cancel monitor task if it exists
+    if let Some(handle) = entry.monitor_handle {
+      handle.abort();
+      info!(id=%id, "monitor task cancelled");
     }
 
     STREAMS_RUNNING.dec();
@@ -249,23 +377,27 @@ pub async fn stop_stream(id: &str) -> Result<()> {
 pub async fn list_streams() -> Vec<StreamStatus> {
   let mut reg = REGISTRY.lock().await;
   let mut to_remove = vec![];
-  for (id, (child, status, _spec, _upload)) in reg.iter_mut() {
-    if let Ok(Some(_exit)) = child.try_wait() {
-      status.running = false;
+  for (id, entry) in reg.iter_mut() {
+    if let Ok(Some(_exit)) = entry.child.try_wait() {
+      entry.status.running = false;
       to_remove.push(id.clone());
     } else {
-      status.running = true;
+      entry.status.running = true;
     }
   }
   for id in to_remove {
-    if let Some((_child, _status, _spec, upload_handle)) = reg.remove(&id) {
+    if let Some(entry) = reg.remove(&id) {
       // Cancel upload task on stream exit
-      if let Some(handle) = upload_handle {
+      if let Some(handle) = entry.upload_handle {
+        handle.abort();
+      }
+      // Cancel monitor task on stream exit
+      if let Some(handle) = entry.monitor_handle {
         handle.abort();
       }
       STREAMS_RUNNING.dec();
     }
   }
 
-  reg.values().map(|(_c, s, _, _)| s.clone()).collect()
+  reg.values().map(|entry| entry.status.clone()).collect()
 }
