@@ -77,6 +77,24 @@ async fn create_device(
             .into_response();
     }
 
+    // Validate name
+    if let Err(e) = common::validation::validate_name(&req.name, "name") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid name: {}", e)})),
+        )
+            .into_response();
+    }
+
+    // Validate primary_uri
+    if let Err(e) = common::validation::validate_uri(&req.primary_uri, "primary_uri") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid primary_uri: {}", e)})),
+        )
+            .into_response();
+    }
+
     let tenant_id = &auth_ctx.tenant_id;
 
     match state.store.create_device(tenant_id, req).await {
@@ -146,6 +164,15 @@ async fn get_device(
             .into_response();
     }
 
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
+        )
+            .into_response();
+    }
+
     match state.store.get_device(&device_id).await {
         Ok(Some(device)) => {
             // Check tenant access
@@ -185,6 +212,15 @@ async fn update_device(
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
         )
             .into_response();
     }
@@ -251,6 +287,15 @@ async fn delete_device(
             .into_response();
     }
 
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
+        )
+            .into_response();
+    }
+
     // Check device exists and user has access
     match state.store.get_device(&device_id).await {
         Ok(Some(device)) => {
@@ -305,6 +350,15 @@ async fn probe_device(
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
         )
             .into_response();
     }
@@ -377,6 +431,15 @@ async fn get_device_health(
             .into_response();
     }
 
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
+        )
+            .into_response();
+    }
+
     // Get device
     match state.store.get_device(&device_id).await {
         Ok(Some(device)) => {
@@ -425,6 +488,15 @@ async fn get_health_history(
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
         )
             .into_response();
     }
@@ -478,13 +550,22 @@ async fn get_health_history(
 async fn get_device_events(
     State(_state): State<DeviceManagerState>,
     RequireAuth(auth_ctx): RequireAuth,
-    Path(_device_id): Path<String>,
+    Path(device_id): Path<String>,
 ) -> impl IntoResponse {
     // Check permission
     if !auth_ctx.has_permission("device:read") {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    // Validate device_id
+    if let Err(e) = common::validation::validate_id(&device_id, "device_id") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("invalid device_id: {}", e)})),
         )
             .into_response();
     }
