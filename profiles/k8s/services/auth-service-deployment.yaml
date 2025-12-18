@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: quadrant-vms
+  labels:
+    app: auth-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8087
+    name: http
+  - port: 9091
+    name: metrics
+  selector:
+    app: auth-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: quadrant-vms
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: auth-service
+        image: quadrant-vms/auth-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8087
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: AUTH_SERVICE_ADDR
+          value: "0.0.0.0:8087"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: auth-secret
+              key: jwt-secret
+        - name: JWT_EXPIRATION_SECS
+          value: "3600"
+        - name: API_TOKEN_EXPIRATION_DAYS
+          value: "90"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8087
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8087
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auth-secret
+  namespace: quadrant-vms
+type: Opaque
+stringData:
+  jwt-secret: "change-this-secret-in-production-use-32-bytes-minimum"

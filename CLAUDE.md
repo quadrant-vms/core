@@ -403,26 +403,27 @@ make status-dc
 ```
 
 
-**Recently Completed**: Operator UI Web Dashboard
-- ✅ React + Vite + JavaScript frontend with responsive dark theme
-- ✅ Real-time WebSocket updates for live dashboard statistics
-- ✅ Multi-view interface: Dashboard, Devices, Streams, Recordings, AI Tasks, Alerts, Incidents
-- ✅ Incident workflow system with create, acknowledge, resolve, and notes
-- ✅ Search capabilities for recordings and AI detections
-- ✅ Alert rule management (enable/disable)
-- ✅ Stream control (start/stop)
-- ✅ REST API backend with service integration
-- ✅ Integration tests for all API endpoints
-- ✅ Comprehensive documentation in README.md and SERVICES.md
+**Recently Completed**: Full Kubernetes Deployment Support
+- ✅ Complete Kubernetes manifests for all 10 services
+- ✅ Helm chart with configurable values for easy installation
+- ✅ HorizontalPodAutoscaler for auto-scaling under load
+- ✅ PodDisruptionBudget for high availability during cluster maintenance
+- ✅ NetworkPolicy for secure pod-to-pod communication
+- ✅ RBAC with ServiceAccount, Roles, and RoleBindings
+- ✅ ServiceMonitor for Prometheus Operator integration
+- ✅ Ingress manifest with TLS support for external access
+- ✅ Production-ready configuration with resource limits and health checks
+- ✅ Comprehensive Kubernetes documentation
 
 **Previous Milestones**:
+- **Operator UI Web Dashboard**: React-based dashboard with real-time WebSocket updates
 - **Edge Caching for Playback Service**: LRU cache with configurable TTL and size limits
 - **WebRTC Playback Support**: WHEP protocol implementation for ultra-low-latency streaming
 - **LL-HLS Support**: Low-latency HLS with partial segments and blocking playlist reload
 - **Time-Axis Preview Thumbnails**: Evenly-spaced thumbnail generation for video scrubbing
 - **Distributed Observability**: Centralized logging, OpenTelemetry tracing, and SLO metrics
 
-**Completed Feature List**: All planned features from the roadmap have been implemented
+**All Core Features Complete**: The project is now production-ready with full Kubernetes support
 
 ### Common Tasks
 ### Common Tasks

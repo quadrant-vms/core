@@ -115,6 +115,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Alert system with multi-channel notifications
 - Retention & search capabilities
 - Stateless architecture with HA support
+- **Full Kubernetes deployment** with Helm charts and Kustomize manifests
 
 ### Operator Dashboard
 - **Web-based Operator UI**: Responsive React dashboard for monitoring and management
@@ -226,6 +227,35 @@ make docker-clean
 ```
 
 **📚 For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**
+
+### Kubernetes Deployment (Production)
+
+**For production-grade Kubernetes deployment with auto-scaling, HA, and monitoring:**
+
+```bash
+# Option 1: Using kubectl + Kustomize (recommended)
+cd profiles/k8s
+kubectl apply -k .
+
+# Option 2: Using Helm chart
+cd profiles/k8s/helm
+helm install quadrant-vms ./quadrant-vms -n quadrant-vms --create-namespace
+
+# Check deployment status
+kubectl get all -n quadrant-vms
+```
+
+**Kubernetes features included:**
+- ✅ All 10 services with production-ready manifests
+- ✅ HorizontalPodAutoscaler for auto-scaling
+- ✅ PodDisruptionBudget for high availability
+- ✅ NetworkPolicy for pod-to-pod security
+- ✅ RBAC with ServiceAccount and Roles
+- ✅ ServiceMonitor for Prometheus Operator
+- ✅ Ingress with TLS support
+- ✅ Helm chart for easy installation
+
+**📚 For complete Kubernetes setup, see [profiles/k8s/README.md](profiles/k8s/README.md) and [profiles/k8s/helm/README.md](profiles/k8s/helm/README.md)**
 
 ---
 

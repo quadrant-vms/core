@@ -1,0 +1,387 @@
+# Default deny all ingress traffic (recommended security baseline)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+---
+# Allow ingress to Operator UI from Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: operator-ui-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: operator-ui
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8090
+  # Allow from within namespace (for service-to-service communication)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: quadrant-vms
+    ports:
+    - protocol: TCP
+      port: 8090
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Admin Gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: admin-gateway-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: admin-gateway
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8081
+  # Allow from services in quadrant-vms namespace
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8081
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Coordinator (central service, accessed by all workers)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coordinator-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: coordinator
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from all pods in quadrant-vms namespace
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8082
+    - protocol: TCP
+      port: 9091  # Metrics
+  # Allow from ingress for monitoring endpoints
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8082
+---
+# Allow ingress to Auth Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-service-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-service
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow from all services that need auth
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8087
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Device Manager
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: device-manager-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: device-manager
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8088
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Stream Node
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: stream-node-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: stream-node
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8083
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Recorder Node
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: recorder-node-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: recorder-node
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8085
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to AI Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-service-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8084
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Alert Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: alert-service-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: alert-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8089
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to Playback Service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: playback-service-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: playback-service
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8086
+    - protocol: TCP
+      port: 9091  # Metrics
+---
+# Allow ingress to PostgreSQL (only from VMS services)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 5432
+---
+# Allow ingress to Redis (only from VMS services)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 6379
+---
+# Allow ingress to MinIO (only from VMS services)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: minio-ingress
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app: minio
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 9000  # API
+    - protocol: TCP
+      port: 9001  # Console
+---
+# Allow egress from all pods (DNS, external services, etc.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress
+  namespace: quadrant-vms
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow all egress within namespace
+  - to:
+    - podSelector: {}
+  # Allow egress to external services (RTSP cameras, S3, SMTP, etc.)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+    - protocol: TCP
+      port: 554  # RTSP
+    - protocol: TCP
+      port: 587  # SMTP
+    - protocol: TCP
+      port: 465  # SMTPS
+    - protocol: TCP
+      port: 9000 # S3/MinIO
+---
+# Allow Prometheus scraping from monitoring namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: quadrant-vms
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: quadrant-vms
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 9091

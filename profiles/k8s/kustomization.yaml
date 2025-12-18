@@ -14,20 +14,34 @@ resources:
 
   # Core Services
   - core/coordinator-deployment.yaml
+  - core/admin-gateway-deployment.yaml
+  - core/stream-node-deployment.yaml
+  - core/recorder-node-deployment.yaml
 
-  # TODO: Add remaining service manifests
-  # - core/admin-gateway-deployment.yaml
-  # - core/stream-node-deployment.yaml
-  # - core/recorder-node-deployment.yaml
-  # - services/auth-service-deployment.yaml
-  # - services/device-manager-deployment.yaml
-  # - services/ai-service-deployment.yaml
-  # - services/alert-service-deployment.yaml
-  # - services/playback-service-deployment.yaml
-  # - services/operator-ui-deployment.yaml
+  # Additional Services
+  - services/auth-service-deployment.yaml
+  - services/device-manager-deployment.yaml
+  - services/ai-service-deployment.yaml
+  - services/alert-service-deployment.yaml
+  - services/playback-service-deployment.yaml
+  - services/operator-ui-deployment.yaml
 
-  # Ingress
-  # - ingress.yaml
+  # Networking
+  - ingress.yaml
+  - network/networkpolicy.yaml
+
+  # RBAC
+  - rbac/rbac.yaml
+
+  # High Availability
+  - ha/poddisruptionbudget.yaml
+
+  # Auto-scaling
+  - autoscaling/hpa.yaml
+
+  # Monitoring (requires Prometheus Operator)
+  # Uncomment if Prometheus Operator is installed
+  # - monitoring/servicemonitor.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: quadrant-vms
@@ -38,3 +52,13 @@ configMapGenerator:
       - ENABLE_STATE_STORE=true
       - CLUSTER_ENABLED=true
       - ORPHAN_CLEANUP_INTERVAL_SECS=300
+
+# Namespace labels for NetworkPolicy
+patches:
+  - target:
+      kind: Namespace
+      name: quadrant-vms
+    patch: |-
+      - op: add
+        path: /metadata/labels/name
+        value: quadrant-vms

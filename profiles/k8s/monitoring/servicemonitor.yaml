@@ -1,0 +1,154 @@
+# ServiceMonitor for Prometheus Operator
+# Automatically discovers and scrapes Quadrant VMS services
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: quadrant-vms-services
+  namespace: quadrant-vms
+  labels:
+    app.kubernetes.io/part-of: quadrant-vms
+    prometheus: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: quadrant-vms
+  namespaceSelector:
+    matchNames:
+    - quadrant-vms
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_service_name]
+      targetLabel: service
+---
+# PodMonitor for direct pod scraping (alternative to ServiceMonitor)
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: quadrant-vms-pods
+  namespace: quadrant-vms
+  labels:
+    app.kubernetes.io/part-of: quadrant-vms
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: quadrant-vms
+  namespaceSelector:
+    matchNames:
+    - quadrant-vms
+  podMetricsEndpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_name]
+      targetLabel: pod
+    - sourceLabels: [__meta_kubernetes_namespace]
+      targetLabel: namespace
+    - sourceLabels: [__meta_kubernetes_pod_label_app]
+      targetLabel: app
+---
+# PrometheusRule for alerting (examples)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: quadrant-vms-alerts
+  namespace: quadrant-vms
+  labels:
+    app.kubernetes.io/part-of: quadrant-vms
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: quadrant-vms
+    interval: 30s
+    rules:
+    # High CPU usage alert
+    - alert: HighCPUUsage
+      expr: |
+        rate(process_cpu_seconds_total{namespace="quadrant-vms"}[5m]) > 0.8
+      for: 5m
+      labels:
+        severity: warning
+        component: "{{ $labels.app }}"
+      annotations:
+        summary: "High CPU usage on {{ $labels.pod }}"
+        description: "Pod {{ $labels.pod }} has been using >80% CPU for 5 minutes"
+
+    # High memory usage alert
+    - alert: HighMemoryUsage
+      expr: |
+        process_resident_memory_bytes{namespace="quadrant-vms"} / 1024 / 1024 / 1024 > 1.5
+      for: 5m
+      labels:
+        severity: warning
+        component: "{{ $labels.app }}"
+      annotations:
+        summary: "High memory usage on {{ $labels.pod }}"
+        description: "Pod {{ $labels.pod }} is using >1.5GB memory"
+
+    # Service down alert
+    - alert: ServiceDown
+      expr: |
+        up{namespace="quadrant-vms"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        component: "{{ $labels.app }}"
+      annotations:
+        summary: "Service {{ $labels.app }} is down"
+        description: "Service {{ $labels.app }} on pod {{ $labels.pod }} has been down for 2 minutes"
+
+    # High error rate alert
+    - alert: HighErrorRate
+      expr: |
+        rate(http_requests_total{namespace="quadrant-vms",status=~"5.."}[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        component: "{{ $labels.app }}"
+      annotations:
+        summary: "High error rate on {{ $labels.app }}"
+        description: "Service {{ $labels.app }} has >5% error rate for 5 minutes"
+
+    # Coordinator lease store issues
+    - alert: LeaseStoreErrors
+      expr: |
+        rate(lease_store_errors_total{namespace="quadrant-vms"}[5m]) > 0
+      for: 2m
+      labels:
+        severity: critical
+        component: coordinator
+      annotations:
+        summary: "Coordinator lease store errors"
+        description: "Coordinator is experiencing lease store errors"
+
+    # Recording failures
+    - alert: RecordingFailures
+      expr: |
+        rate(recordings_failed_total{namespace="quadrant-vms"}[10m]) > 0.1
+      for: 5m
+      labels:
+        severity: warning
+        component: recorder-node
+      annotations:
+        summary: "High recording failure rate"
+        description: "Recording failures >10% over 10 minutes"
+
+    # Stream node segment upload failures
+    - alert: SegmentUploadFailures
+      expr: |
+        rate(stream_segments_upload_failed_total{namespace="quadrant-vms"}[5m]) > 0
+      for: 5m
+      labels:
+        severity: warning
+        component: stream-node
+      annotations:
+        summary: "HLS segment upload failures"
+        description: "Stream node experiencing S3 upload failures"

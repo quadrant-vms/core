@@ -1,0 +1,22 @@
+apiVersion: v2
+name: quadrant-vms
+description: A Helm chart for Quadrant VMS - Modular Video Management System
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - vms
+  - video-management
+  - surveillance
+  - rtsp
+  - hls
+  - ai
+  - object-detection
+home: https://github.com/quadrant-intelligence/quadrant-vms
+sources:
+  - https://github.com/quadrant-intelligence/quadrant-vms
+maintainers:
+  - name: Quadrant Intelligence Studio
+    email: contact@quadrant-vms.example.com
+icon: https://quadrant-vms.example.com/logo.png
+dependencies: []

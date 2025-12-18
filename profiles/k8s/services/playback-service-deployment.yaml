@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: playback-service
+  namespace: quadrant-vms
+  labels:
+    app: playback-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8086
+    name: http
+  - port: 9091
+    name: metrics
+  selector:
+    app: playback-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playback-service
+  namespace: quadrant-vms
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: playback-service
+  template:
+    metadata:
+      labels:
+        app: playback-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: playback-service
+        image: quadrant-vms/playback-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8086
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: PLAYBACK_SERVICE_ADDR
+          value: "0.0.0.0:8086"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: RECORDING_STORAGE_ROOT
+          value: "/data/recordings"
+        - name: HLS_ROOT
+          value: "/data/hls"
+        - name: CACHE_ENABLED
+          value: "true"
+        - name: CACHE_MAX_SIZE_MB
+          value: "1024"
+        - name: CACHE_TTL_SECS
+          value: "300"
+        volumeMounts:
+        - name: recording-storage
+          mountPath: /data/recordings
+          readOnly: true
+        - name: hls-storage
+          mountPath: /data/hls
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8086
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8086
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: recording-storage
+        persistentVolumeClaim:
+          claimName: recording-storage-pvc
+      - name: hls-storage
+        emptyDir:
+          sizeLimit: 10Gi

@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: quadrant-vms
+  labels:
+    app: ai-service
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8084
+    name: http
+  - port: 9091
+    name: metrics
+  selector:
+    app: ai-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: quadrant-vms
+spec:
+  replicas: 1  # GPU workloads typically run on specific nodes
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Uncomment for GPU node scheduling
+      # nodeSelector:
+      #   accelerator: nvidia-gpu
+      # tolerations:
+      # - key: nvidia.com/gpu
+      #   operator: Exists
+      #   effect: NoSchedule
+      containers:
+      - name: ai-service
+        image: quadrant-vms/ai-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8084
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: AI_SERVICE_ADDR
+          value: "0.0.0.0:8084"
+        - name: COORDINATOR_URL
+          value: "http://coordinator:8082"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: ENABLE_STATE_STORE
+          value: "true"
+        - name: AI_FRAME_CACHE_DIR
+          value: "/data/ai-frames"
+        # Uncomment for GPU support
+        # - name: CUDA_VISIBLE_DEVICES
+        #   value: "0"
+        # resources:
+        #   limits:
+        #     nvidia.com/gpu: 1
+        volumeMounts:
+        - name: ai-frame-storage
+          mountPath: /data/ai-frames
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8084
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8084
+          initialDelaySeconds: 10
+          periodSeconds: 5
+      volumes:
+      - name: ai-frame-storage
+        emptyDir:
+          sizeLimit: 20Gi

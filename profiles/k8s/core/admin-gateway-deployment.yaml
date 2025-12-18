@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-gateway
+  namespace: quadrant-vms
+  labels:
+    app: admin-gateway
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8081
+    name: http
+  - port: 9091
+    name: metrics
+  selector:
+    app: admin-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-gateway
+  namespace: quadrant-vms
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin-gateway
+  template:
+    metadata:
+      labels:
+        app: admin-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: admin-gateway
+        image: quadrant-vms/admin-gateway:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8081
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: ADMIN_GATEWAY_ADDR
+          value: "0.0.0.0:8081"
+        - name: COORDINATOR_URL
+          value: "http://coordinator:8082"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: ENABLE_STATE_STORE
+          value: "true"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5

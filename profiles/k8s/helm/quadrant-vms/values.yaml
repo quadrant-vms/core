@@ -1,0 +1,414 @@
+# Default values for quadrant-vms Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  namespace: quadrant-vms
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+  storageClass: standard
+
+# Image configuration
+image:
+  registry: quadrant-vms
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# Infrastructure components
+infrastructure:
+  postgres:
+    enabled: true
+    image:
+      repository: postgres
+      tag: "15-alpine"
+    replicas: 1
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: ""
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    env:
+      POSTGRES_DB: quadrant_vms
+      POSTGRES_USER: quadrant
+      POSTGRES_PASSWORD: change-me-in-production
+
+  redis:
+    enabled: true
+    image:
+      repository: redis
+      tag: "7-alpine"
+    replicas: 1
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+  minio:
+    enabled: true
+    image:
+      repository: minio/minio
+      tag: "latest"
+    replicas: 1
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClass: ""
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    env:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+
+# Core services
+coordinator:
+  enabled: true
+  replicas: 3
+  image:
+    repository: quadrant-vms/coordinator
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  env:
+    CLUSTER_ENABLED: "true"
+    ENABLE_STATE_STORE: "true"
+    ORPHAN_CLEANUP_INTERVAL_SECS: "300"
+
+adminGateway:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/admin-gateway
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    ADMIN_GATEWAY_ADDR: "0.0.0.0:8081"
+
+streamNode:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/stream-node
+    tag: "latest"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 75
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  persistence:
+    enabled: true
+    size: 10Gi
+  env:
+    STREAM_NODE_ADDR: "0.0.0.0:8083"
+    HLS_ROOT: "/data/hls"
+
+recorderNode:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/recorder-node
+    tag: "latest"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "2000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 75
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  persistence:
+    enabled: true
+    size: 200Gi
+    storageClass: ""
+  env:
+    RECORDER_NODE_ADDR: "0.0.0.0:8085"
+    RECORDING_STORAGE_ROOT: "/data/recordings"
+
+# Additional services
+authService:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/auth-service
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    AUTH_SERVICE_ADDR: "0.0.0.0:8087"
+    JWT_SECRET: "change-this-secret-in-production-use-32-bytes-minimum"
+    JWT_EXPIRATION_SECS: "3600"
+
+deviceManager:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/device-manager
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    DEVICE_MANAGER_ADDR: "0.0.0.0:8088"
+    HEALTH_CHECK_INTERVAL_SECS: "60"
+
+aiService:
+  enabled: true
+  replicas: 1
+  image:
+    repository: quadrant-vms/ai-service
+    tag: "latest"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
+      # Uncomment for GPU support
+      # nvidia.com/gpu: 1
+  autoscaling:
+    enabled: false  # Manual scaling for GPU workloads
+  podDisruptionBudget:
+    enabled: false
+  persistence:
+    enabled: true
+    size: 20Gi
+  env:
+    AI_SERVICE_ADDR: "0.0.0.0:8084"
+    AI_FRAME_CACHE_DIR: "/data/ai-frames"
+  # GPU node scheduling
+  nodeSelector: {}
+    # accelerator: nvidia-gpu
+  tolerations: []
+    # - key: nvidia.com/gpu
+    #   operator: Exists
+    #   effect: NoSchedule
+
+alertService:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/alert-service
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    ALERT_SERVICE_ADDR: "0.0.0.0:8089"
+  smtp:
+    enabled: false
+    host: "smtp.gmail.com"
+    port: "587"
+    username: "your-email@gmail.com"
+    password: "your-app-password"
+    fromEmail: "noreply@quadrant-vms.example.com"
+
+playbackService:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/playback-service
+    tag: "latest"
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 75
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    PLAYBACK_SERVICE_ADDR: "0.0.0.0:8086"
+    RECORDING_STORAGE_ROOT: "/data/recordings"
+    HLS_ROOT: "/data/hls"
+    CACHE_ENABLED: "true"
+    CACHE_MAX_SIZE_MB: "1024"
+    CACHE_TTL_SECS: "300"
+
+operatorUI:
+  enabled: true
+  replicas: 2
+  image:
+    repository: quadrant-vms/operator-ui
+    tag: "latest"
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  env:
+    OPERATOR_UI_ADDR: "0.0.0.0:8090"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/websocket-services: "operator-ui"
+    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+  hosts:
+    - host: vms.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          service: operator-ui
+          port: 8090
+  tls: []
+  #  - secretName: quadrant-vms-tls
+  #    hosts:
+  #      - vms.example.com
+
+# Monitoring
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+  prometheusRule:
+    enabled: true
+
+# Network policies
+networkPolicy:
+  enabled: true
+
+# RBAC
+rbac:
+  create: true
+
+# Service accounts
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security
+podSecurityPolicy:
+  enabled: false
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false

@@ -1,0 +1,126 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quadrant-vms-ingress
+  namespace: quadrant-vms
+  annotations:
+    # For nginx-ingress controller
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    # Increase timeouts for video streaming
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    # WebSocket support for operator UI
+    nginx.ingress.kubernetes.io/websocket-services: "operator-ui"
+    # Increase body size for video uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: vms.example.com
+    http:
+      paths:
+      # Operator UI (Web Dashboard) - Main interface
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: operator-ui
+            port:
+              number: 8090
+
+      # Admin Gateway API
+      - path: /api/gateway
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-gateway
+            port:
+              number: 8081
+
+      # Auth Service API
+      - path: /api/auth
+        pathType: Prefix
+        backend:
+          service:
+            name: auth-service
+            port:
+              number: 8087
+
+      # Device Manager API
+      - path: /api/devices
+        pathType: Prefix
+        backend:
+          service:
+            name: device-manager
+            port:
+              number: 8088
+
+      # Recorder Node API
+      - path: /api/recordings
+        pathType: Prefix
+        backend:
+          service:
+            name: recorder-node
+            port:
+              number: 8085
+
+      # AI Service API
+      - path: /api/ai
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-service
+            port:
+              number: 8084
+
+      # Alert Service API
+      - path: /api/alerts
+        pathType: Prefix
+        backend:
+          service:
+            name: alert-service
+            port:
+              number: 8089
+
+      # Playback Service API
+      - path: /api/playback
+        pathType: Prefix
+        backend:
+          service:
+            name: playback-service
+            port:
+              number: 8086
+
+      # Coordinator API (for monitoring)
+      - path: /api/coordinator
+        pathType: Prefix
+        backend:
+          service:
+            name: coordinator
+            port:
+              number: 8082
+---
+# TLS-enabled variant (uncomment and configure for production)
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: quadrant-vms-ingress-tls
+#   namespace: quadrant-vms
+#   annotations:
+#     nginx.ingress.kubernetes.io/rewrite-target: /
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+# spec:
+#   ingressClassName: nginx
+#   tls:
+#   - hosts:
+#     - vms.example.com
+#     secretName: quadrant-vms-tls
+#   rules:
+#   - host: vms.example.com
+#     http:
+#       paths:
+#       # Same path configuration as above

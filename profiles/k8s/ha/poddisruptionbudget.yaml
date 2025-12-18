@@ -1,0 +1,125 @@
+# PodDisruptionBudget for Coordinator
+# Ensures at least 2 coordinators are always available during disruptions
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coordinator-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: coordinator
+---
+# PodDisruptionBudget for Admin Gateway
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-gateway-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: admin-gateway
+---
+# PodDisruptionBudget for Stream Node
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stream-node-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: stream-node
+---
+# PodDisruptionBudget for Recorder Node
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: recorder-node-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: recorder-node
+---
+# PodDisruptionBudget for Auth Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: auth-service
+---
+# PodDisruptionBudget for Device Manager
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: device-manager-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: device-manager
+---
+# PodDisruptionBudget for Alert Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: alert-service-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: alert-service
+---
+# PodDisruptionBudget for Playback Service
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: playback-service-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: playback-service
+---
+# PodDisruptionBudget for Operator UI
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: operator-ui-pdb
+  namespace: quadrant-vms
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: operator-ui
+---
+# PodDisruptionBudget for PostgreSQL
+# Allows max 0 disruptions for single-node postgres
+# For HA postgres deployment, use minAvailable: 1
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-pdb
+  namespace: quadrant-vms
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: postgres
+---
+# NOTE: AI Service intentionally excluded from PDB as it may require
+# manual intervention for GPU-based workload rescheduling
