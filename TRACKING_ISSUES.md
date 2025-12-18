@@ -437,31 +437,38 @@ severity: row.get::<String, _>("severity").parse().unwrap(),
 
 ### P3-5: Integration Tests Broken
 
-**Status**: 🔴 Open
+**Status**: 🟡 In Progress
 **Severity**: MEDIUM
 **Impact**: No automated testing coverage, risk of regressions
 
-**Issues**: 9 test files failing with ~120 total compilation errors
-- `stateless_integration.rs` (70 errors) - StreamConfig/StreamInfo field mismatches
-- `ai_service.rs` (20 errors) - AiTaskConfig field changes
-- `distributed_tracing.rs` (8 errors) - Missing dependencies
-- `alert_service_integration.rs` (6 errors) - Type mismatches
-- `device_manager_integration.rs` (5 errors) - API changes
-- `playback_integration.rs` (4 errors) - PlaybackConfig missing fields
-- `lpr_plugin.rs` (3 errors) - Plugin API changes
-- `webrtc_playback.rs` (2 errors) - Router API changes
-- `edge_cache_integration.rs` (1 error) - Import issues
+**Progress**: 6/9 test files fixed (~90 errors resolved)
+- ✅ `stateless_integration.rs` (70 errors) - FIXED: Updated StreamConfig/StreamInfo/RecordingConfig to match current API
+- ✅ `ai_service.rs` (20 errors) - FIXED: Updated AiTaskConfig structure (source_stream_id, frame_config, output format)
+- ✅ `distributed_tracing.rs` (8 errors) - FIXED: Added missing telemetry dependency
+- ✅ `playback_integration.rs` (4 errors) - FIXED: Added dvr and low_latency fields to PlaybackConfig
+- ✅ `webrtc_playback.rs` (2 errors) - FIXED: Added dvr field to PlaybackConfig
+- ✅ `edge_cache_integration.rs` (1 error) - FIXED: Added missing dependencies (tempfile, image, tower, sqlx)
+- 🔴 `device_manager_integration.rs` (5 errors) - REMAINING: DeviceManagerState constructor needs 6 arguments
+- 🔴 `alert_service_integration.rs` (6 errors) - Not yet addressed
+- 🔴 `lpr_plugin.rs` (3 errors) - Not yet addressed
 
-**Root Causes**:
-1. Struct field changes: `StreamConfig` (rtsp_url → uri, removed transcode_format/segment_duration)
-2. Struct field changes: `StreamInfo` (created_at/updated_at → started_at/stopped_at)
-3. Struct field changes: `RecordingConfig` (multiple fields renamed/removed)
-4. Struct field changes: `AiTaskConfig` (input_stream_id/input_uri/frame_rate removed)
-5. Type changes: `node_id` from `String` to `Option<String>`
-6. Missing test dependencies: `telemetry`, `tempfile`, `tower`, `image`, `sqlx`
-7. Router API changes: `.oneshot()` method removed
+**Work Completed**:
+1. ✅ Fixed StreamConfig field changes (rtsp_url → uri, camera_id, codec, container added)
+2. ✅ Fixed StreamInfo field changes (created_at/updated_at → started_at/stopped_at, added playlist_path/output_dir)
+3. ✅ Fixed RecordingConfig field changes (source_url → source_uri/source_stream_id, format → RecordingFormat)
+4. ✅ Fixed AiTaskConfig field changes (input_stream_id → source_stream_id, frame_rate → frame_config)
+5. ✅ Fixed node_id type change (String → Option<String>)
+6. ✅ Added missing test dependencies: telemetry, tempfile, tower, image, sqlx
+7. ✅ Fixed PlaybackConfig missing fields (dvr, low_latency)
+8. ✅ Fixed PostgresLeaseStore::new() arguments (changed to &str)
+9. ✅ Fixed state_store method signatures (update_stream_state uses &str, not enum)
 
-**Estimated Effort**: 12-16 hours (requires alignment with current API contracts)
+**Remaining Work**:
+- Fix device_manager_integration.rs constructor issues
+- Fix alert_service_integration.rs type mismatches
+- Fix lpr_plugin.rs plugin API changes
+
+**Estimated Remaining Effort**: 2-4 hours
 
 ---
 
@@ -544,8 +551,8 @@ Additional issues found in code comments (not yet triaged):
 |----------|------|-------------|-----------|-------|
 | **P1 (Critical)** | 0 | 0 | 6 | 6 |
 | **P2 (High)** | 0 | 0 | 9 | 9 |
-| **P3 (Medium)** | 4 | 0 | 3 | 7 |
-| **TOTAL** | **4** | **0** | **18** | **22** |
+| **P3 (Medium)** | 3 | 1 | 3 | 7 |
+| **TOTAL** | **3** | **1** | **18** | **22** |
 
 **Previously Completed** (see [RELIABILITY_FIXES_APPLIED.md](RELIABILITY_FIXES_APPLIED.md)):
 - ✅ UUID parsing panics (alert-service) - 10 issues

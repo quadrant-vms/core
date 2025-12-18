@@ -9,18 +9,17 @@
 use anyhow::Result;
 use axum::Router;
 use common::{
-    recordings::{RecordingConfig, RecordingInfo, RecordingState},
-    state_store::StateStore,
-    streams::{StreamConfig, StreamInfo, StreamState, TranscodeFormat},
+    recordings::{RecordingConfig, RecordingFormat, RecordingInfo, RecordingState},
+    streams::{StreamConfig, StreamInfo, StreamState},
 };
 use coordinator::{
     config::{CoordinatorConfig, LeaseStoreType},
     pg_state_store::PgStateStore,
     routes as coordinator_routes,
     state::CoordinatorState,
-    store::{LeaseStore, PostgresLeaseStore},
+    store::PostgresLeaseStore,
 };
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, task::JoinHandle};
 
 /// Helper to spawn a router on a random port
@@ -59,7 +58,7 @@ async fn coordinator_state_with_postgres() -> Result<CoordinatorState> {
 
     let lease_store = Arc::new(
         PostgresLeaseStore::new(
-            db_url.clone(),
+            &db_url,
             cfg.default_ttl_secs,
             cfg.max_ttl_secs,
         )
@@ -86,16 +85,19 @@ async fn test_state_store_save_retrieve_stream() -> Result<()> {
     let stream_info = StreamInfo {
         config: StreamConfig {
             id: stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Running,
         lease_id: Some("test-lease-123".to_string()),
-        node_id: "test-node-1".to_string(),
+        node_id: Some("test-node-1".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     // Save stream
@@ -130,19 +132,19 @@ async fn test_state_store_save_retrieve_recording() -> Result<()> {
     let recording_info = RecordingInfo {
         config: RecordingConfig {
             id: recording_id.clone(),
-            source_url: "rtsp://test.local/stream".to_string(),
-            output_format: common::recordings::OutputFormat::Mp4,
-            output_path: "/tmp/test.mp4".to_string(),
-            duration_secs: Some(60),
-            start_time: None,
-            metadata: None,
+            source_stream_id: None,
+            source_uri: Some("rtsp://test.local/stream".to_string()),
+            retention_hours: Some(24),
+            format: Some(RecordingFormat::Mp4),
         },
         state: RecordingState::Recording,
         lease_id: Some("test-lease-456".to_string()),
-        node_id: "test-node-1".to_string(),
+        storage_path: Some("/tmp/test.mp4".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
+        node_id: Some("test-node-1".to_string()),
+        metadata: None,
     };
 
     // Save recording
@@ -178,31 +180,37 @@ async fn test_state_store_list_streams_by_node() -> Result<()> {
     let node1_stream = StreamInfo {
         config: StreamConfig {
             id: node1_stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream1".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream1".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Running,
         lease_id: Some("lease-1".to_string()),
-        node_id: "node-1".to_string(),
+        node_id: Some("node-1".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     let node2_stream = StreamInfo {
         config: StreamConfig {
             id: node2_stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream2".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream2".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Running,
         lease_id: Some("lease-2".to_string()),
-        node_id: "node-2".to_string(),
+        node_id: Some("node-2".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     state_store.save_stream(&node1_stream).await?;
@@ -239,16 +247,19 @@ async fn test_state_store_update_stream_state() -> Result<()> {
     let stream_info = StreamInfo {
         config: StreamConfig {
             id: stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Pending,
         lease_id: Some("test-lease-123".to_string()),
-        node_id: "test-node-1".to_string(),
+        node_id: Some("test-node-1".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     // Save initial state
@@ -256,7 +267,7 @@ async fn test_state_store_update_stream_state() -> Result<()> {
 
     // Update state to Running
     state_store
-        .update_stream_state(&stream_id, StreamState::Running, None)
+        .update_stream_state(&stream_id, "running", None)
         .await?;
 
     let updated = state_store.get_stream(&stream_id).await?.unwrap();
@@ -265,7 +276,7 @@ async fn test_state_store_update_stream_state() -> Result<()> {
 
     // Update state to Error with error message
     state_store
-        .update_stream_state(&stream_id, StreamState::Error, Some("Test error".to_string()))
+        .update_stream_state(&stream_id, "error", Some("Test error"))
         .await?;
 
     let updated = state_store.get_stream(&stream_id).await?.unwrap();
@@ -293,16 +304,19 @@ async fn test_orphan_detection() -> Result<()> {
     let orphan_stream = StreamInfo {
         config: StreamConfig {
             id: orphan_stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Error,
         lease_id: Some("orphan-lease-123".to_string()),
-        node_id: "test-node-1".to_string(),
+        node_id: Some("test-node-1".to_string()),
         last_error: Some("Simulated crash".to_string()),
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     // Create active stream (should NOT be detected as orphan)
@@ -310,16 +324,19 @@ async fn test_orphan_detection() -> Result<()> {
     let active_stream = StreamInfo {
         config: StreamConfig {
             id: active_stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream2".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream2".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Running,
         lease_id: Some("active-lease-456".to_string()),
-        node_id: "test-node-1".to_string(),
+        node_id: Some("test-node-1".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     state_store.save_stream(&orphan_stream).await?;
@@ -361,16 +378,19 @@ async fn test_state_store_http_api() -> Result<()> {
     let stream_info = StreamInfo {
         config: StreamConfig {
             id: stream_id.clone(),
-            rtsp_url: "rtsp://test.local/stream".to_string(),
-            transcode_format: TranscodeFormat::Ts,
-            segment_duration: 4,
+            camera_id: None,
+            uri: "rtsp://test.local/stream".to_string(),
+            codec: None,
+            container: None,
         },
         state: StreamState::Running,
         lease_id: Some("http-test-lease".to_string()),
-        node_id: "http-test-node".to_string(),
+        node_id: Some("http-test-node".to_string()),
         last_error: None,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
+        playlist_path: None,
+        output_dir: None,
+        started_at: Some(common::validation::safe_unix_timestamp()),
+        stopped_at: None,
     };
 
     // POST /v1/state/streams
@@ -447,16 +467,19 @@ async fn test_state_persistence_across_restart() -> Result<()> {
         let stream_info = StreamInfo {
             config: StreamConfig {
                 id: stream_id.clone(),
-                rtsp_url: "rtsp://test.local/stream".to_string(),
-                transcode_format: TranscodeFormat::Ts,
-                segment_duration: 4,
+                camera_id: None,
+                uri: "rtsp://test.local/stream".to_string(),
+                codec: None,
+                container: None,
             },
             state: StreamState::Running,
             lease_id: Some("persistent-lease".to_string()),
-            node_id: "persistent-node".to_string(),
+            node_id: Some("persistent-node".to_string()),
             last_error: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            playlist_path: None,
+            output_dir: None,
+            started_at: Some(common::validation::safe_unix_timestamp()),
+            stopped_at: None,
         };
 
         state_store.save_stream(&stream_info).await?;
@@ -474,7 +497,7 @@ async fn test_state_persistence_across_restart() -> Result<()> {
         let retrieved = retrieved.unwrap();
         assert_eq!(retrieved.config.id, stream_id);
         assert_eq!(retrieved.state, StreamState::Running);
-        assert_eq!(retrieved.node_id, "persistent-node");
+        assert_eq!(retrieved.node_id, Some("persistent-node".to_string()));
 
         // Cleanup
         state_store.delete_stream(&stream_id).await?;
@@ -508,16 +531,19 @@ async fn test_bootstrap_recovery() -> Result<()> {
         let stream_info = StreamInfo {
             config: StreamConfig {
                 id: stream_id.clone(),
-                rtsp_url: format!("rtsp://test.local/stream-{}", stream_id),
-                transcode_format: TranscodeFormat::Ts,
-                segment_duration: 4,
+                camera_id: None,
+                uri: format!("rtsp://test.local/stream-{}", stream_id),
+                codec: None,
+                container: None,
             },
             state: StreamState::Running,
             lease_id: Some(format!("lease-{}", stream_id)),
-            node_id: node_id.to_string(),
+            node_id: Some(node_id.to_string()),
             last_error: None,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            playlist_path: None,
+            output_dir: None,
+            started_at: Some(common::validation::safe_unix_timestamp()),
+            stopped_at: None,
         };
         state_store.save_stream(&stream_info).await?;
     }

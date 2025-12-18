@@ -2,7 +2,7 @@ use anyhow::Result;
 use axum_test::TestServer;
 use device_manager::{
     ConnectionProtocol, CreateDeviceRequest, DeviceManagerState, DeviceProber, DeviceStore,
-    DeviceType, UpdateDeviceRequest,
+    DeviceType, TourExecutor, OnvifDiscoveryClient, FirmwareExecutor, FirmwareStorage, UpdateDeviceRequest,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -23,8 +23,18 @@ async fn setup_test_server() -> Result<TestServer> {
     // Initialize prober
     let prober = Arc::new(DeviceProber::new(5));
 
+    // Initialize tour executor
+    let tour_executor = Arc::new(TourExecutor::new(store.clone()));
+
+    // Initialize ONVIF discovery client
+    let discovery_client = Arc::new(OnvifDiscoveryClient::new());
+
+    // Initialize firmware components
+    let firmware_executor = Arc::new(FirmwareExecutor::new());
+    let firmware_storage = Arc::new(FirmwareStorage::new("/tmp/firmware"));
+
     // Create state
-    let state = DeviceManagerState::new(store, prober);
+    let state = DeviceManagerState::new(store, prober, tour_executor, discovery_client, firmware_executor, firmware_storage);
 
     // Create router
     let app = device_manager::routes::router(state);
@@ -222,30 +232,4 @@ async fn test_device_health_tracking() -> Result<()> {
     store.delete_device(&device.device_id).await?;
 
     Ok(())
-}
-
-impl Default for UpdateDeviceRequest {
-    fn default() -> Self {
-        Self {
-            name: None,
-            manufacturer: None,
-            model: None,
-            firmware_version: None,
-            primary_uri: None,
-            secondary_uri: None,
-            username: None,
-            password: None,
-            location: None,
-            zone: None,
-            tags: None,
-            description: None,
-            notes: None,
-            health_check_interval_secs: None,
-            auto_start: None,
-            recording_enabled: None,
-            ai_enabled: None,
-            status: None,
-            metadata: None,
-        }
-    }
 }

@@ -13,6 +13,7 @@ async fn test_webrtc_playback_url_generation() {
         start_time_secs: None,
         speed: None,
         low_latency: false,
+        dvr: None,
     };
 
     // Test the protocol is set correctly
@@ -28,6 +29,7 @@ async fn test_webrtc_playback_url_generation() {
         start_time_secs: Some(10.0),
         speed: None,
         low_latency: false,
+        dvr: None,
     };
 
     // Test the protocol is set correctly

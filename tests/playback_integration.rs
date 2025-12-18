@@ -47,6 +47,8 @@ async fn test_playback_session_lifecycle() -> Result<()> {
         protocol: PlaybackProtocol::Hls,
         start_time_secs: None,
         speed: Some(1.0),
+        low_latency: false,
+        dvr: None,
     };
 
     // Start playback (will fail if stream doesn't exist, which is expected)
@@ -105,6 +107,8 @@ async fn test_playback_seek() -> Result<()> {
         protocol: PlaybackProtocol::Hls,
         start_time_secs: Some(0.0),
         speed: Some(1.0),
+        low_latency: false,
+        dvr: None,
     };
 
     let start_req = PlaybackStartRequest {
@@ -170,6 +174,8 @@ async fn test_playback_controls() -> Result<()> {
         protocol: PlaybackProtocol::Hls,
         start_time_secs: None,
         speed: Some(1.0),
+        low_latency: false,
+        dvr: None,
     };
 
     let start_req = PlaybackStartRequest {
@@ -309,6 +315,7 @@ async fn test_ll_hls_playback_config() -> Result<()> {
         start_time_secs: None,
         speed: Some(1.0),
         low_latency: true, // Enable LL-HLS mode
+        dvr: None,
     };
 
     let start_req = PlaybackStartRequest {

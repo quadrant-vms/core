@@ -118,12 +118,19 @@ async fn test_start_task_with_invalid_plugin() {
     let task_config = AiTaskConfig {
         id: "test-task-2".to_string(),
         plugin_type: "nonexistent_plugin".to_string(),
-        input_stream_id: Some("stream-123".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-123".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 1,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/test.json".to_string(),
+        frame_config: AiFrameConfig {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/test.json"
+            }),
         },
     };
 
@@ -152,12 +159,19 @@ async fn test_list_tasks() {
     let task_config = AiTaskConfig {
         id: "test-task-3".to_string(),
         plugin_type: "mock_object_detector".to_string(),
-        input_stream_id: Some("stream-123".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-123".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 1,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/test.json".to_string(),
+        frame_config: AiFrameConfig {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/test.json"
+            }),
         },
     };
 
@@ -184,12 +198,19 @@ async fn test_get_task() {
     let task_config = AiTaskConfig {
         id: "test-task-4".to_string(),
         plugin_type: "mock_object_detector".to_string(),
-        input_stream_id: Some("stream-123".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-123".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 1,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/test.json".to_string(),
+        frame_config: AiFrameConfig {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/test.json"
+            }),
         },
     };
 
@@ -216,12 +237,19 @@ async fn test_stop_task() {
     let task_config = AiTaskConfig {
         id: "test-task-5".to_string(),
         plugin_type: "mock_object_detector".to_string(),
-        input_stream_id: Some("stream-123".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-123".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 1,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/test.json".to_string(),
+        frame_config: AiFrameConfig {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/test.json"
+            }),
         },
     };
 
@@ -294,12 +322,19 @@ async fn test_submit_frame() {
     let task_config = AiTaskConfig {
         id: "test-task-frame".to_string(),
         plugin_type: "mock_object_detector".to_string(),
-        input_stream_id: Some("stream-123".to_string()),
-        input_uri: None,
+        source_stream_id: Some("stream-123".to_string()),
+        source_recording_id: None,
         model_config: serde_json::json!({}),
-        frame_rate: 1,
-        output: AiOutputConfig::LocalFile {
-            path: "/tmp/test.json".to_string(),
+        frame_config: AiFrameConfig {
+            frame_interval: 1,
+            max_fps: None,
+            skip_seconds: 0,
+        },
+        output: AiOutputConfig {
+            output_type: "file".to_string(),
+            config: serde_json::json!({
+                "path": "/tmp/test.json"
+            }),
         },
     };
 
