@@ -24,14 +24,20 @@ async fn setup_test_server() -> Result<TestServer> {
     let prober = Arc::new(DeviceProber::new(5));
 
     // Initialize tour executor
-    let tour_executor = Arc::new(TourExecutor::new(store.clone()));
+    let tour_executor = Arc::new(TourExecutor::new(store.clone(), 30));
 
     // Initialize ONVIF discovery client
-    let discovery_client = Arc::new(OnvifDiscoveryClient::new());
+    let discovery_client = Arc::new(OnvifDiscoveryClient::new(5));
 
-    // Initialize firmware components
-    let firmware_executor = Arc::new(FirmwareExecutor::new());
-    let firmware_storage = Arc::new(FirmwareStorage::new("/tmp/firmware"));
+    // Initialize firmware storage
+    let firmware_storage = Arc::new(FirmwareStorage::new("/tmp/firmware")?);
+    firmware_storage.init().await?;
+
+    // Initialize firmware executor
+    let firmware_executor = Arc::new(FirmwareExecutor::new(
+        DeviceStore::new(&database_url).await?,
+        (*firmware_storage).clone(),
+    ));
 
     // Create state
     let state = DeviceManagerState::new(store, prober, tour_executor, discovery_client, firmware_executor, firmware_storage);
@@ -131,8 +137,24 @@ async fn test_device_store_operations() -> Result<()> {
     // Update device
     let update_req = UpdateDeviceRequest {
         name: Some("Updated Camera".to_string()),
+        manufacturer: None,
+        model: None,
+        firmware_version: None,
+        primary_uri: None,
+        secondary_uri: None,
+        username: None,
+        password: None,
         location: Some("New Location".to_string()),
-        ..Default::default()
+        zone: None,
+        tags: None,
+        description: None,
+        notes: None,
+        health_check_interval_secs: None,
+        auto_start: None,
+        recording_enabled: None,
+        ai_enabled: None,
+        status: None,
+        metadata: None,
     };
 
     let updated = store.update_device(&device.device_id, update_req).await?;
