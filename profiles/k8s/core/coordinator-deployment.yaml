@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: quadrant-vms
+  labels:
+    app: coordinator
+spec:
+  ports:
+  - port: 8082
+    name: http
+  - port: 9091
+    name: metrics
+  selector:
+    app: coordinator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: quadrant-vms
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: coordinator
+  template:
+    metadata:
+      labels:
+        app: coordinator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9091"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: coordinator
+        image: quadrant-vms/coordinator:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8082
+          name: http
+        - containerPort: 9091
+          name: metrics
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: LEASE_STORE_TYPE
+          value: "postgres"
+        - name: CLUSTER_ENABLED
+          value: "true"
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ENABLE_STATE_STORE
+          value: "true"
+        - name: ORPHAN_CLEANUP_INTERVAL_SECS
+          value: "300"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8082
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: quadrant-vms
+type: Opaque
+stringData:
+  database-url: postgresql://quadrant:change-me-in-production@postgres:5432/quadrant_vms

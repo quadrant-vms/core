@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: quadrant-vms
+
+resources:
+  # Namespace
+  - namespace.yaml
+
+  # Infrastructure
+  - infrastructure/postgres-statefulset.yaml
+  - infrastructure/redis-deployment.yaml
+  - infrastructure/minio-statefulset.yaml
+
+  # Core Services
+  - core/coordinator-deployment.yaml
+
+  # TODO: Add remaining service manifests
+  # - core/admin-gateway-deployment.yaml
+  # - core/stream-node-deployment.yaml
+  # - core/recorder-node-deployment.yaml
+  # - services/auth-service-deployment.yaml
+  # - services/device-manager-deployment.yaml
+  # - services/ai-service-deployment.yaml
+  # - services/alert-service-deployment.yaml
+  # - services/playback-service-deployment.yaml
+  # - services/operator-ui-deployment.yaml
+
+  # Ingress
+  # - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: quadrant-vms
+
+configMapGenerator:
+  - name: quadrant-vms-config
+    literals:
+      - ENABLE_STATE_STORE=true
+      - CLUSTER_ENABLED=true
+      - ORPHAN_CLEANUP_INTERVAL_SECS=300
