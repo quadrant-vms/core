@@ -464,21 +464,203 @@ impl DeviceStore {
         Ok(())
     }
 
-    /// Simple password encryption placeholder - should use proper encryption in production
-    fn encrypt_password(&self, password: &str) -> String {
-        // TODO: Implement proper encryption using a key management system
-        // For now, just base64 encode (NOT SECURE - placeholder only)
-        use base64::{engine::general_purpose, Engine as _};
-        general_purpose::STANDARD.encode(password.as_bytes())
+    /// Retrieve device events
+    pub async fn get_device_events(
+        &self,
+        device_id: &str,
+        event_type: Option<String>,
+        start_time: Option<chrono::DateTime<chrono::Utc>>,
+        end_time: Option<chrono::DateTime<chrono::Utc>>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<Vec<crate::types::DeviceEvent>> {
+        let limit = limit.unwrap_or(100).min(1000); // Max 1000 events
+        let offset = offset.unwrap_or(0);
+
+        let mut query = String::from(
+            r#"
+            SELECT event_id, device_id, event_type, old_value, new_value, user_id, metadata, created_at
+            FROM device_events
+            WHERE device_id = $1
+            "#,
+        );
+
+        let mut params_count = 1;
+
+        // Add event_type filter
+        if event_type.is_some() {
+            params_count += 1;
+            query.push_str(&format!(" AND event_type = ${}", params_count));
+        }
+
+        // Add start_time filter
+        if start_time.is_some() {
+            params_count += 1;
+            query.push_str(&format!(" AND created_at >= ${}", params_count));
+        }
+
+        // Add end_time filter
+        if end_time.is_some() {
+            params_count += 1;
+            query.push_str(&format!(" AND created_at <= ${}", params_count));
+        }
+
+        // Add ordering, limit, and offset
+        params_count += 1;
+        let limit_param = params_count;
+        params_count += 1;
+        let offset_param = params_count;
+
+        query.push_str(&format!(
+            " ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+            limit_param, offset_param
+        ));
+
+        // Build query with parameters
+        let mut sqlx_query = sqlx::query_as::<_, crate::types::DeviceEvent>(&query)
+            .bind(device_id);
+
+        if let Some(et) = event_type {
+            sqlx_query = sqlx_query.bind(et);
+        }
+
+        if let Some(st) = start_time {
+            sqlx_query = sqlx_query.bind(st);
+        }
+
+        if let Some(et) = end_time {
+            sqlx_query = sqlx_query.bind(et);
+        }
+
+        sqlx_query = sqlx_query.bind(limit).bind(offset);
+
+        let events = sqlx_query
+            .fetch_all(&self.pool)
+            .await
+            .context("failed to retrieve device events")?;
+
+        Ok(events)
     }
 
-    /// Simple password decryption placeholder
-    pub fn decrypt_password(&self, encrypted: &str) -> Result<String> {
+    /// Encrypt password using AES-256-GCM with Argon2 key derivation
+    ///
+    /// Format: {version}${salt}${nonce}${ciphertext}${tag}
+    /// - version: encryption version (currently "v1")
+    /// - salt: base64-encoded random salt for key derivation (32 bytes)
+    /// - nonce: base64-encoded random nonce for AES-GCM (12 bytes)
+    /// - ciphertext: base64-encoded encrypted password
+    /// - tag: included in ciphertext by AES-GCM
+    ///
+    /// This implementation uses:
+    /// - Argon2id for key derivation from environment master key
+    /// - AES-256-GCM for authenticated encryption
+    /// - Random salt and nonce per encryption operation
+    ///
+    /// Future: Can be extended to fetch master key from external KMS (AWS KMS, Vault, etc.)
+    fn encrypt_password(&self, password: &str) -> String {
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
+        use argon2::{Algorithm, Argon2, Params, Version};
         use base64::{engine::general_purpose, Engine as _};
-        let bytes = general_purpose::STANDARD
-            .decode(encrypted)
-            .context("failed to decode password")?;
-        Ok(String::from_utf8(bytes).context("invalid utf8 in password")?)
+        use rand::Rng;
+
+        // Get master key from environment (in production, fetch from KMS)
+        let master_key = std::env::var("DEVICE_CREDENTIAL_MASTER_KEY")
+            .unwrap_or_else(|_| "INSECURE_DEFAULT_KEY_CHANGE_IN_PRODUCTION".to_string());
+
+        // Generate random salt for key derivation
+        let salt: [u8; 32] = rand::thread_rng().gen();
+
+        // Derive encryption key using Argon2id
+        let argon2 = Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::new(19456, 2, 1, Some(32)).expect("BUG: invalid Argon2 params"),
+        );
+
+        let mut derived_key = [0u8; 32];
+        argon2
+            .hash_password_into(master_key.as_bytes(), &salt, &mut derived_key)
+            .expect("BUG: Argon2 key derivation failed");
+
+        // Create cipher
+        let cipher = Aes256Gcm::new(&derived_key.into());
+
+        // Generate random nonce
+        let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
+        let nonce = Nonce::from_slice(&nonce_bytes);
+
+        // Encrypt password
+        let ciphertext = cipher
+            .encrypt(nonce, password.as_bytes())
+            .expect("BUG: AES-GCM encryption failed");
+
+        // Encode components to base64
+        let salt_b64 = general_purpose::STANDARD.encode(salt);
+        let nonce_b64 = general_purpose::STANDARD.encode(nonce_bytes);
+        let ciphertext_b64 = general_purpose::STANDARD.encode(ciphertext);
+
+        // Return formatted encrypted string
+        format!("v1${}${}${}", salt_b64, nonce_b64, ciphertext_b64)
+    }
+
+    /// Decrypt password encrypted with encrypt_password
+    pub fn decrypt_password(&self, encrypted: &str) -> Result<String> {
+        use aes_gcm::{
+            aead::{Aead, KeyInit},
+            Aes256Gcm, Nonce,
+        };
+        use argon2::{Algorithm, Argon2, Params, Version};
+        use base64::{engine::general_purpose, Engine as _};
+
+        // Parse encrypted format: v1$salt$nonce$ciphertext
+        let parts: Vec<&str> = encrypted.split('$').collect();
+
+        if parts.len() != 4 || parts[0] != "v1" {
+            anyhow::bail!("invalid encrypted password format");
+        }
+
+        let salt_b64 = parts[1];
+        let nonce_b64 = parts[2];
+        let ciphertext_b64 = parts[3];
+
+        // Decode from base64
+        let salt = general_purpose::STANDARD
+            .decode(salt_b64)
+            .context("failed to decode salt")?;
+        let nonce_bytes = general_purpose::STANDARD
+            .decode(nonce_b64)
+            .context("failed to decode nonce")?;
+        let ciphertext = general_purpose::STANDARD
+            .decode(ciphertext_b64)
+            .context("failed to decode ciphertext")?;
+
+        // Get master key from environment (in production, fetch from KMS)
+        let master_key = std::env::var("DEVICE_CREDENTIAL_MASTER_KEY")
+            .unwrap_or_else(|_| "INSECURE_DEFAULT_KEY_CHANGE_IN_PRODUCTION".to_string());
+
+        // Derive decryption key using Argon2id
+        let params = Params::new(19456, 2, 1, Some(32))
+            .map_err(|e| anyhow::anyhow!("invalid Argon2 params: {}", e))?;
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+        let mut derived_key = [0u8; 32];
+        argon2
+            .hash_password_into(master_key.as_bytes(), &salt, &mut derived_key)
+            .map_err(|e| anyhow::anyhow!("Argon2 key derivation failed: {}", e))?;
+
+        // Create cipher
+        let cipher = Aes256Gcm::new(&derived_key.into());
+
+        // Decrypt password
+        let nonce = Nonce::from_slice(&nonce_bytes);
+        let plaintext = cipher
+            .decrypt(nonce, ciphertext.as_ref())
+            .map_err(|e| anyhow::anyhow!("AES-GCM decryption failed: {}", e))?;
+
+        Ok(String::from_utf8(plaintext).context("invalid utf8 in password")?)
     }
 
     // PTZ Preset Methods

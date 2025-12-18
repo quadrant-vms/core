@@ -581,9 +581,10 @@ async fn get_health_history(
 }
 
 async fn get_device_events(
-    State(_state): State<DeviceManagerState>,
+    State(state): State<DeviceManagerState>,
     RequireAuth(auth_ctx): RequireAuth,
     Path(device_id): Path<String>,
+    Query(query): Query<DeviceEventQuery>,
 ) -> impl IntoResponse {
     // Check permission
     if !auth_ctx.has_permission("device:read") {
@@ -603,12 +604,58 @@ async fn get_device_events(
             .into_response();
     }
 
-    // TODO: Implement event retrieval
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({"error": "not implemented"})),
-    )
-        .into_response()
+    // Parse timestamps if provided
+    let start_time = match query.start_time {
+        Some(ref s) => match chrono::DateTime::parse_from_rfc3339(s) {
+            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("invalid start_time: {}", e)})),
+                )
+                    .into_response();
+            }
+        },
+        None => None,
+    };
+
+    let end_time = match query.end_time {
+        Some(ref s) => match chrono::DateTime::parse_from_rfc3339(s) {
+            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": format!("invalid end_time: {}", e)})),
+                )
+                    .into_response();
+            }
+        },
+        None => None,
+    };
+
+    // Retrieve events from store
+    match state
+        .store
+        .get_device_events(
+            &device_id,
+            query.event_type,
+            start_time,
+            end_time,
+            query.limit,
+            query.offset,
+        )
+        .await
+    {
+        Ok(events) => (StatusCode::OK, Json(events)).into_response(),
+        Err(e) => {
+            tracing::error!(device_id = %device_id, error = %e, "failed to retrieve device events");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
+    }
 }
 
 async fn batch_update_devices(

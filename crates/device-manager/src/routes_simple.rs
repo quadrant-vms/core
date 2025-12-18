@@ -1,6 +1,4 @@
-// Simplified routes without auth for initial implementation
-// TODO: Add proper authentication using auth-service integration
-
+// Simplified routes with JWT authentication
 use crate::imaging_client::create_imaging_client;
 use crate::ptz_client::create_ptz_client;
 use crate::state::DeviceManagerState;
@@ -13,6 +11,7 @@ use axum::{
     Json, Router,
 };
 use chrono::Utc;
+use common::auth_middleware::RequireAuth;
 use serde_json::json;
 use std::collections::HashMap;
 use tracing::{error, info};
@@ -116,10 +115,20 @@ async fn metrics() -> impl IntoResponse {
 
 async fn create_device(
     State(state): State<DeviceManagerState>,
+    RequireAuth(auth_ctx): RequireAuth,
     Json(req): Json<CreateDeviceRequest>,
 ) -> impl IntoResponse {
-    // TODO: Extract tenant_id from auth context
-    let tenant_id = "system"; // Default tenant for now
+    // Check permission
+    if !auth_ctx.has_permission("device:create") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    // Extract tenant_id from auth context
+    let tenant_id = &auth_ctx.tenant_id;
 
     match state.store.create_device(tenant_id, req).await {
         Ok(device) => {
@@ -869,10 +878,20 @@ async fn get_device_and_create_imaging_client(
 /// Configure camera settings
 async fn configure_camera(
     State(state): State<DeviceManagerState>,
+    RequireAuth(auth_ctx): RequireAuth,
     Path(device_id): Path<String>,
     Json(config_request): Json<CameraConfigurationRequest>,
 ) -> impl IntoResponse {
-    info!(device_id = %device_id, "configuring camera");
+    // Check permission
+    if !auth_ctx.has_permission("device:configure") {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"error": "permission denied"})),
+        )
+            .into_response();
+    }
+
+    info!(device_id = %device_id, user = %auth_ctx.username, "configuring camera");
 
     // Get device and create imaging client
     let imaging_client = match get_device_and_create_imaging_client(&state, &device_id).await {
@@ -901,7 +920,7 @@ async fn configure_camera(
         applied_config: Some(serde_json::to_value(&response.applied_settings).unwrap_or_default()),
         status: response.status.clone(),
         error_message: response.error_message.clone(),
-        applied_by: None, // TODO: Get from auth context
+        applied_by: Some(auth_ctx.username.clone()), // Get from auth context
         created_at: Utc::now(),
         applied_at: response.applied_at,
     };

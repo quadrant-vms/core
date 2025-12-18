@@ -142,7 +142,7 @@ pub struct DeviceHealthHistory {
     pub checked_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct DeviceEvent {
     pub event_id: i64,
     pub device_id: String,
@@ -152,6 +152,15 @@ pub struct DeviceEvent {
     pub user_id: Option<String>,
     pub metadata: Option<JsonValue>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceEventQuery {
+    pub event_type: Option<String>,
+    pub start_time: Option<String>, // ISO 8601 timestamp
+    pub end_time: Option<String>,   // ISO 8601 timestamp
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
