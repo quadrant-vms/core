@@ -291,6 +291,8 @@ quadrant-vms/core/
 ## 📖 Documentation
 
 - **[SERVICES.md](SERVICES.md)** - Detailed documentation for each service
+- **[ENV_VAR_REFERENCE.md](ENV_VAR_REFERENCE.md)** - Canonical environment variable names for all services
+- **[TRACKING_ISSUES.md](TRACKING_ISSUES.md)** - Deployment and operability issues tracking
 - **[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)** - Authentication & authorization setup
 - **[docs/HA_DEPLOYMENT.md](docs/HA_DEPLOYMENT.md)** - High-availability deployment guide
 - **[docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md)** - GPU acceleration setup for AI workloads

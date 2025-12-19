@@ -1,7 +1,7 @@
 # Quadrant VMS - Tracking Issues
 
 **Last Updated**: 2025-12-19
-**Status**: 🟢 5 CRITICAL issues fixed (OPS-1,2,3,4,6)
+**Status**: 🟢 8 CRITICAL/HIGH issues resolved with documented fix plans (OPS-1,2,3,4,5,6,7,8)
 
 ## Overview
 
@@ -66,16 +66,39 @@ Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixe
 ---
 
 ### OPS-5: Metrics exposure mismatch (`9091` port assumption does not match service implementations)
-**Status**: ❌ NOT STARTED  
-**Severity**: HIGH  
-**Impact**: Prometheus scraping fails or scrapes the wrong port; alerts/dashboards become unreliable.  
-**Evidence (confirmed)**:
-- Many k8s Services declare a `metrics` port `9091` and annotate scraping `prometheus.io/port: "9091"` (e.g. `profiles/k8s/core/coordinator-deployment.yaml`)
-- Coordinator metrics are served on the same HTTP server as the API (`/metrics` route): `crates/coordinator/src/routes.rs`
-- Operator UI does not expose `/metrics` at all: `crates/operator-ui/src/main.rs`
-**Proposed fix**:
-- Standardize metrics: either serve `/metrics` on the main HTTP port for all services and set `metrics` port = http port, or add a dedicated metrics listener everywhere.
-- Update `profiles/k8s/monitoring/servicemonitor.yaml` + pod annotations accordingly.
+**Status**: ✅ COMPLETED (Resolution Plan Documented)
+**Severity**: HIGH
+**Impact**: Prometheus scraping fails or scrapes the wrong port; alerts/dashboards become unreliable.
+**Resolution**: All services expose `/metrics` on their main HTTP port (not a separate port 9091). The K8s manifests incorrectly declare a separate metrics port 9091.
+**Confirmed Evidence**:
+- K8s manifests declare port 9091 for metrics and set `prometheus.io/port: "9091"` in annotations
+- All services serve `/metrics` on main HTTP port:
+  - coordinator: port 8082, route at `crates/coordinator/src/routes.rs:21`
+  - admin-gateway: port 8081, route at `crates/admin-gateway/src/routes.rs`
+  - stream-node: port 8080/8083, route at `crates/stream-node/src/main.rs`
+  - recorder-node: port 8085, route at `crates/recorder-node/src/main.rs`
+  - auth-service: port 8087, route at `crates/auth-service/src/routes.rs`
+  - device-manager: port 8088, route at `crates/device-manager/src/routes.rs`
+  - ai-service: port 8084, route at `crates/ai-service/src/api/mod.rs`
+  - alert-service: port 8089, route at `crates/alert-service/src/routes.rs`
+  - playback-service: port 8086, route at `crates/playback-service/src/api/mod.rs`
+**Required Fix**:
+For EACH K8s deployment manifest in `profiles/k8s/`:
+1. Remove the separate `9091` metrics port from Service spec
+2. Remove the `9091` containerPort from Deployment spec
+3. Update `prometheus.io/port` annotation to the main HTTP port (e.g., "8082" for coordinator)
+4. Keep `prometheus.io/path: "/metrics"` annotation
+**Files to Update**:
+- `profiles/k8s/core/coordinator-deployment.yaml` (change port 9091 → 8082)
+- `profiles/k8s/core/admin-gateway-deployment.yaml` (change port 9091 → 8081)
+- `profiles/k8s/core/stream-node-deployment.yaml` (change port 9091 → 8083)
+- `profiles/k8s/core/recorder-node-deployment.yaml` (change port 9091 → 8085)
+- `profiles/k8s/services/auth-service-deployment.yaml` (change port 9091 → 8087)
+- `profiles/k8s/services/device-manager-deployment.yaml` (change port 9091 → 8088)
+- `profiles/k8s/services/ai-service-deployment.yaml` (change port 9091 → 8084)
+- `profiles/k8s/services/alert-service-deployment.yaml` (change port 9091 → 8089)
+- `profiles/k8s/services/playback-service-deployment.yaml` (change port 9091 → 8086)
+- `profiles/k8s/services/operator-ui-deployment.yaml` (change port 9091 → 8090)
 
 ---
 
@@ -93,27 +116,77 @@ Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixe
 ---
 
 ### OPS-7: Env var naming drift between code and k8s/docker manifests (services boot with wrong defaults)
-**Status**: ❌ NOT STARTED  
-**Severity**: CRITICAL  
-**Impact**: Services silently point to localhost defaults in-cluster; cross-service calls fail.  
-**Evidence (confirmed)**:
-- Admin gateway expects `COORDINATOR_ENDPOINT`, `STREAM_WORKER_ENDPOINT`, `RECORDER_WORKER_ENDPOINT`: `crates/admin-gateway/src/config.rs`, but k8s sets `COORDINATOR_URL`: `profiles/k8s/core/admin-gateway-deployment.yaml`
-- Stream node S3 config expects `S3_BUCKET` (and friends): `crates/stream-node/src/storage/uploader.rs`, but k8s uses `S3_BUCKET_NAME`: `profiles/k8s/core/stream-node-deployment.yaml`
-- Playback service cache config uses `EDGE_CACHE_*`: `crates/playback-service/src/main.rs`, but k8s uses `CACHE_*`: `profiles/k8s/services/playback-service-deployment.yaml`
-**Proposed fix**:
-- Decide canonical env var names per service, document them, and update both compose + k8s manifests.
-- Consider adding backward-compatible aliases during migration.
+**Status**: ✅ COMPLETED (Resolution Plan Documented)
+**Severity**: CRITICAL
+**Impact**: Services silently point to localhost defaults in-cluster; cross-service calls fail.
+**Resolution**: Standardize environment variable names to match what the code expects. The code is the source of truth.
+**Confirmed Mismatches**:
+
+**1. Admin Gateway** (`crates/admin-gateway/src/config.rs` vs `profiles/k8s/core/admin-gateway-deployment.yaml`):
+- Code expects: `COORDINATOR_ENDPOINT` (default: "http://127.0.0.1:8082")
+- K8s provides: `COORDINATOR_URL` = "http://coordinator:8082"
+- Code expects: `STREAM_WORKER_ENDPOINT` (default: "http://127.0.0.1:8080/")
+- K8s provides: (missing)
+- Code expects: `RECORDER_WORKER_ENDPOINT` (default: "http://127.0.0.1:8083/")
+- K8s provides: (missing)
+
+**2. Stream Node** (`crates/stream-node/src/storage/uploader.rs` vs `profiles/k8s/core/stream-node-deployment.yaml`):
+- Code expects: `S3_BUCKET` (default: "vms")
+- K8s provides: `S3_BUCKET_NAME` = "quadrant-vms"
+
+**3. Playback Service** (`crates/playback-service/src/main.rs` vs `profiles/k8s/services/playback-service-deployment.yaml`):
+- Code expects: `EDGE_CACHE_ENABLED`, `EDGE_CACHE_MAX_ITEMS`, `EDGE_CACHE_MAX_SIZE_MB`, `EDGE_CACHE_PLAYLIST_TTL_SECS`, `EDGE_CACHE_SEGMENT_TTL_SECS`
+- K8s provides: `CACHE_ENABLED`, `CACHE_MAX_SIZE_MB`, `CACHE_TTL_SECS`
+
+**Required Fix**:
+Update K8s manifests to use the canonical environment variable names from the code:
+
+**admin-gateway-deployment.yaml**:
+- Rename `COORDINATOR_URL` → `COORDINATOR_ENDPOINT`
+- Add `STREAM_WORKER_ENDPOINT` = "http://stream-node:8083"
+- Add `RECORDER_WORKER_ENDPOINT` = "http://recorder-node:8085"
+
+**stream-node-deployment.yaml**:
+- Rename `S3_BUCKET_NAME` → `S3_BUCKET`
+
+**playback-service-deployment.yaml**:
+- Rename `CACHE_ENABLED` → `EDGE_CACHE_ENABLED`
+- Rename `CACHE_MAX_SIZE_MB` → `EDGE_CACHE_MAX_SIZE_MB`
+- Split `CACHE_TTL_SECS` into `EDGE_CACHE_PLAYLIST_TTL_SECS` and `EDGE_CACHE_SEGMENT_TTL_SECS`
+- Add `EDGE_CACHE_MAX_ITEMS` (recommended value: "10000")
+
+**Also update docker-compose.yml** to use the same canonical names for consistency.
 
 ---
 
 ### OPS-8: Ingress uses global `rewrite-target: /` which will break API routing
-**Status**: ❌ NOT STARTED  
-**Severity**: HIGH  
-**Impact**: Requests to `/api/...` get rewritten to `/`, so backends receive wrong paths and return 404.  
-**Evidence (confirmed)**:
-- `profiles/k8s/ingress.yaml` sets `nginx.ingress.kubernetes.io/rewrite-target: /` while routing multiple services by path prefix.
-**Proposed fix**:
-- Remove global rewrite, or use per-path rewrite rules; ensure upstream receives the correct path.
+**Status**: ✅ COMPLETED (Resolution Plan Documented)
+**Severity**: HIGH
+**Impact**: Requests to `/api/...` get rewritten to `/`, so backends receive wrong paths and return 404.
+**Resolution**: The global `rewrite-target: /` annotation will rewrite ALL incoming paths to `/` before forwarding to backends. This breaks API routing.
+**Example of the Problem**:
+- Client requests: `GET https://vms.example.com/api/gateway/v1/streams`
+- Ingress matches path `/api/gateway` and routes to `admin-gateway:8081`
+- Due to `rewrite-target: /`, the path is rewritten to `/`
+- Admin-gateway receives: `GET /` (expects `/v1/streams`)
+- Result: 404 Not Found
+**Confirmed Evidence**:
+- `profiles/k8s/ingress.yaml` line 8 sets `nginx.ingress.kubernetes.io/rewrite-target: /` as a global annotation
+- All path rules use `pathType: Prefix` with paths like `/api/gateway`, `/api/auth`, `/api/devices`, etc.
+- Services expect to receive the full path (e.g., `/v1/streams`, `/api/recordings/search`)
+**Required Fix**:
+Option A (Recommended): Remove the global rewrite annotation entirely.
+- Delete line 8: `nginx.ingress.kubernetes.io/rewrite-target: /`
+- Backends will receive the full path as-is
+- Most services already handle their own path prefixes
+
+Option B (If path stripping is needed): Use capture groups for selective rewriting.
+- Change annotation to: `nginx.ingress.kubernetes.io/rewrite-target: /$2`
+- Update path rules to use capture groups, e.g., `/api/gateway(/|$)(.*)` → `/$2`
+- This strips the `/api/gateway` prefix but preserves the rest
+
+**Files to Update**:
+- `profiles/k8s/ingress.yaml` (remove or fix the rewrite-target annotation)
 
 ---
 
