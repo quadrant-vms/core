@@ -32,13 +32,28 @@ spec:
         prometheus.io/port: "8089"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: alert-service
-        image: quadrant-vms/alert-service:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/alert-service:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8089
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: ALERT_SERVICE_ADDR
           value: "0.0.0.0:8089"

@@ -32,13 +32,28 @@ spec:
         prometheus.io/port: "8083"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: stream-node
-        image: quadrant-vms/stream-node:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/stream-node:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8083
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: STREAM_NODE_ADDR
           value: "0.0.0.0:8083"

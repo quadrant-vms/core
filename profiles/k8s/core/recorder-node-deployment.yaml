@@ -14,11 +14,12 @@ spec:
     app: recorder-node
 ---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: recorder-node
   namespace: quadrant-vms
 spec:
+  serviceName: recorder-node
   replicas: 2
   selector:
     matchLabels:
@@ -32,13 +33,28 @@ spec:
         prometheus.io/port: "8085"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: recorder-node
-        image: quadrant-vms/recorder-node:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/recorder-node:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8085
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: RECORDER_NODE_ADDR
           value: "0.0.0.0:8085"
@@ -53,6 +69,22 @@ spec:
           value: "/data/recordings"
         - name: ENABLE_STATE_STORE
           value: "true"
+        - name: S3_ENDPOINT
+          value: "http://minio:9000"
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: access-key
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: secret-key
+        - name: S3_BUCKET
+          value: "recordings"
+        - name: S3_REGION
+          value: "us-east-1"
         volumeMounts:
         - name: recording-storage
           mountPath: /data/recordings
@@ -71,24 +103,21 @@ spec:
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /readyz
+            path: /healthz
             port: 8085
           initialDelaySeconds: 5
           periodSeconds: 5
-      volumes:
-      - name: recording-storage
-        persistentVolumeClaim:
-          claimName: recording-storage-pvc
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: recording-storage-pvc
-  namespace: quadrant-vms
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 200Gi
-  storageClassName: standard
+  volumeClaimTemplates:
+  - metadata:
+      name: recording-storage
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 100Gi

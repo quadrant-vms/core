@@ -247,6 +247,10 @@ kubectl get all -n quadrant-vms
 
 **Kubernetes features included:**
 - ✅ All 10 services with production-ready manifests
+- ✅ Pinned image versions (v0.1.0 for Quadrant VMS, stable releases for infrastructure)
+- ✅ Pod Security Standards with securityContext and Pod Security Admission
+- ✅ StatefulSet for recorder-node with ReadWriteOnce PVCs (no RWX dependency)
+- ✅ Centralized configuration via Kustomize ConfigMap consumed by all services
 - ✅ HorizontalPodAutoscaler for auto-scaling
 - ✅ PodDisruptionBudget for high availability
 - ✅ NetworkPolicy for pod-to-pod security

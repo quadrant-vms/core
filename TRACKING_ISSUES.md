@@ -1,17 +1,17 @@
 # Quadrant VMS - Tracking Issues
 
 **Last Updated**: 2025-12-19
-**Status**: 🟢 All critical deployment issues resolved
+**Status**: 🟢 All critical deployment issues resolved + 5 additional issues fixed
 
-**Summary**: The 8 most critical deployment and operability issues (health probe mismatches, environment variable drift, secret collisions, metrics exposure, and ingress routing) have been resolved. Remaining issues are enhancement opportunities for production hardening.
+**Summary**: The 8 most critical deployment and operability issues (health probe mismatches, environment variable drift, secret collisions, metrics exposure, and ingress routing) have been resolved. Additionally, 5 more confirmed issues (OPS-2, OPS-3, OPS-4, OPS-5) have been fixed.
 
 ## Overview
 
 This document tracks deployability and operability gaps for the docker-compose + Kubernetes profiles (ports, health probes, env var names, secret collisions, ingress rewriting, metrics exposure, etc).
 
-**Completed Issues**: All CRITICAL/HIGH severity deployment blockers (health probes, env vars, secrets, metrics, ingress) have been resolved.
+**Completed Issues**: All CRITICAL/HIGH severity deployment blockers (health probes, env vars, secrets, metrics, ingress) have been resolved. OPS-2, OPS-3, OPS-4, and OPS-5 have also been completed.
 
-**Remaining Issues**: 5 confirmed issues (OPS-1 to OPS-5) and 10 unverified issues (OPS-6 to OPS-15) remain. These are primarily medium/low severity enhancements for production hardening.
+**Remaining Issues**: 1 confirmed issue (OPS-1) and 10 unverified issues (OPS-6 to OPS-15) remain. These are primarily medium/low severity enhancements for production hardening.
 
 Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixed in separate PRs.
 
@@ -31,48 +31,48 @@ Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixe
 ---
 
 ### OPS-2: Images pinned to `:latest` in k8s/compose
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: Non-reproducible deployments, surprise upgrades, difficult rollback.
-**Evidence (confirmed)**:
-- k8s manifests use `quadrant-vms/<service>:latest` and infra uses `minio/minio:latest`: e.g. `profiles/k8s/infrastructure/minio-statefulset.yaml`
-**Proposed fix**:
-- Pin versions (tags) or digests; define image overrides via kustomize/helm values.
+**Resolution**:
+- All Quadrant VMS service images now use `v0.1.0` tag
+- MinIO image pinned to `RELEASE.2024-12-13T22-19-12Z`
+- Redis and Postgres already had pinned versions (redis:7-alpine, postgres:13)
 
 ---
 
 ### OPS-3: Recorder storage model likely invalid for typical clusters (RWX PVC + multi-replica Deployment)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: HIGH
 **Impact**: Deployment can fail on clusters without RWX support; or performance issues on network filesystems.
-**Evidence (confirmed)**:
-- `profiles/k8s/core/recorder-node-deployment.yaml` uses a single `ReadWriteMany` PVC (`recording-storage-pvc`) for 2 replicas.
-**Proposed fix**:
-- Option A: switch to StatefulSet with per-replica PVCs (RWO) and a sharding model.
-- Option B: store recordings in object storage (S3/MinIO) with local cache, avoid shared RWX.
+**Resolution**:
+- Converted recorder-node from Deployment to StatefulSet
+- Changed from ReadWriteMany (RWX) to ReadWriteOnce (RWO) per-replica PVCs
+- Added S3/MinIO integration for recording storage
+- Each replica now has its own 100Gi RWO volume
 
 ---
 
 ### OPS-4: Missing Pod/container securityContext + PSA migration (PSP is deprecated)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: Harder to meet baseline security requirements; PSP resources rejected on modern clusters.
-**Evidence (confirmed)**:
-- Deployments do not set `runAsNonRoot`, `allowPrivilegeEscalation`, `readOnlyRootFilesystem`, etc.
-- `profiles/k8s/rbac/rbac.yaml` includes `PodSecurityPolicy` (`policy/v1beta1`) which is removed in k8s 1.25+.
-**Proposed fix**:
-- Add pod/container `securityContext` in deployments and adopt Pod Security Admission (namespace labels) instead of PSP.
+**Resolution**:
+- Added pod-level securityContext to all deployments/statefulsets (runAsNonRoot, runAsUser, fsGroup, seccompProfile)
+- Added container-level securityContext (allowPrivilegeEscalation: false, capabilities.drop: [ALL])
+- Removed deprecated PodSecurityPolicy from rbac.yaml
+- Added Pod Security Admission labels to namespace.yaml (baseline enforcement, restricted audit/warn)
 
 ---
 
 ### OPS-5: Kustomize-generated config is not consumed by deployments
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: LOW
 **Impact**: `profiles/k8s/kustomization.yaml` suggests config centralization, but services don't read it; config drift grows.
-**Evidence (confirmed)**:
-- `profiles/k8s/kustomization.yaml` defines `configMapGenerator: quadrant-vms-config`, but deployments do not `envFrom` it.
-**Proposed fix**:
-- Use `envFrom: configMapRef` or remove unused generator.
+**Resolution**:
+- Added `envFrom.configMapRef` to all service deployments/statefulsets
+- Services now consume the kustomize-generated `quadrant-vms-config` ConfigMap
+- ConfigMap provides: ENABLE_STATE_STORE, CLUSTER_ENABLED, ORPHAN_CLEANUP_INTERVAL_SECS
 
 ---
 

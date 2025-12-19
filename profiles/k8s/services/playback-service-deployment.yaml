@@ -32,13 +32,28 @@ spec:
         prometheus.io/port: "8086"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: playback-service
-        image: quadrant-vms/playback-service:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/playback-service:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8086
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: PLAYBACK_SERVICE_ADDR
           value: "0.0.0.0:8086"
@@ -89,8 +104,20 @@ spec:
           periodSeconds: 5
       volumes:
       - name: recording-storage
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
         persistentVolumeClaim:
           claimName: recording-storage-pvc
       - name: hls-storage
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
         emptyDir:
           sizeLimit: 10Gi

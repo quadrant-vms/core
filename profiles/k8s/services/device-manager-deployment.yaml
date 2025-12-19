@@ -32,13 +32,28 @@ spec:
         prometheus.io/port: "8088"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: device-manager
-        image: quadrant-vms/device-manager:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/device-manager:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8088
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: DEVICE_MANAGER_ADDR
           value: "0.0.0.0:8088"

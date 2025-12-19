@@ -32,6 +32,12 @@ spec:
         prometheus.io/port: "8084"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       # Uncomment for GPU node scheduling
       # nodeSelector:
       #   accelerator: nvidia-gpu
@@ -41,11 +47,20 @@ spec:
       #   effect: NoSchedule
       containers:
       - name: ai-service
-        image: quadrant-vms/ai-service:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: quadrant-vms/ai-service:v0.1.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8084
           name: http
+        envFrom:
+        - configMapRef:
+            name: quadrant-vms-config
         env:
         - name: AI_SERVICE_ADDR
           value: "0.0.0.0:8084"

@@ -6,3 +6,10 @@ metadata:
     name: quadrant-vms
     app.kubernetes.io/name: quadrant-vms
     app.kubernetes.io/part-of: quadrant-vms
+    # Pod Security Standards (replaces deprecated PodSecurityPolicy)
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: v1.28
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: v1.28
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: v1.28

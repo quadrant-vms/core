@@ -30,9 +30,21 @@ spec:
       labels:
         app: minio
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: minio
-        image: minio/minio:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        image: minio/minio:RELEASE.2024-12-13T22-19-12Z
         args:
         - server
         - /data
@@ -80,6 +92,12 @@ spec:
   - metadata:
       name: minio-data
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       accessModes: [ "ReadWriteOnce" ]
       resources:
         requests:
