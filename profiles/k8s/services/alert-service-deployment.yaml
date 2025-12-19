@@ -32,6 +32,7 @@ spec:
         prometheus.io/port: "8089"
         prometheus.io/path: "/metrics"
     spec:
+      serviceAccountName: quadrant-vms-service
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

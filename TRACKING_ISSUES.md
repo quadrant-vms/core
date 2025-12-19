@@ -1,17 +1,17 @@
 # Quadrant VMS - Tracking Issues
 
 **Last Updated**: 2025-12-19
-**Status**: 🟢 All critical deployment issues resolved + 5 additional issues fixed
+**Status**: 🟢 All critical deployment issues resolved + 8 additional issues fixed
 
-**Summary**: The 8 most critical deployment and operability issues (health probe mismatches, environment variable drift, secret collisions, metrics exposure, and ingress routing) have been resolved. Additionally, 5 more confirmed issues (OPS-2, OPS-3, OPS-4, OPS-5) have been fixed.
+**Summary**: The 8 most critical deployment and operability issues (health probe mismatches, environment variable drift, secret collisions, metrics exposure, and ingress routing) have been resolved. Additionally, 8 more confirmed issues (OPS-2, OPS-3, OPS-4, OPS-5, OPS-6, OPS-7, OPS-11) have been fixed.
 
 ## Overview
 
 This document tracks deployability and operability gaps for the docker-compose + Kubernetes profiles (ports, health probes, env var names, secret collisions, ingress rewriting, metrics exposure, etc).
 
-**Completed Issues**: All CRITICAL/HIGH severity deployment blockers (health probes, env vars, secrets, metrics, ingress) have been resolved. OPS-2, OPS-3, OPS-4, and OPS-5 have also been completed.
+**Completed Issues**: All CRITICAL/HIGH severity deployment blockers (health probes, env vars, secrets, metrics, ingress) have been resolved. OPS-2, OPS-3, OPS-4, OPS-5, OPS-6, OPS-7, and OPS-11 have also been completed.
 
-**Remaining Issues**: 1 confirmed issue (OPS-1) and 10 unverified issues (OPS-6 to OPS-15) remain. These are primarily medium/low severity enhancements for production hardening.
+**Remaining Issues**: 1 confirmed issue (OPS-1) and 7 unverified issues (OPS-8 to OPS-10, OPS-12 to OPS-15) remain. These are primarily medium/low severity enhancements for production hardening.
 
 Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixed in separate PRs.
 
@@ -81,24 +81,24 @@ Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixe
 These are common production blockers for modern VMS stacks. They are not fully confirmed in this scan (or depend on your cluster setup), but are high-probability items worth tracking.
 
 ### OPS-6: Deployments don't reference ServiceAccounts (RBAC may be unused)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: RBAC policies in `profiles/k8s/rbac/rbac.yaml` may not apply if pods run under the default ServiceAccount; later features that require API access may fail unexpectedly.
-**What to check**:
-- Whether each Deployment has `spec.template.spec.serviceAccountName`.
-**Proposed fix**:
-- Set `serviceAccountName: coordinator` for coordinator and `serviceAccountName: quadrant-vms-service` for other services where needed.
+**Resolution**:
+- Added `serviceAccountName: coordinator` to coordinator deployment
+- Added `serviceAccountName: quadrant-vms-service` to all other service deployments
+- All deployments now properly reference their ServiceAccounts for RBAC enforcement
 
 ---
 
 ### OPS-7: NetworkPolicy assumes `ingress-nginx` namespace label `name=ingress-nginx`
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: Ingress traffic can be blocked if your ingress controller namespace labels don't match `profiles/k8s/network/networkpolicy.yaml`.
-**What to check**:
-- Label on ingress namespace: `kubectl get ns ingress-nginx --show-labels`.
-**Proposed fix**:
-- Match actual labels, or use `namespaceSelector.matchLabels: kubernetes.io/metadata.name: ingress-nginx`.
+**Resolution**:
+- Changed all NetworkPolicy namespace selectors from `name: ingress-nginx` to `kubernetes.io/metadata.name: ingress-nginx`
+- Now uses the standard Kubernetes metadata label that's automatically set on all namespaces
+- Eliminates dependency on custom namespace labels
 
 ---
 
@@ -134,13 +134,13 @@ These are common production blockers for modern VMS stacks. They are not fully c
 ---
 
 ### OPS-11: Postgres liveness/readiness uses fixed `pg_isready -U quadrant`
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: If `postgres-secret.username` changes, probes will start failing.
-**What to check**:
-- Whether the probe user is intended to be hard-coded.
-**Proposed fix**:
-- Use `pg_isready -U $(POSTGRES_USER)` via env expansion (or a small shell wrapper) and keep it aligned with Secret.
+**Resolution**:
+- Changed probes to use shell expansion: `sh -c "pg_isready -U $POSTGRES_USER"`
+- Probes now dynamically use the POSTGRES_USER environment variable
+- Username changes in postgres-secret no longer break health checks
 
 ---
 
