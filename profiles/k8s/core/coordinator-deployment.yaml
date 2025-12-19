@@ -9,8 +9,6 @@ spec:
   ports:
   - port: 8082
     name: http
-  - port: 9091
-    name: metrics
   selector:
     app: coordinator
 ---
@@ -30,7 +28,7 @@ spec:
         app: coordinator
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9091"
+        prometheus.io/port: "8082"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -40,8 +38,6 @@ spec:
         ports:
         - containerPort: 8082
           name: http
-        - containerPort: 9091
-          name: metrics
         env:
         - name: DATABASE_URL
           valueFrom:

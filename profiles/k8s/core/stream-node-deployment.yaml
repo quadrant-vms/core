@@ -10,8 +10,6 @@ spec:
   ports:
   - port: 8083
     name: http
-  - port: 9091
-    name: metrics
   selector:
     app: stream-node
 ---
@@ -31,7 +29,7 @@ spec:
         app: stream-node
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9091"
+        prometheus.io/port: "8083"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -41,8 +39,6 @@ spec:
         ports:
         - containerPort: 8083
           name: http
-        - containerPort: 9091
-          name: metrics
         env:
         - name: STREAM_NODE_ADDR
           value: "0.0.0.0:8083"
@@ -62,7 +58,7 @@ spec:
             secretKeyRef:
               name: minio-secret
               key: secret-key
-        - name: S3_BUCKET_NAME
+        - name: S3_BUCKET
           value: "quadrant-vms"
         volumeMounts:
         - name: hls-storage

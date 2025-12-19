@@ -10,8 +10,6 @@ spec:
   ports:
   - port: 8084
     name: http
-  - port: 9091
-    name: metrics
   selector:
     app: ai-service
 ---
@@ -31,7 +29,7 @@ spec:
         app: ai-service
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9091"
+        prometheus.io/port: "8084"
         prometheus.io/path: "/metrics"
     spec:
       # Uncomment for GPU node scheduling
@@ -48,8 +46,6 @@ spec:
         ports:
         - containerPort: 8084
           name: http
-        - containerPort: 9091
-          name: metrics
         env:
         - name: AI_SERVICE_ADDR
           value: "0.0.0.0:8084"

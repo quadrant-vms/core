@@ -10,8 +10,6 @@ spec:
   ports:
   - port: 8089
     name: http
-  - port: 9091
-    name: metrics
   selector:
     app: alert-service
 ---
@@ -31,7 +29,7 @@ spec:
         app: alert-service
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9091"
+        prometheus.io/port: "8089"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -41,8 +39,6 @@ spec:
         ports:
         - containerPort: 8089
           name: http
-        - containerPort: 9091
-          name: metrics
         env:
         - name: ALERT_SERVICE_ADDR
           value: "0.0.0.0:8089"

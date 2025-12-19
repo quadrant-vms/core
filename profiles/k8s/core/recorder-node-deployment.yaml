@@ -10,8 +10,6 @@ spec:
   ports:
   - port: 8085
     name: http
-  - port: 9091
-    name: metrics
   selector:
     app: recorder-node
 ---
@@ -31,7 +29,7 @@ spec:
         app: recorder-node
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "9091"
+        prometheus.io/port: "8085"
         prometheus.io/path: "/metrics"
     spec:
       containers:
@@ -41,8 +39,6 @@ spec:
         ports:
         - containerPort: 8085
           name: http
-        - containerPort: 9091
-          name: metrics
         env:
         - name: RECORDER_NODE_ADDR
           value: "0.0.0.0:8085"
