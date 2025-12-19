@@ -82,7 +82,7 @@ spec:
             cpu: "2000m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8084
           initialDelaySeconds: 60
           periodSeconds: 10

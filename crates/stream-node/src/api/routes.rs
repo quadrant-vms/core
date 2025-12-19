@@ -10,6 +10,10 @@ pub async fn healthz() -> impl IntoResponse {
   (StatusCode::OK, "ok")
 }
 
+pub async fn readyz() -> impl IntoResponse {
+  (StatusCode::OK, "ready")
+}
+
 pub async fn list_streams() -> impl IntoResponse {
   let list = stream::list_streams().await;
   let out: Vec<StreamDto> = list

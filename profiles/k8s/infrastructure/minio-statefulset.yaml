@@ -94,3 +94,6 @@ type: Opaque
 stringData:
   root-user: minioadmin
   root-password: change-me-in-production
+  # S3 API access keys (same as root credentials by default)
+  access-key: minioadmin
+  secret-key: change-me-in-production

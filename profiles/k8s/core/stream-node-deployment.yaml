@@ -76,7 +76,7 @@ spec:
             cpu: "2000m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /healthz
             port: 8083
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -90,13 +90,3 @@ spec:
       - name: hls-storage
         emptyDir:
           sizeLimit: 10Gi
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: minio-secret
-  namespace: quadrant-vms
-type: Opaque
-stringData:
-  access-key: minioadmin
-  secret-key: minioadmin

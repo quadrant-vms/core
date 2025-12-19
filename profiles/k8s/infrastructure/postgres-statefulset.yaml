@@ -94,3 +94,4 @@ type: Opaque
 stringData:
   username: quadrant
   password: change-me-in-production
+  database-url: postgresql://quadrant:change-me-in-production@postgres:5432/quadrant_vms

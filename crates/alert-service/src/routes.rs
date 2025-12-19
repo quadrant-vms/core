@@ -43,7 +43,7 @@ pub struct AppState {
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         // Health check
-        .route("/health", axum::routing::get(health_check))
+        .route("/healthz", axum::routing::get(health_check))
         .route("/readyz", axum::routing::get(ready_check))
         // Alert Rules
         .route("/v1/rules", axum::routing::post(create_rule))

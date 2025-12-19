@@ -35,7 +35,8 @@ async fn main() -> anyhow::Result<()> {
     // Build API router
     let api_router = Router::new()
         // Health check
-        .route("/health", get(api::health::health_check))
+        .route("/healthz", get(api::health::health_check))
+        .route("/readyz", get(api::health::ready_check))
         // Dashboard stats
         .route("/api/dashboard/stats", get(api::dashboard::get_stats))
         // Devices

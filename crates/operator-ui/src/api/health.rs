@@ -11,3 +11,13 @@ pub async fn health_check() -> (StatusCode, Json<Value>) {
         })),
     )
 }
+
+pub async fn ready_check() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::OK,
+        Json(json!({
+            "status": "ready",
+            "service": "operator-ui"
+        })),
+    )
+}

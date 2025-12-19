@@ -22,6 +22,7 @@ pub fn create_router(manager: Arc<PlaybackManager>, cache: Arc<EdgeCache>) -> Ro
 
     Router::new()
         .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
         .route("/v1/playback/start", post(start_playback))
         .route("/v1/playback/stop", post(stop_playback))
         .route("/v1/playback/seek", post(seek_playback))

@@ -6,9 +6,12 @@ use tracing::info;
 
 mod api;
 mod compat;
+mod config;
 mod metrics;
 mod storage;
 mod stream;
+
+use config::Config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -24,8 +27,12 @@ async fn main() -> anyhow::Result<()> {
       telemetry::init_structured_logging(log_config);
   }
 
+  // Load configuration
+  let config = Config::from_env()?;
+
   let app = Router::new()
     .route("/healthz", get(api::healthz))
+    .route("/readyz", get(api::readyz))
     .route("/streams", get(api::list_streams))
     // Recommended REST endpoints with proper HTTP methods
     .route("/start", post(api::start_stream))
@@ -39,9 +46,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(middleware::from_fn(trace_http_request))
     );
 
-  let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 8080));
-  let listener = TcpListener::bind(addr).await?;
-  info!(%addr, "stream-node started");
+  let listener = TcpListener::bind(&config.bind_addr).await?;
+  info!(addr = %config.bind_addr, "stream-node started");
   axum::serve(listener, app).await?;
 
   // Shutdown tracing provider

@@ -16,6 +16,10 @@ pub async fn healthz() -> &'static str {
     "ok"
 }
 
+pub async fn readyz() -> &'static str {
+    "ready"
+}
+
 pub async fn start_playback(
     State(manager): State<Arc<PlaybackManager>>,
     Json(req): Json<PlaybackStartRequest>,
