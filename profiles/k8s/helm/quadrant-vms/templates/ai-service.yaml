@@ -1,0 +1,125 @@
+{{- if .Values.aiService.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: ai-service
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8084
+    name: http
+  selector:
+    app: ai-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.aiService.replicas }}
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8084"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- with .Values.aiService.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.aiService.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: ai-service
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.aiService.image.repository }}:{{ .Values.aiService.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8084
+          name: http
+        envFrom:
+        - configMapRef:
+            name: {{ include "quadrant-vms.fullname" . }}-config
+        env:
+        - name: AI_SERVICE_ADDR
+          value: {{ .Values.aiService.env.AI_SERVICE_ADDR | quote }}
+        - name: AI_FRAME_CACHE_DIR
+          value: {{ .Values.aiService.env.AI_FRAME_CACHE_DIR | quote }}
+        - name: COORDINATOR_URL
+          value: "http://coordinator:8082"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- with .Values.aiService.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if .Values.aiService.persistence.enabled }}
+        volumeMounts:
+        - name: ai-data
+          mountPath: /data/ai-frames
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8084
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      {{- if .Values.aiService.persistence.enabled }}
+      volumes:
+      - name: ai-data
+        persistentVolumeClaim:
+          claimName: ai-service-data
+      {{- end }}
+{{- if .Values.aiService.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-service-data
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  accessModes:
+  - ReadWriteOnce
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.aiService.persistence.size }}
+{{- end }}
+{{- end }}

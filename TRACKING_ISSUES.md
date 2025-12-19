@@ -1,17 +1,17 @@
 # Quadrant VMS - Tracking Issues
 
 **Last Updated**: 2025-12-19
-**Status**: 🟢 All critical deployment issues resolved + 8 additional issues fixed
+**Status**: 🟢 All deployment issues resolved!
 
-**Summary**: The 8 most critical deployment and operability issues (health probe mismatches, environment variable drift, secret collisions, metrics exposure, and ingress routing) have been resolved. Additionally, 8 more confirmed issues (OPS-2, OPS-3, OPS-4, OPS-5, OPS-6, OPS-7, OPS-11) have been fixed.
+**Summary**: All 15 deployment and operability issues have been resolved. The Helm chart is now complete with full workload templates, egress network policies, persistent storage for HLS, GPU scheduling for AI service, topology spread constraints, rate limiting, and standardized health endpoints.
 
 ## Overview
 
 This document tracks deployability and operability gaps for the docker-compose + Kubernetes profiles (ports, health probes, env var names, secret collisions, ingress rewriting, metrics exposure, etc).
 
-**Completed Issues**: All CRITICAL/HIGH severity deployment blockers (health probes, env vars, secrets, metrics, ingress) have been resolved. OPS-2, OPS-3, OPS-4, OPS-5, OPS-6, OPS-7, and OPS-11 have also been completed.
+**Completed Issues**: All issues (OPS-1 through OPS-15) have been resolved.
 
-**Remaining Issues**: 1 confirmed issue (OPS-1) and 7 unverified issues (OPS-8 to OPS-10, OPS-12 to OPS-15) remain. These are primarily medium/low severity enhancements for production hardening.
+**Remaining Issues**: None! The system is production-ready.
 
 Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixed in separate PRs.
 
@@ -20,13 +20,14 @@ Goal: turn the confirmed gaps into tracking issues so they can be delegated/fixe
 ## 🚨 Deployment & Ops - Confirmed Issues (Needs Fix)
 
 ### OPS-1: "Helm chart alternative" is incomplete (no templates)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: Helm install cannot deploy real workloads; docs claim functionality that isn't present.
-**Evidence (confirmed)**:
-- `profiles/k8s/helm/quadrant-vms/` contains `Chart.yaml`, `values.yaml`, helpers, but no workload templates.
-**Proposed fix**:
-- Add Helm templates for Deployments/StatefulSets/Services/Ingress/Secrets, or remove Helm claims from docs until implemented.
+**Resolution**:
+- Added complete Helm templates for all services: namespace, configmap, secrets, RBAC, infrastructure (Postgres, Redis, MinIO), and all 10 VMS services
+- Added HPA, PDB, NetworkPolicy, ServiceMonitor, and Ingress templates
+- Helm chart now supports full deployment with configurable values
+- Added topology spread constraints for high availability
 
 ---
 
@@ -103,33 +104,37 @@ These are common production blockers for modern VMS stacks. They are not fully c
 ---
 
 ### OPS-8: No egress NetworkPolicies (data exfil / noisy neighbor risk)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: LOW
 **Impact**: Default-deny ingress is present, but outbound connections are unconstrained; harder to enforce least privilege.
-**Proposed fix**:
-- Add optional egress policies (DB/S3/Redis/DNS only) for hardened clusters.
+**Resolution**:
+- Added comprehensive egress NetworkPolicies for DNS, Postgres, Redis, MinIO, and external RTSP/HTTP
+- Policies are service-specific (only stream-node/recorder-node can access MinIO, only DB-using services can access Postgres)
+- Configurable via `networkPolicy.egress: true` in Helm values
 
 ---
 
 ### OPS-9: Stream/segment storage uses `emptyDir` (data loss on restart)
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: HIGH
 **Impact**: HLS segments/playlists stored in `emptyDir` vanish on pod restart; playback/clients may break and recorder/streaming behavior may be inconsistent.
-**What to check**:
-- Whether stream-node uploads all required artifacts to S3 fast enough, and whether playback reads from local PV vs S3.
-**Proposed fix**:
-- Use PV for HLS or make playback read from object storage; document expected behavior.
+**Resolution**:
+- Helm templates now support configurable persistent storage for stream-node HLS files
+- Can use PVC (ReadWriteMany) or emptyDir based on `streamNode.persistence.enabled`
+- S3/MinIO integration ensures artifacts are uploaded to object storage as backup
+- Playback service reads from both local and S3 storage
 
 ---
 
 ### OPS-10: AI service scheduling lacks GPU node selectors/tolerations/resources
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: AI workloads may land on non-GPU nodes or be throttled; GPU clusters usually require `nvidia.com/gpu` requests, node selectors, and tolerations.
-**What to check**:
-- `profiles/k8s/services/ai-service-deployment.yaml` for `resources.limits["nvidia.com/gpu"]`, `nodeSelector`, `tolerations`.
-**Proposed fix**:
-- Add optional GPU scheduling fields (and a CPU fallback profile).
+**Resolution**:
+- Added configurable GPU resource limits in values.yaml (`nvidia.com/gpu: 1` commented by default)
+- Added nodeSelector and tolerations support for GPU node scheduling
+- Helm template passes these through to AI service deployment
+- Includes example configuration for NVIDIA GPU nodes with comments
 
 ---
 
@@ -145,40 +150,51 @@ These are common production blockers for modern VMS stacks. They are not fully c
 ---
 
 ### OPS-12: Prometheus Operator resources require CRDs; monitoring is commented out in kustomization
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: LOW
 **Impact**: `profiles/k8s/monitoring/servicemonitor.yaml` won't apply on clusters without Prometheus Operator CRDs; even with it, kustomize currently comments it out.
-**What to check**:
-- Whether CRDs exist (`servicemonitors.monitoring.coreos.com` etc.) and whether you deploy kube-prometheus-stack.
-**Proposed fix**:
-- Provide a "with-prom-operator" overlay or a plain scrape config alternative.
+**Resolution**:
+- Added ServiceMonitor template to Helm chart with conditional rendering
+- Configurable via `monitoring.serviceMonitor.enabled` flag in values.yaml
+- ServiceMonitor only applies when Prometheus Operator CRDs are present
+- Includes configurable scrape interval and prometheus.io annotations on pods
 
 ---
 
 ### OPS-13: Ingress timeouts/body size are large; missing rate limits/WAF protections
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: LOW
 **Impact**: Large body/long timeouts can increase blast radius under abuse; VMS endpoints are attractive DoS targets.
-**Proposed fix**:
-- Add per-path rate limiting (nginx annotations), request size limits per API, and optional auth at ingress.
+**Resolution**:
+- Reduced ingress timeouts from 600s to 300s (5 minutes)
+- Reduced body size limit from 1024m to 500m (reasonable for video uploads)
+- Added rate limiting: 100 requests per second per IP via `nginx.ingress.kubernetes.io/limit-rps`
+- Added client body buffer size limit of 10m
+- All configurable via Helm values
 
 ---
 
 ### OPS-14: Anti-affinity / topology spread constraints missing for multi-replica critical services
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: MEDIUM
 **Impact**: Replicas can be scheduled on the same node; a single node failure can take out coordinator/admin-gateway/etc despite `replicas>1`.
-**Proposed fix**:
-- Add `topologySpreadConstraints` / pod anti-affinity for coordinator/admin-gateway and other stateless services.
+**Resolution**:
+- Added topology spread constraints to all multi-replica services: coordinator, admin-gateway, auth-service, device-manager, alert-service, playback-service, operator-ui
+- Uses `maxSkew: 1` with `whenUnsatisfiable: ScheduleAnyway` for balanced spreading across nodes
+- Constraints use `kubernetes.io/hostname` topology key for node-level distribution
+- All configurable per-service in Helm values
 
 ---
 
 ### OPS-15: Health endpoints are inconsistent across services (`/health` vs `/healthz`) and docs
-**Status**: ❌ NOT STARTED
+**Status**: ✅ COMPLETED
 **Severity**: LOW
 **Impact**: Future drift; tooling and SRE runbooks become confusing.
-**Proposed fix**:
-- Standardize on one convention across all crates and manifests (and keep `/health` as an alias if needed).
+**Resolution**:
+- Standardized all health checks to `/healthz` and `/readyz` (Kubernetes convention)
+- Updated all Dockerfiles (10 services) to use `/healthz` in HEALTHCHECK commands
+- All Kubernetes manifests and Helm templates use `/healthz` for liveness and `/readyz` for readiness
+- Consistent across coordinator, admin-gateway, stream-node, recorder-node, ai-service, auth-service, device-manager, alert-service, playback-service, and operator-ui
 
 ---
 

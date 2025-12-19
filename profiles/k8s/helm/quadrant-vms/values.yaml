@@ -8,6 +8,10 @@ global:
   imagePullPolicy: IfNotPresent
   storageClass: standard
 
+# Namespace creation
+namespace:
+  create: true
+
 # Image configuration
 image:
   registry: quadrant-vms
@@ -100,6 +104,13 @@ coordinator:
   podDisruptionBudget:
     enabled: true
     minAvailable: 2
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: coordinator
   env:
     CLUSTER_ENABLED: "true"
     ENABLE_STATE_STORE: "true"
@@ -125,6 +136,13 @@ adminGateway:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: admin-gateway
   env:
     ADMIN_GATEWAY_ADDR: "0.0.0.0:8081"
 
@@ -206,6 +224,13 @@ authService:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: auth-service
   env:
     AUTH_SERVICE_ADDR: "0.0.0.0:8087"
     JWT_SECRET: "change-this-secret-in-production-use-32-bytes-minimum"
@@ -231,6 +256,13 @@ deviceManager:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: device-manager
   env:
     DEVICE_MANAGER_ADDR: "0.0.0.0:8088"
     HEALTH_CHECK_INTERVAL_SECS: "60"
@@ -288,6 +320,13 @@ alertService:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: alert-service
   env:
     ALERT_SERVICE_ADDR: "0.0.0.0:8089"
   smtp:
@@ -319,6 +358,13 @@ playbackService:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: playback-service
   env:
     PLAYBACK_SERVICE_ADDR: "0.0.0.0:8086"
     RECORDING_STORAGE_ROOT: "/data/recordings"
@@ -347,6 +393,13 @@ operatorUI:
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
+  topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app: operator-ui
   env:
     OPERATOR_UI_ADDR: "0.0.0.0:8090"
 
@@ -357,11 +410,18 @@ ingress:
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/websocket-services: "operator-ui"
-    nginx.ingress.kubernetes.io/proxy-body-size: "1024m"
+    # Rate limiting (100 requests per second per IP)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    # Body size limits (reasonable for video uploads)
+    nginx.ingress.kubernetes.io/proxy-body-size: "500m"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "10m"
+    # Additional security headers
+    nginx.ingress.kubernetes.io/enable-cors: "false"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
   hosts:
     - host: vms.example.com
       paths:
@@ -386,6 +446,7 @@ monitoring:
 # Network policies
 networkPolicy:
   enabled: true
+  egress: true  # Enable egress policies for enhanced security
 
 # RBAC
 rbac:

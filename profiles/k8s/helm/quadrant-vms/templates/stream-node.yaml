@@ -1,0 +1,130 @@
+{{- if .Values.streamNode.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: stream-node
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: stream-node
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8083
+    name: http
+  selector:
+    app: stream-node
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stream-node
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.streamNode.replicas }}
+  selector:
+    matchLabels:
+      app: stream-node
+  template:
+    metadata:
+      labels:
+        app: stream-node
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      containers:
+      - name: stream-node
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.streamNode.image.repository }}:{{ .Values.streamNode.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8083
+          name: http
+        envFrom:
+        - configMapRef:
+            name: {{ include "quadrant-vms.fullname" . }}-config
+        env:
+        - name: STREAM_NODE_ADDR
+          value: {{ .Values.streamNode.env.STREAM_NODE_ADDR | quote }}
+        - name: HLS_ROOT
+          value: {{ .Values.streamNode.env.HLS_ROOT | quote }}
+        - name: S3_ENDPOINT
+          value: "http://minio:9000"
+        - name: S3_BUCKET
+          value: "vms"
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: access-key
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: secret-key
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- with .Values.streamNode.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: hls-storage
+          mountPath: /data/hls
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8083
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8083
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      {{- if .Values.streamNode.persistence.enabled }}
+      - name: hls-storage
+        persistentVolumeClaim:
+          claimName: stream-node-hls
+      {{- else }}
+      - name: hls-storage
+        emptyDir: {}
+      {{- end }}
+{{- if .Values.streamNode.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stream-node-hls
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  accessModes:
+  - ReadWriteMany
+  {{- if .Values.global.storageClass }}
+  storageClassName: {{ .Values.global.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.streamNode.persistence.size }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,84 @@
+{{- if .Values.adminGateway.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: admin-gateway
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: admin-gateway
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8081
+    name: http
+  selector:
+    app: admin-gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-gateway
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.adminGateway.replicas }}
+  selector:
+    matchLabels:
+      app: admin-gateway
+  template:
+    metadata:
+      labels:
+        app: admin-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8081"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.adminGateway.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.adminGateway.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: admin-gateway
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.adminGateway.image.repository }}:{{ .Values.adminGateway.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8081
+          name: http
+        envFrom:
+        - configMapRef:
+            name: {{ include "quadrant-vms.fullname" . }}-config
+        env:
+        - name: ADMIN_GATEWAY_ADDR
+          value: {{ .Values.adminGateway.env.ADMIN_GATEWAY_ADDR | quote }}
+        - name: COORDINATOR_URL
+          value: "http://coordinator:8082"
+        {{- with .Values.adminGateway.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}

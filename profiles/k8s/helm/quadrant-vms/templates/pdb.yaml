@@ -1,0 +1,134 @@
+{{- if .Values.coordinator.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: coordinator
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.coordinator.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: coordinator
+{{- end }}
+---
+{{- if .Values.adminGateway.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: admin-gateway
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.adminGateway.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: admin-gateway
+{{- end }}
+---
+{{- if .Values.streamNode.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: stream-node
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.streamNode.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: stream-node
+{{- end }}
+---
+{{- if .Values.recorderNode.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: recorder-node
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.recorderNode.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: recorder-node
+{{- end }}
+---
+{{- if .Values.authService.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: auth-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.authService.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: auth-service
+{{- end }}
+---
+{{- if .Values.deviceManager.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: device-manager
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.deviceManager.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: device-manager
+{{- end }}
+---
+{{- if .Values.alertService.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: alert-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.alertService.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: alert-service
+{{- end }}
+---
+{{- if .Values.playbackService.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: playback-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.playbackService.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: playback-service
+{{- end }}
+---
+{{- if .Values.operatorUI.podDisruptionBudget.enabled -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: operator-ui
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.operatorUI.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      app: operator-ui
+{{- end }}

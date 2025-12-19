@@ -1,0 +1,97 @@
+{{- if .Values.coordinator.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: coordinator
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: coordinator
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8082
+    name: http
+  selector:
+    app: coordinator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coordinator
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.coordinator.replicas }}
+  selector:
+    matchLabels:
+      app: coordinator
+  template:
+    metadata:
+      labels:
+        app: coordinator
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: coordinator
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.coordinator.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.coordinator.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: coordinator
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.coordinator.image.repository }}:{{ .Values.coordinator.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8082
+          name: http
+        envFrom:
+        - configMapRef:
+            name: {{ include "quadrant-vms.fullname" . }}-config
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        - name: LEASE_STORE_TYPE
+          value: "postgres"
+        - name: CLUSTER_ENABLED
+          value: {{ .Values.coordinator.env.CLUSTER_ENABLED | quote }}
+        - name: NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ENABLE_STATE_STORE
+          value: {{ .Values.coordinator.env.ENABLE_STATE_STORE | quote }}
+        - name: ORPHAN_CLEANUP_INTERVAL_SECS
+          value: {{ .Values.coordinator.env.ORPHAN_CLEANUP_INTERVAL_SECS | quote }}
+        {{- with .Values.coordinator.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8082
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8082
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}

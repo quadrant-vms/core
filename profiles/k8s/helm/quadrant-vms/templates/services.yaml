@@ -1,0 +1,456 @@
+{{- if .Values.authService.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: auth-service
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8087
+    name: http
+  selector:
+    app: auth-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.authService.replicas }}
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8087"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.authService.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.authService.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: auth-service
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.authService.image.repository }}:{{ .Values.authService.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8087
+          name: http
+        env:
+        - name: AUTH_SERVICE_ADDR
+          value: {{ .Values.authService.env.AUTH_SERVICE_ADDR | quote }}
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: auth-secret
+              key: jwt-secret
+        - name: JWT_EXPIRATION_SECS
+          value: {{ .Values.authService.env.JWT_EXPIRATION_SECS | quote }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- with .Values.authService.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8087
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8087
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}
+---
+{{- if .Values.deviceManager.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: device-manager
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: device-manager
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8088
+    name: http
+  selector:
+    app: device-manager
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: device-manager
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.deviceManager.replicas }}
+  selector:
+    matchLabels:
+      app: device-manager
+  template:
+    metadata:
+      labels:
+        app: device-manager
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8088"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.deviceManager.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.deviceManager.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: device-manager
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.deviceManager.image.repository }}:{{ .Values.deviceManager.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8088
+          name: http
+        env:
+        - name: DEVICE_MANAGER_ADDR
+          value: {{ .Values.deviceManager.env.DEVICE_MANAGER_ADDR | quote }}
+        - name: HEALTH_CHECK_INTERVAL_SECS
+          value: {{ .Values.deviceManager.env.HEALTH_CHECK_INTERVAL_SECS | quote }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- with .Values.deviceManager.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8088
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8088
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}
+---
+{{- if .Values.alertService.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: alert-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: alert-service
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8089
+    name: http
+  selector:
+    app: alert-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.alertService.replicas }}
+  selector:
+    matchLabels:
+      app: alert-service
+  template:
+    metadata:
+      labels:
+        app: alert-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8089"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.alertService.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.alertService.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: alert-service
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.alertService.image.repository }}:{{ .Values.alertService.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8089
+          name: http
+        env:
+        - name: ALERT_SERVICE_ADDR
+          value: {{ .Values.alertService.env.ALERT_SERVICE_ADDR | quote }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- if .Values.alertService.smtp.enabled }}
+        - name: SMTP_HOST
+          value: {{ .Values.alertService.smtp.host | quote }}
+        - name: SMTP_PORT
+          value: {{ .Values.alertService.smtp.port | quote }}
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: smtp-secret
+              key: smtp-username
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smtp-secret
+              key: smtp-password
+        - name: SMTP_FROM_EMAIL
+          value: {{ .Values.alertService.smtp.fromEmail | quote }}
+        {{- end }}
+        {{- with .Values.alertService.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8089
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8089
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}
+---
+{{- if .Values.playbackService.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: playback-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: playback-service
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8086
+    name: http
+  selector:
+    app: playback-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playback-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.playbackService.replicas }}
+  selector:
+    matchLabels:
+      app: playback-service
+  template:
+    metadata:
+      labels:
+        app: playback-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8086"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.playbackService.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.playbackService.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: playback-service
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.playbackService.image.repository }}:{{ .Values.playbackService.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8086
+          name: http
+        env:
+        - name: PLAYBACK_SERVICE_ADDR
+          value: {{ .Values.playbackService.env.PLAYBACK_SERVICE_ADDR | quote }}
+        - name: RECORDING_STORAGE_ROOT
+          value: {{ .Values.playbackService.env.RECORDING_STORAGE_ROOT | quote }}
+        - name: HLS_ROOT
+          value: {{ .Values.playbackService.env.HLS_ROOT | quote }}
+        - name: CACHE_ENABLED
+          value: {{ .Values.playbackService.env.CACHE_ENABLED | quote }}
+        - name: CACHE_MAX_SIZE_MB
+          value: {{ .Values.playbackService.env.CACHE_MAX_SIZE_MB | quote }}
+        - name: CACHE_TTL_SECS
+          value: {{ .Values.playbackService.env.CACHE_TTL_SECS | quote }}
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: database-url
+        {{- with .Values.playbackService.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8086
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8086
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}
+---
+{{- if .Values.operatorUI.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: operator-ui
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: operator-ui
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  ports:
+  - port: 8090
+    name: http
+  selector:
+    app: operator-ui
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator-ui
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "quadrant-vms.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.operatorUI.replicas }}
+  selector:
+    matchLabels:
+      app: operator-ui
+  template:
+    metadata:
+      labels:
+        app: operator-ui
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: quadrant-vms-service
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+        seccompProfile:
+          type: RuntimeDefault
+      {{- end }}
+      {{- if .Values.operatorUI.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.operatorUI.topologySpreadConstraints | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: operator-ui
+        {{- with .Values.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        image: "{{ .Values.image.registry }}/{{ .Values.operatorUI.image.repository }}:{{ .Values.operatorUI.image.tag | default .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 8090
+          name: http
+        env:
+        - name: OPERATOR_UI_ADDR
+          value: {{ .Values.operatorUI.env.OPERATOR_UI_ADDR | quote }}
+        {{- with .Values.operatorUI.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+{{- end }}
