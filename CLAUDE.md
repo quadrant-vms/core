@@ -18,10 +18,12 @@
 ### 2. Always Update Documentation After Feature Completion
 - **CRITICAL**: After completing ANY feature or milestone, update documentation:
   - Update `README.md` - Keep high-level status current
-  - Update `SERVICES.md` - Add detailed service features and configuration
+  - Update `docs/DEPLOYMENT.md`, `docs/OPERATIONS.md`, or `docs/SECURITY.md` as needed
+  - Update `ENV_VAR_REFERENCE.md` if env vars change
+  - Update `TRACKING_ISSUES.md` if new ops gaps are found
   - Move completed items from "🔜 Upcoming Features" to appropriate sections
   - Add specific details about what was implemented
-- README.md is the high-level overview, SERVICES.md has detailed service documentation
+- README.md is the high-level overview; detailed notes live under `docs/`
 
 ### 3. Update This File (CLAUDE.md) When Needed
 - **Keep this guide current**: If project structure changes, update this file
@@ -38,7 +40,7 @@
 
 ### 5. 🔒 MANDATORY Reliability & Safety Rules
 
-**Context**: After a comprehensive reliability audit (see RELIABILITY_AUDIT.md), 120 critical issues were identified that could cause cascading failures similar to Cloudflare-style outages. ALL code must follow these rules to prevent panics, crashes, and service failures.
+**Context**: After a comprehensive reliability audit, 120 critical issues were identified that could cause cascading failures similar to Cloudflare-style outages. ALL code must follow these rules to prevent panics, crashes, and service failures.
 
 #### 5.1 NEVER Use `.unwrap()` or `.expect()` in Production Code
 
@@ -345,7 +347,8 @@ This is a **Cargo workspace** with multiple crates:
 - `Cargo.toml` - Workspace manifest
 - `Makefile` - Docker Compose and cargo shortcuts
 - `README.md` - High-level project overview and quick start guide
-- `SERVICES.md` - Detailed documentation for each service (features, API, configuration)
+- `ENV_VAR_REFERENCE.md` - Canonical environment variables
+- `TRACKING_ISSUES.md` - Deployment/ops issues and status
 - `CLAUDE.md` - Development guide for Claude Code (this file)
 - `tests/gateway_coordinator.rs` - End-to-end integration tests
 - `tests/ai_service.rs` - AI service integration tests
@@ -353,7 +356,7 @@ This is a **Cargo workspace** with multiple crates:
 - `.env` / `example.env` - Configuration (not in git)
 - `profiles/` - Deployment profiles (compose/desktop/k8s)
 - `data/hls/` - HLS output directory (runtime generated)
-- `docs/` - Additional documentation (AUTHENTICATION.md, HA_DEPLOYMENT.md, GPU_ACCELERATION.md)
+- `docs/` - Additional documentation (DEPLOYMENT.md, OPERATIONS.md, SECURITY.md)
 
 ## Development Workflow
 
@@ -363,7 +366,7 @@ When implementing a new feature, follow this sequence:
 
 1. **Plan & Explore**
    - Read README.md for high-level project status
-   - Read SERVICES.md for detailed service documentation
+   - Read `docs/DEPLOYMENT.md` and `ENV_VAR_REFERENCE.md` for config expectations
    - Explore relevant crates and existing patterns
    - Use Task tool with Explore agent for codebase discovery
 
@@ -381,7 +384,7 @@ When implementing a new feature, follow this sequence:
 4. **Document & Commit** ⚠️ NEVER SKIP THIS STEP
    - **MANDATORY**: Always commit and push after completing work
    - Update README.md with high-level status (if applicable)
-   - Update SERVICES.md with detailed feature documentation (if applicable)
+   - Update docs under `docs/` (if applicable)
    - Update CLAUDE.md if structure changed
    - Run: `git add <files>`
    - Run: `git commit -m "descriptive message"`
@@ -402,18 +405,6 @@ make init-dc
 make status-dc
 ```
 
-
-**Recently Completed**: Full Kubernetes Deployment Support
-- ✅ Complete Kubernetes manifests for all 10 services
-- ✅ Helm chart with configurable values for easy installation
-- ✅ HorizontalPodAutoscaler for auto-scaling under load
-- ✅ PodDisruptionBudget for high availability during cluster maintenance
-- ✅ NetworkPolicy for secure pod-to-pod communication
-- ✅ RBAC with ServiceAccount, Roles, and RoleBindings
-- ✅ ServiceMonitor for Prometheus Operator integration
-- ✅ Ingress manifest with TLS support for external access
-- ✅ Production-ready configuration with resource limits and health checks
-- ✅ Comprehensive Kubernetes documentation
 
 **Previous Milestones**:
 - **Operator UI Web Dashboard**: React-based dashboard with real-time WebSocket updates
@@ -467,7 +458,7 @@ See `.claudeignore` for files to skip during context gathering to save tokens.
 
 1. **Read this file first** - Contains all context and rules
 2. **Check README.md** - See high-level project status and features
-3. **Check SERVICES.md** - See detailed service documentation
+3. **Check docs/DEPLOYMENT.md** - See deployment expectations
 4. **Run `cargo test`** - Verify current state
 5. **Continue from "Current Development Priority"** section above
-6. **Remember**: Always update documentation (README.md and SERVICES.md) when completing features
+6. **Remember**: Always update documentation (README.md and docs/*) when completing features

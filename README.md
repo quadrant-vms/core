@@ -34,7 +34,7 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - **`common`** - Shared utilities, types, auth middleware, and state management clients
 - **`telemetry`** - Centralized logging and Prometheus metrics infrastructure
 
-**For detailed service documentation, see [SERVICES.md](SERVICES.md)**
+Service details are in code and configuration docs; see the documentation links below.
 
 ---
 
@@ -115,7 +115,6 @@ Quadrant VMS is built as a **Cargo workspace** with multiple specialized service
 - Alert system with multi-channel notifications
 - Retention & search capabilities
 - Stateless architecture with HA support
-- **Full Kubernetes deployment** with Helm charts and Kustomize manifests
 
 ### Operator Dashboard
 - **Web-based Operator UI**: Responsive React dashboard for monitoring and management
@@ -226,40 +225,22 @@ make logs-gateway     # Admin Gateway
 make docker-clean
 ```
 
-**📚 For detailed deployment instructions, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**
+**📚 For detailed deployment instructions, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 ### Kubernetes Deployment (Production)
 
-**For production-grade Kubernetes deployment with auto-scaling, HA, and monitoring:**
+**Kubernetes manifests are available; review known gaps before production use:**
 
 ```bash
 # Option 1: Using kubectl + Kustomize (recommended)
 cd profiles/k8s
 kubectl apply -k .
 
-# Option 2: Using Helm chart
-cd profiles/k8s/helm
-helm install quadrant-vms ./quadrant-vms -n quadrant-vms --create-namespace
-
 # Check deployment status
 kubectl get all -n quadrant-vms
 ```
 
-**Kubernetes features included:**
-- ✅ All 10 services with production-ready manifests
-- ✅ Pinned image versions (v0.1.0 for Quadrant VMS, stable releases for infrastructure)
-- ✅ Pod Security Standards with securityContext and Pod Security Admission
-- ✅ StatefulSet for recorder-node with ReadWriteOnce PVCs (no RWX dependency)
-- ✅ Centralized configuration via Kustomize ConfigMap consumed by all services
-- ✅ HorizontalPodAutoscaler for auto-scaling
-- ✅ PodDisruptionBudget for high availability
-- ✅ NetworkPolicy for pod-to-pod security
-- ✅ RBAC with ServiceAccount and Roles
-- ✅ ServiceMonitor for Prometheus Operator
-- ✅ Ingress with TLS support
-- ✅ Helm chart for easy installation
-
-**📚 For complete Kubernetes setup, see [profiles/k8s/README.md](profiles/k8s/README.md) and [profiles/k8s/helm/README.md](profiles/k8s/helm/README.md)**
+**📚 For complete Kubernetes setup, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) and [TRACKING_ISSUES.md](TRACKING_ISSUES.md)**
 
 ---
 
@@ -286,7 +267,7 @@ quadrant-vms/core/
 ├── Cargo.toml               # Workspace manifest
 ├── Makefile                 # Build & deployment shortcuts
 ├── README.md                # This file
-├── SERVICES.md              # Detailed service documentation
+├── ENV_VAR_REFERENCE.md     # Canonical environment variables
 └── CLAUDE.md                # Development guide for Claude Code
 ```
 
@@ -294,12 +275,11 @@ quadrant-vms/core/
 
 ## 📖 Documentation
 
-- **[SERVICES.md](SERVICES.md)** - Detailed documentation for each service
-- **[ENV_VAR_REFERENCE.md](ENV_VAR_REFERENCE.md)** - Canonical environment variable names for all services
+- **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Docker Compose and Kubernetes deployment
+- **[docs/OPERATIONS.md](docs/OPERATIONS.md)** - HA, monitoring, GPU notes
+- **[docs/SECURITY.md](docs/SECURITY.md)** - Authentication and security overview
+- **[ENV_VAR_REFERENCE.md](ENV_VAR_REFERENCE.md)** - Canonical environment variables
 - **[TRACKING_ISSUES.md](TRACKING_ISSUES.md)** - Deployment and operability issues tracking
-- **[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)** - Authentication & authorization setup
-- **[docs/HA_DEPLOYMENT.md](docs/HA_DEPLOYMENT.md)** - High-availability deployment guide
-- **[docs/GPU_ACCELERATION.md](docs/GPU_ACCELERATION.md)** - GPU acceleration setup for AI workloads
 - **[CLAUDE.md](CLAUDE.md)** - Development guide for Claude Code (AI assistant)
 
 ---
@@ -338,7 +318,7 @@ Services are configured via environment variables. Key variables:
 - `OTLP_ENDPOINT` - OTLP collector endpoint for Jaeger/OTLP collectors (default: http://localhost:4317)
 - `TRACE_SAMPLE_RATE` - Trace sampling rate 0.0-1.0 (default: 1.0)
 
-**For complete configuration options, see [SERVICES.md](SERVICES.md)**
+**For complete configuration options, see [ENV_VAR_REFERENCE.md](ENV_VAR_REFERENCE.md)**
 
 Example `.env` file:
 ```bash
@@ -380,7 +360,7 @@ All services expose Prometheus metrics at `/metrics`:
 - Alert-service: Rules, events, notifications
 - Playback-service: Sessions, bytes delivered
 
-**For detailed metrics, see [SERVICES.md](SERVICES.md)**
+**For detailed metrics and ops notes, see [docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
 ---
 
@@ -390,7 +370,7 @@ We welcome contributions! Please ensure:
 1. All tests pass (`cargo test`)
 2. Code follows existing patterns and style
 3. New features include tests
-4. Update documentation (README.md, SERVICES.md, CLAUDE.md) as needed
+4. Update documentation (README.md, docs/*, CLAUDE.md) as needed
 
 ---
 
