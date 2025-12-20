@@ -560,7 +560,7 @@ impl DeviceStore {
     fn encrypt_password(&self, password: &str) -> String {
         use aes_gcm::{
             aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
+            Aes256Gcm,
         };
         use argon2::{Algorithm, Argon2, Params, Version};
         use base64::{engine::general_purpose, Engine as _};
@@ -590,7 +590,7 @@ impl DeviceStore {
 
         // Generate random nonce
         let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = &nonce_bytes.into();
 
         // Encrypt password
         let ciphertext = cipher
@@ -610,7 +610,7 @@ impl DeviceStore {
     pub fn decrypt_password(&self, encrypted: &str) -> Result<String> {
         use aes_gcm::{
             aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
+            Aes256Gcm,
         };
         use argon2::{Algorithm, Argon2, Params, Version};
         use base64::{engine::general_purpose, Engine as _};
@@ -655,9 +655,13 @@ impl DeviceStore {
         let cipher = Aes256Gcm::new(&derived_key.into());
 
         // Decrypt password
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        if nonce_bytes.len() != 12 {
+            anyhow::bail!("invalid nonce length: expected 12 bytes, got {}", nonce_bytes.len());
+        }
+        let nonce: [u8; 12] = nonce_bytes.as_slice().try_into()
+            .context("failed to convert nonce to fixed-size array")?;
         let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
+            .decrypt(&nonce.into(), ciphertext.as_ref())
             .map_err(|e| anyhow::anyhow!("AES-GCM decryption failed: {}", e))?;
 
         Ok(String::from_utf8(plaintext).context("invalid utf8 in password")?)
